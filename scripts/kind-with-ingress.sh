@@ -5,8 +5,24 @@ LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; c
 
 cd $SCRIPT_PARENT_DIR
 
+# https://cloudyuga.guru/hands_on_lab/kind-k8s
 kind create cluster --config=./config/config.yaml --name kind
 docker container ls --format "table {{.Image}}\t{{.State}}\t{{.Names}}"
+CONTEXT="kind-kind"
+
+CERTIFICATE=$(kubectl config view --raw -o json | jq -r '.users[] | select(.name == "'${CONTEXT}'") | .user."client-certificate-data"')
+KEY=$(kubectl config view --raw -o json | jq -r '.users[] | select(.name == "'${CONTEXT}'") | .user."client-key-data"')
+CLUSTER_CA=$(kubectl config view --raw -o json | jq -r '.clusters[] | select(.name == "'${CONTEXT}'") | .cluster."certificate-authority-data"')
+
+echo ${CERTIFICATE} | base64 -d > client.crt
+echo ${KEY} | base64 -d > client.key
+
+openssl pkcs12 -export -in client.crt -inkey client.key -out client.pfx -passout pass:
+
+rm client.crt
+rm client.key
+
+echo ${CLUSTER_CA} | base64 -d > cluster.crt
 
 # https://github.com/kubernetes/ingress-nginx
 echo "deploy nginx ingress for kind"
