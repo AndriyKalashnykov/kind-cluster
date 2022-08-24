@@ -23,3 +23,19 @@ spec:
         resources:
           requests:
             cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: helloweb
+  labels:
+    app: hello
+    tier: web
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: hello
+    tier: web
