@@ -11,6 +11,8 @@ docker container ls --format "table {{.Image}}\t{{.State}}\t{{.Names}}"
 # https://github.com/kubernetes/ingress-nginx
 echo "deploy nginx ingress for kind"
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+echo "wait for nginx pods"
+kubectl wait pods -n ingress-nginx -l app.kubernetes.io/component=controller --for condition=Ready --timeout=90s
 
 # https://metallb.universe.tf/
 # https://github.com/metallb/metallb
@@ -75,12 +77,20 @@ spec:
   - default
 EOF
 
+echo "deploy helloweb"
 kubectl apply -f ./k8s/helloweb-deployment.yaml
-
 # https://stackoverflow.com/questions/70108499/kubectl-wait-for-service-on-aws-eks-to-expose-elastic-load-balancer-elb-addres/70108500#70108500
 echo "wait for helloweb service to get External-IP from LoadBalancer"
 until kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done &&
+kubectl get services helloweb -n default -o jsonpath="{.items[0].status.loadBalancer.ingress[0].hostname}"
+helloweb_ip=$(kubectl get services helloweb -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
+curl ${helloweb_ip}:80
 
+echo "deploy golang-hello-world-web"
+# https://fabianlee.org/2022/01/27/kubernetes-using-kubectl-to-wait-for-condition-of-pods-deployments-services/
+kubectl apply -f https://raw.githubusercontent.com/fabianlee/k3s-cluster-kvm/main/roles/golang-hello-world-web/templates/golang-hello-world-web.yaml.j2
+echo "wait for deploy golang-hello-world-web pods"
+kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout=90s
 
 # kind delete cluster
 
