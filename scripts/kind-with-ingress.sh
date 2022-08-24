@@ -92,6 +92,17 @@ kubectl apply -f https://raw.githubusercontent.com/fabianlee/k3s-cluster-kvm/mai
 echo "wait for deploy golang-hello-world-web pods"
 kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout=90s
 
+echo "deploy foo-service"
+kubectl apply -f https://kind.sigs.k8s.io/examples/loadbalancer/usage.yaml
+echo "wait for foo-service pods"
+kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout=90s
+echo "wait for foo-service service to get External-IP from LoadBalancer"
+until kubectl get service/foo-service -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done &&
+LB_IP=$(kubectl get svc/foo-service -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
+for _ in {1..10}; do
+  curl ${LB_IP}:5678
+done
+
 # kind delete cluster
 
 cd $LAUNCH_DIR
