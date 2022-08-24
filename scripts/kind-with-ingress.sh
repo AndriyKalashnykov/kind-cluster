@@ -24,11 +24,24 @@ rm client.key
 
 echo ${CLUSTER_CA} | base64 -d > cluster.crt
 
+# dashboard 
+# https://github.com/kubernetes/dashboard
+# https://upcloud.com/resources/tutorials/deploy-kubernetes-dashboard
+# https://www.containiq.com/post/intro-to-kubernetes-dashboards
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.6.1/aio/deploy/recommended.yaml
+kubectl apply -f ./k8s/dashboard-admin.yaml
+
+echo "Dashboard admin token: "
+# dashboard_admin_token=$(kubectl get secret -n kubernetes-dashboard $(kubectl get serviceaccount admin-user -n kubernetes-dashboard -o jsonpath="{.secrets[0].name}") -o jsonpath="{.data.token}" | base64 --decode)
+export dashboard_admin_token=$(kubectl -n kubernetes-dashboard create token admin-user)
+echo "${dashboard_admin_token}" > dashboard-admin-token.txt
+kubectl config set-credentials cluster-admin --token=${dashboard_admin_token}
+
 # https://github.com/kubernetes/ingress-nginx
 echo "deploy nginx ingress for kind"
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 echo "wait for nginx pods"
-kubectl wait pods -n ingress-nginx -l app.kubernetes.io/component=controller --for condition=Ready --timeout=90s
+kubectl wait pods -n ingress-nginx -l app.kubernetes.io/component=controller --for condition=Ready --timeout=180s
 
 # https://metallb.universe.tf/
 # https://github.com/metallb/metallb
@@ -45,7 +58,7 @@ kubectl apply -f  https://raw.githubusercontent.com/metallb/metallb/v0.13.4/conf
 # kubectl get pods -n metallb-system --watch
 
 echo "wait for metallb pods"
-kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout=90s
+kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout=180s
 
 # get kind network IP
 # iface="$(ip route | grep $(docker network inspect --format '{{json (index .IPAM.Config 0).Subnet}}' "kind" | tr -d '"') | cut -d ' ' -f 3)"
@@ -95,6 +108,8 @@ EOF
 
 echo "deploy helloweb"
 kubectl apply -f ./k8s/helloweb-deployment.yaml
+echo "wait for deploy helloweb pods"
+kubectl wait deployment -n default helloweb --for condition=Available=True --timeout=180s
 # https://stackoverflow.com/questions/70108499/kubectl-wait-for-service-on-aws-eks-to-expose-elastic-load-balancer-elb-addres/70108500#70108500
 echo "wait for helloweb service to get External-IP from LoadBalancer"
 until kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done &&
@@ -106,18 +121,28 @@ echo "deploy golang-hello-world-web"
 # https://fabianlee.org/2022/01/27/kubernetes-using-kubectl-to-wait-for-condition-of-pods-deployments-services/
 kubectl apply -f https://raw.githubusercontent.com/fabianlee/k3s-cluster-kvm/main/roles/golang-hello-world-web/templates/golang-hello-world-web.yaml.j2
 echo "wait for deploy golang-hello-world-web pods"
-kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout=90s
+kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout=180s
 
 echo "deploy foo-service"
 kubectl apply -f https://kind.sigs.k8s.io/examples/loadbalancer/usage.yaml
 echo "wait for foo-service pods"
-kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout=90s
+kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout=180s
 echo "wait for foo-service service to get External-IP from LoadBalancer"
 until kubectl get service/foo-service -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done &&
 LB_IP=$(kubectl get svc/foo-service -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
 for _ in {1..10}; do
   curl ${LB_IP}:5678
 done
+
+# kill kubectl proxy if any
+pkill -9 -f "kubectl proxy"
+# start new kubectl proxy
+kubectl proxy –address=’0.0.0.0′ –accept-hosts=’^*$’ &
+# copy admin token to the clipboard
+cat ./dashboard-admin-token.txt|xclip -i
+# open dashboard
+xdg-open "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/" &
+
 
 # kind delete cluster
 
