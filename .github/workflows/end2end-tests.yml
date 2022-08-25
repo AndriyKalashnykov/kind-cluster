@@ -13,6 +13,8 @@ jobs:
     strategy:
       matrix:
         k8s-version: ['1.24.2']
+        kubectl-version: ['1.25.0']
+        kind-version: ['0.14.0']
 
     steps:
     - uses: actions/checkout@v3.0.2
@@ -20,10 +22,10 @@ jobs:
     - name: Install K8S ${{ matrix.k8s-version }}
       uses: helm/kind-action@v1.3.0
       with:
-        version: v0.14.0
+        version: v{{ matrix.kind-version }}
         cluster_name: kind
         config: ./config/config.yaml
-        kubectl_version: v1.25.0
+        kubectl_version: v{{ matrix.kubectl-version }}
         node_image: kindest/node:v${{ matrix.k8s-version }}
     - run: kubectl cluster-info
     - run: kubectl version
