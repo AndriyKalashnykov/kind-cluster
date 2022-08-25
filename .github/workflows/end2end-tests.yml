@@ -36,3 +36,5 @@ jobs:
       run: ./scripts/kind-add-dashboard.sh
     - name: Install Nginx ingress
       run: ./scripts/kind-add-ingress-nginx.sh
+    - name: Install MetalLB
+      run: ./scripts/kind-add-metallb.sh

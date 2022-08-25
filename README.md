@@ -53,12 +53,11 @@ In Dashboard UI select "Token' and `Ctrl+V`
 ./scripts/kind-add-ingress-nginx.sh
 ```
 
-## Install Kind cluster with Nginx ingress and Metallb load balancer
+## Install MetalLB load balancer
 
 ```bash
-./scripts/kind-with-ingress.sh
+./scripts/kind-add-metallb.sh
 ```
-
 
 ## Delete k8s cluster
 
