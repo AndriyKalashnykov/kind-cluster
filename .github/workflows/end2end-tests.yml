@@ -24,6 +24,7 @@ jobs:
         cluster_name: kind
         config: ./config/config.yaml
         kubectl_version: v1.25.0
+        node_image: kindest/node:v${{ matrix.k8s-version }}
     - run: kubectl cluster-info
     - run: kubectl version
     - run: kubectl get pods -n kube-system
