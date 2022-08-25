@@ -5,16 +5,18 @@ LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; c
 
 cd $SCRIPT_PARENT_DIR
 
-./kind-export-cert.sh
+./scripts/kind-create.sh
 
-./kind-add-dashboard.sh
+./scripts/kind-export-cert.sh
 
-./kind-add-ingress-nginx.sh
+./scripts/kind-add-dashboard.sh
 
-./kind-add-metallb.sh
+./scripts/kind-add-ingress-nginx.sh
 
-./kind-deploy-app-helloweb.sh
-./kind-deploy-app-golang-hello-world-web.sh
-./kind-deploy-app-foo-bar-service.sh
+./scripts/kind-add-metallb.sh
+
+./scripts/kind-deploy-app-helloweb.sh
+./scripts/kind-deploy-app-golang-hello-world-web.sh
+./scripts/kind-deploy-app-foo-bar-service.sh
 
 cd $LAUNCH_DIR
