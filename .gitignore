@@ -14,6 +14,8 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+client.crt
+client.key
 client.pfx
-cluster.crt
+cluster-ca.crt
 dashboard-admin-token.txt

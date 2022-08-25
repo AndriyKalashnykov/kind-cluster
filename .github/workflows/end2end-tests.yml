@@ -30,5 +30,7 @@ jobs:
     - run: kubectl cluster-info
     - run: kubectl version
     - run: kubectl get pods -n kube-system
-    - name: Create namespace
-      run: kubectl create ns test-project-ci
+    - name: Export k8s keys(client) and certificates(client, cluster CA)
+      run: ./scripts/kind-export-cert.sh
+    - name: Install k8s dashboard
+      run: ./scripts/kind-add-dashboard.sh

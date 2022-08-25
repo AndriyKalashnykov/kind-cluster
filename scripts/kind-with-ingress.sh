@@ -5,40 +5,10 @@ LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; c
 
 cd $SCRIPT_PARENT_DIR
 
-# https://cloudyuga.guru/hands_on_lab/kind-k8s
-kind create cluster --config=./config/config.yaml --name kind
-docker container ls --format "table {{.Image}}\t{{.State}}\t{{.Names}}"
-CONTEXT="kind-kind"
 
-CERTIFICATE=$(kubectl config view --raw -o json | jq -r '.users[] | select(.name == "'${CONTEXT}'") | .user."client-certificate-data"')
-KEY=$(kubectl config view --raw -o json | jq -r '.users[] | select(.name == "'${CONTEXT}'") | .user."client-key-data"')
-CLUSTER_CA=$(kubectl config view --raw -o json | jq -r '.clusters[] | select(.name == "'${CONTEXT}'") | .cluster."certificate-authority-data"')
+./kind-export-cert.sh
 
-echo ${CERTIFICATE} | base64 -d > client.crt
-echo ${KEY} | base64 -d > client.key
-
-openssl pkcs12 -export -in client.crt -inkey client.key -out client.pfx -passout pass:
-
-rm client.crt
-rm client.key
-
-echo ${CLUSTER_CA} | base64 -d > cluster.crt
-
-# dashboard 
-# https://github.com/kubernetes/dashboard
-# https://upcloud.com/resources/tutorials/deploy-kubernetes-dashboard
-# https://www.containiq.com/post/intro-to-kubernetes-dashboards
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.6.1/aio/deploy/recommended.yaml
-kubectl apply -f ./k8s/dashboard-admin.yaml
-# kubectl describe serviceaccount admin-user -n kubernetes-dashboard
-# kubectl describe secret admin-user-token -n kubernetes-dashboard
-
-# dashboard_admin_token=$(kubectl get secret -n kubernetes-dashboard $(kubectl get serviceaccount admin-user -n kubernetes-dashboard -o jsonpath="{.secrets[0].name}") -o jsonpath="{.data.token}" | base64 --decode)
-# export dashboard_admin_token=$(kubectl -n kubernetes-dashboard create token admin-user)
-export dashboard_admin_token=$(kubectl get secret -n kubernetes-dashboard admin-user-token -o jsonpath="{.data.token}" | base64 --decode)
-echo "${dashboard_admin_token}" > dashboard-admin-token.txt
-kubectl config set-credentials cluster-admin --token=${dashboard_admin_token}
-echo "Dashboard Token: ${dashboard_admin_token}"
+./kind-add-dashboard.sh
 
 # https://github.com/kubernetes/ingress-nginx
 echo "deploy nginx ingress for kind"
@@ -137,16 +107,5 @@ for _ in {1..10}; do
   curl ${LB_IP}:5678
 done
 
-# kill kubectl proxy if any
-pkill -9 -f "kubectl proxy"
-# start new kubectl proxy
-kubectl proxy –address=’0.0.0.0′ –accept-hosts=’^*$’ &
-# copy admin token to the clipboard
-cat ./dashboard-admin-token.txt|xclip -i
-# open dashboard
-xdg-open "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/" &
-
-
-# kind delete cluster
 
 cd $LAUNCH_DIR
