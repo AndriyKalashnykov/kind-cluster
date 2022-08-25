@@ -34,3 +34,5 @@ jobs:
       run: ./scripts/kind-export-cert.sh
     - name: Install k8s dashboard
       run: ./scripts/kind-add-dashboard.sh
+    - name: Install Nginx ingress
+      run: ./scripts/kind-add-ingress-nginx.sh

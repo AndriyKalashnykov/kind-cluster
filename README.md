@@ -47,6 +47,11 @@ xdg-open "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/
 
 In Dashboard UI select "Token' and `Ctrl+V` 
 
+## Install Nginx ingress
+
+```bash
+./scripts/kind-add-ingress-nginx.sh
+```
 
 ## Install Kind cluster with Nginx ingress and Metallb load balancer
 

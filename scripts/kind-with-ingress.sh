@@ -10,11 +10,9 @@ cd $SCRIPT_PARENT_DIR
 
 ./kind-add-dashboard.sh
 
-# https://github.com/kubernetes/ingress-nginx
-echo "deploy nginx ingress for kind"
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-echo "wait for nginx pods"
-kubectl wait pods -n ingress-nginx -l app.kubernetes.io/component=controller --for condition=Ready --timeout=180s
+./kind-add-ingress-nginx.sh
+
+
 
 # https://metallb.universe.tf/
 # https://github.com/metallb/metallb
