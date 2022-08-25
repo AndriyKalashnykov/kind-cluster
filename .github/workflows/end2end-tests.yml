@@ -22,10 +22,10 @@ jobs:
     - name: Install K8S ${{ matrix.k8s-version }}
       uses: helm/kind-action@v1.3.0
       with:
-        version: {{ matrix.kind-version }}
+        version: ${{ matrix.kind-version }}
         cluster_name: kind
         config: ./config/config.yaml
-        kubectl_version: {{ matrix.kubectl-version }}
+        kubectl_version: ${{ matrix.kubectl-version }}
         node_image: kindest/node:${{ matrix.k8s-version }}
     - run: kubectl cluster-info
     - run: kubectl version
