@@ -13,7 +13,7 @@ echo "deploy metallb LoadBalancer"
 kubectl apply -f  https://raw.githubusercontent.com/metallb/metallb/v0.13.4/config/manifests/metallb-native.yaml
 
 # https://fabianlee.org/2022/01/27/kubernetes-using-kubectl-to-wait-for-condition-of-pods-deployments-services/
-echo "wait for metallb pods"
+echo "wait for metallb"
 kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout=180s
 
 # get kind IP

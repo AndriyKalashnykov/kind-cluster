@@ -28,13 +28,28 @@ jobs:
         kubectl_version: ${{ matrix.kubectl-version }}
         node_image: kindest/node:${{ matrix.k8s-version }}
     - run: kubectl cluster-info
+
     - run: kubectl version
+
     - run: kubectl get pods -n kube-system
+
     - name: Export k8s keys(client) and certificates(client, cluster CA)
       run: ./scripts/kind-export-cert.sh
+
     - name: Install k8s dashboard
       run: ./scripts/kind-add-dashboard.sh
+
     - name: Install Nginx ingress
       run: ./scripts/kind-add-ingress-nginx.sh
+
     - name: Install MetalLB
       run: ./scripts/kind-add-metallb.sh
+
+    - name: Deploy helloweb app
+      run: ./scripts/kind-deploy-app-helloweb.sh
+
+    - name: Deploy golang-hello-world-web app
+      run: ./scripts/kind-deploy-app-golang-hello-world-web.sh
+      
+    - name: Deploy foo-bar-service app
+      run: ./scripts/kind-deploy-app-foo-bar-service.sh

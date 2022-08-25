@@ -2,6 +2,14 @@
 Create local Kubernetes clusters using Docker container "nodes"
 
 
+## Install all at one (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
+
+```bash
+./scripts/kind-install-all.sh
+```
+
+Or you can install each component individually
+
 ## Create k8s cluster
 
 ```bash
@@ -57,6 +65,27 @@ In Dashboard UI select "Token' and `Ctrl+V`
 
 ```bash
 ./scripts/kind-add-metallb.sh
+```
+
+## Deploy demo workloads
+
+### Deploy helloweb
+
+```bash
+./scripts/kind-deploy-app-helloweb.sh
+```
+
+### Deploy golang-hello-world-web
+
+```bash
+./scripts/kind-deploy-app-golang-hello-world-web.sh
+```
+
+
+### Deploy foo-bar-service
+
+```bash
+./scripts/kind-deploy-app-foo-bar-service.sh
 ```
 
 ## Delete k8s cluster
