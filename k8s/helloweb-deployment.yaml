@@ -16,13 +16,17 @@ spec:
         tier: web
     spec:
       containers:
-      - name: hello-app
-        image: us-docker.pkg.dev/google-samples/containers/gke/hello-app:1.0
-        ports:
-        - containerPort: 8080
-        resources:
-          requests:
-            cpu: 200m
+        - name: hello-app
+          image: us-docker.pkg.dev/google-samples/containers/gke/hello-app:1.0
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "64Mi"
+            limits:
+              cpu: "400m"
+              memory: "128Mi"
 ---
 apiVersion: v1
 kind: Service
@@ -34,8 +38,8 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-  - port: 80
-    targetPort: 8080
+    - port: 80
+      targetPort: 8080
   selector:
     app: hello
     tier: web

@@ -8,7 +8,7 @@ cd $SCRIPT_PARENT_DIR
 # https://kind.sigs.k8s.io/
 # https://cloudyuga.guru/hands_on_lab/kind-k8s
 
-kind create cluster --config=./k8s/kind-config.yaml --name kind --wait 10
+kind create cluster --config=./k8s/kind-config.yaml --name kind --wait 10s
 docker container ls --format "table {{.Image}}\t{{.State}}\t{{.Names}}"
 
 cd $LAUNCH_DIR
