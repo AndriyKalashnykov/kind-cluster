@@ -2,7 +2,6 @@
     "yaml.format.enable": true,
     "yaml.completion": true,
     "yaml.schemas": {
-        "Kubernetes": "*.yaml",
-        "https://raw.githubusercontent.com/apache/camel/main/dsl/camel-yaml-dsl/camel-yaml-dsl/src/generated/resources/camel-yaml-dsl.json": "/camel*.yaml",
+        "Kubernetes": "*.yaml"
     }
 }
