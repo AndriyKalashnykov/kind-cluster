@@ -1,28 +1,64 @@
-kind: Pod
-apiVersion: v1
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: foo-app
   labels:
     app: http-echo
 spec:
-  containers:
-    - name: foo-app
-      image: hashicorp/http-echo:0.2.3
-      args:
-        - "-text=foo"
+  selector:
+    matchLabels:
+      app: http-echo
+  template:
+    metadata:
+      labels:
+        app: http-echo
+    spec:
+      containers:
+        - name: foo-app
+          # https://github.com/hashicorp/http-echo
+          image: hashicorp/http-echo:0.2.3
+          args:
+            - "-text=foo"
+          ports:
+            - containerPort: 5678
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "128Mi"
+            limits:
+              cpu: "400m"
+              memory: "256Mi"
 ---
-kind: Pod
-apiVersion: v1
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: bar-app
   labels:
     app: http-echo
 spec:
-  containers:
-    - name: bar-app
-      image: hashicorp/http-echo:0.2.3
-      args:
-        - "-text=bar"
+  selector:
+    matchLabels:
+      app: http-echo
+  template:
+    metadata:
+      labels:
+        app: http-echo
+    spec:
+      containers:
+        - name: foo-app
+          # https://github.com/hashicorp/http-echo
+          image: hashicorp/http-echo:0.2.3
+          args:
+            - "-text=bar"
+          ports:
+            - containerPort: 5678
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "128Mi"
+            limits:
+              cpu: "400m"
+              memory: "256Mi"
 ---
 kind: Service
 apiVersion: v1
