@@ -1,5 +1,5 @@
 # kind-cluster
-Create local Kubernetes clusters using Docker container "nodes"
+Create local Kubernetes clusters using Docker container "nodes" using [kind](https://kind.sigs.k8s.io/)
 
 
 ## Install all at one (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
