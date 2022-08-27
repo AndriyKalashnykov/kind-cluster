@@ -5,6 +5,16 @@
 Create local Kubernetes clusters using Docker container "nodes" using [kind](https://kind.sigs.k8s.io/)
 
 
+
+## Pre-requisites
+
+* [Docker](https://docs.docker.com/engine/install/)
+* [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation)
+* [curl](https://help.ubidots.com/en/articles/2165289-learn-how-to-install-run-curl-on-windows-macosx-linux)
+* [jq](https://github.com/stedolan/jq/wiki/Installation)
+* [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+* [base64](https://command-not-found.com/base64)
+
 ## Install all at one (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
 
 ```bash
