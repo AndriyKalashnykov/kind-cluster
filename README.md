@@ -11,6 +11,7 @@ Create local Kubernetes clusters using Docker container "nodes" with [kind](http
 * [Docker](https://docs.docker.com/engine/install/)
 * [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation)
 * [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+* [helm](https://helm.sh/docs/intro/install/)
 * [curl](https://help.ubidots.com/en/articles/2165289-learn-how-to-install-run-curl-on-windows-macosx-linux)
 * [jq](https://github.com/stedolan/jq/wiki/Installation)
 * [base64](https://command-not-found.com/base64)
