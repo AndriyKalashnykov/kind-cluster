@@ -19,6 +19,8 @@ kubectl apply -f ./k8s/golang-hello-world-web.yaml
 echo "waiting for golang-hello-world-web pods"
 kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout=${TIMEOUT}
 
+echo "waiting for golang-hello-world-web service to get External-IP"
+until kubectl get service/golang-hello-world-web-service -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done 
 service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
 
 curl -s ${service_ip}:8080/myhello/

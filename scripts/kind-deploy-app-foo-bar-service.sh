@@ -19,7 +19,7 @@ echo "waiting for foo-bar-service pods"
 kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout=${TIMEOUT}
 
 echo "waiting for foo-bar-service service to get External-IP"
-until kubectl get service/foo-service -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done &&
+until kubectl get service/foo-service -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done
 
 LB_IP=$(kubectl get svc/foo-service -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
