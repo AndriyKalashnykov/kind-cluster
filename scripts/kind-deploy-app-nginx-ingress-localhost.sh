@@ -29,10 +29,20 @@ echo "waiting for httpd pods"
 kubectl wait deployment -n default demo-localhost --for condition=Available=True --timeout=${TIMEOUT}
 kubectl expose deployment ${DEMO_SVC_NAME}
 
-# create an ingress resource and map a host to localhost
+echo "creating an ingress resource and mapping demo.localdev.me to localhost"
 kubectl create ingress demo-localhost --class=nginx --rule="demo.localdev.me/*=${DEMO_SVC_NAME}:${DEMO_SVC_PORT}"
+
+echo "waiting for ingress demo-localhost"
+hostname=""
+while [ -z $hostname ]; do
+  echo "Waiting for external IP"
+  hostname=$(kubectl get --namespace default ingress/demo-localhost --template="{{range .status.loadBalancer.ingress}}{{.hostname}}{{end}}")
+  [ -z "$hostname" ] && sleep 10
+done
+echo 'ingress demo-localhost hostname: '$hostname
+
 # kubectl port-forward --namespace=ingress-nginx service/ingress-nginx-controller 8080:${DEMO_SVC_PORT}
 
-curl  http://demo.localdev.me:80/
+curl -s http://demo.localdev.me:80/
 
 cd $LAUNCH_DIR
