@@ -18,6 +18,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3.0.2
+
     - name: Github variables
       run: |
         echo github.event_name: ${{ github.event_name }}
@@ -39,9 +40,11 @@ jobs:
         node_image: kindest/node:${{ matrix.k8s-version }}
     - run: kubectl cluster-info
 
-    - run: kubectl version
+    - name: kubectl version
+      run: kubectl
 
-    - run: kubectl get pods -n kube-system
+    - name: k8s pods
+      run: kubectl get pods -n kube-system
 
     - name: Export k8s keys(client) and certificates(client, cluster CA)
       run: ./scripts/kind-export-cert.sh
