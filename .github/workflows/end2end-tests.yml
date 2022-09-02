@@ -58,6 +58,9 @@ jobs:
     - name: Install MetalLB
       run: ./scripts/kind-add-metallb.sh
 
+    - name: Deploy httpd web server and create an ingress rule for a localhost (http://demo.localdev.me:80/), Patch ingress-nginx-controller service type -> LoadBlancer
+      run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+
     - name: Deploy helloweb app
       run: ./scripts/kind-deploy-app-helloweb.sh
 
