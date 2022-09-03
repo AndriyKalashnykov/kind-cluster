@@ -35,7 +35,7 @@ kubectl create ingress demo-localhost --class=nginx --rule="demo.localdev.me/*=$
 echo "waiting for ingress demo-localhost"
 hostname=""
 while [ -z $hostname ]; do
-  echo "Waiting for external IP"
+  echo "Waiting for hotname ..."
   hostname=$(kubectl get --namespace default ingress/demo-localhost --template="{{range .status.loadBalancer.ingress}}{{.hostname}}{{end}}")
   [ -z "$hostname" ] && sleep 10
 done
