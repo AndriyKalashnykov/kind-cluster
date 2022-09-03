@@ -33,13 +33,23 @@ echo "creating an ingress resource and mapping demo.localdev.me to localhost"
 kubectl create ingress demo-localhost --class=nginx --rule="demo.localdev.me/*=${DEMO_SVC_NAME}:${DEMO_SVC_PORT}"
 
 echo "waiting for ingress demo-localhost"
+wait_period=0
 hostname=""
 while [ -z $hostname ]; do
-  echo "Waiting for hotname ..."
+  echo "Waiting for hostname ..."
   hostname=$(kubectl get --namespace default ingress/demo-localhost --template="{{range .status.loadBalancer.ingress}}{{.hostname}}{{end}}")
-  [ -z "$hostname" ] && sleep 10
+  if [ -z "$hostname" ];then
+    sleep 10
+    wait_period=$(($wait_period+10))
+  fi
+
+  wait_timeout=$(echo $TIMEOUT | sed 's/[^0-9]*//g')
+  if [ $wait_period -gt $wait_timeout ];then
+    echo "Didn't get the hostname, timeout reached"
+    break
+  fi
 done
-echo 'ingress demo-localhost hostname: '$hostname
+echo "ingress demo-localhost hostname: $hostname"
 
 # kubectl port-forward --namespace=ingress-nginx service/ingress-nginx-controller 8080:${DEMO_SVC_PORT}
 
