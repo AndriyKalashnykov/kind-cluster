@@ -6,7 +6,7 @@ Create local Kubernetes clusters using Docker container "nodes" with [kind](http
 
 
 
-## Pre-requisites
+## Requirements
 
 * [Docker](https://docs.docker.com/engine/install/)
 * [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation)
@@ -16,7 +16,7 @@ Create local Kubernetes clusters using Docker container "nodes" with [kind](http
 * [jq](https://github.com/stedolan/jq/wiki/Installation)
 * [base64](https://command-not-found.com/base64)
 
-## Install all at one (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
+## Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
 
 ```bash
 ./scripts/kind-install-all.sh
