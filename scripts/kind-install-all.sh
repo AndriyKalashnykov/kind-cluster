@@ -16,8 +16,8 @@ cd $SCRIPT_PARENT_DIR
 ./scripts/kind-add-metallb.sh
 
 ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
-# ./scripts/kind-deploy-app-helloweb.sh
-# ./scripts/kind-deploy-app-golang-hello-world-web.sh
-# ./scripts/kind-deploy-app-foo-bar-service.sh
+./scripts/kind-deploy-app-helloweb.sh
+./scripts/kind-deploy-app-golang-hello-world-web.sh
+./scripts/kind-deploy-app-foo-bar-service.sh
 
 cd $LAUNCH_DIR
