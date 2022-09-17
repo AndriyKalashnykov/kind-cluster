@@ -11,7 +11,7 @@ help:
 
 #create-cluster: @ Create k8s cluster
 @create-cluster:
-	./scripts/kind-export-cert.sh
+	./scripts/kind-create.sh
 
 #export-cert: @ Export k8s keys(client) and certificates(client, cluster CA)
 @export-cert:
