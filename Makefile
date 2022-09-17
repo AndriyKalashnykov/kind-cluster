@@ -1,8 +1,6 @@
-ll:
-	./scripts/kind-install-all.sh
-
-@create-cluster:
-	./scripts/kind-create.sh
+#help: @ List available tasks
+help: ll: @clear ./scripts/kind-install-all.sh @echo "Usage: make COMMAND" @echo "Commands :"@create-cluster: ./scripts/kind-create.sh
+	@grep -E '[a-zA-Z\.\-]+:.*?@ .*$$' $(MAKEFILE_LIST)| tr -d '#' | awk 'BEGIN {FS = ":.*?@ "}; {printf "\033[32m%-19s\033[0m - %s\n", $$1, $$2}'
 
 @export-cert:
 	./scripts/kind-export-cert.sh
