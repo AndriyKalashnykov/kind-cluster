@@ -83,6 +83,12 @@ In Dashboard UI select "Token' and `Ctrl+V`
 
 ## Deploy demo workloads
 
+### Deploy httpd web server and create an ingress rule for a localhost (http://demo.localdev.me:80/), Patch ingress-nginx-controller service type -> LoadBlancer
+
+```bash
+./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+```
+
 ### Deploy helloweb
 
 ```bash
