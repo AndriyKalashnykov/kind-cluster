@@ -101,7 +101,6 @@ In Dashboard UI select "Token' and `Ctrl+V`
 ./scripts/kind-deploy-app-golang-hello-world-web.sh
 ```
 
-
 ### Deploy foo-bar-service
 
 ```bash
