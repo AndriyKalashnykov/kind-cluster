@@ -5,7 +5,6 @@
 Create local Kubernetes clusters using Docker container "nodes" with [kind](https://kind.sigs.k8s.io/)
 
 
-
 ## Requirements
 
 * [Docker](https://docs.docker.com/engine/install/)
