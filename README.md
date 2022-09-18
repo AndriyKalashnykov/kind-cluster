@@ -5,7 +5,6 @@
 Create local Kubernetes clusters using Docker container "nodes" with [kind](https://kind.sigs.k8s.io/)
 
 
-
 ## Requirements
 
 * [Docker](https://docs.docker.com/engine/install/)
@@ -49,6 +48,7 @@ Install k8s dashboard
 ```bash
 ./scripts/kind-add-dashboard.sh
 ```
+
 Script creates file with admin-user token
 - dashboard-admin-token.txt
 
