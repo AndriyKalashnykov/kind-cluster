@@ -17,6 +17,7 @@ Create local Kubernetes clusters using Docker container "nodes" with [kind](http
 
 ## Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
 
+
 ```bash
 ./scripts/kind-install-all.sh
 ```
@@ -25,11 +26,13 @@ Or you can install each component individually
 
 ## Create k8s cluster
 
+
 ```bash
 ./scripts/kind-create.sh
 ```
 
 ## Export k8s keys(client) and certificates(client, cluster CA)
+
 
 ```bash
 ./scripts/kind-create.sh
@@ -45,6 +48,7 @@ Script creates:
 
 Install k8s dashboard
 
+
 ```bash
 ./scripts/kind-add-dashboard.sh
 ```
@@ -55,6 +59,7 @@ Script creates file with admin-user token
 ## Launch k8s Dashboard
 
 In terminal
+
 
 ```bash
 # kill kubectl proxy if already running
@@ -71,11 +76,13 @@ In Dashboard UI select "Token' and `Ctrl+V`
 
 ## Install Nginx ingress
 
+
 ```bash
 ./scripts/kind-add-ingress-nginx.sh
 ```
 
 ## Install MetalLB load balancer
+
 
 ```bash
 ./scripts/kind-add-metallb.sh
@@ -85,11 +92,13 @@ In Dashboard UI select "Token' and `Ctrl+V`
 
 ### Deploy httpd web server and create an ingress rule for a localhost `http://demo.localdev.me:80/`
 
+
 ```bash
 ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
 ```
 
 ### Deploy helloweb
+
 
 ```bash
 ./scripts/kind-deploy-app-helloweb.sh
@@ -97,17 +106,20 @@ In Dashboard UI select "Token' and `Ctrl+V`
 
 ### Deploy golang-hello-world-web
 
+
 ```bash
 ./scripts/kind-deploy-app-golang-hello-world-web.sh
 ```
 
 ### Deploy foo-bar-service
 
+
 ```bash
 ./scripts/kind-deploy-app-foo-bar-service.sh
 ```
 
 ## Delete k8s cluster
+
 
 ```bash
 ./scripts/kind-delete.sh
