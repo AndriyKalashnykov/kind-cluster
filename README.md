@@ -48,6 +48,7 @@ Install k8s dashboard
 ```bash
 ./scripts/kind-add-dashboard.sh
 ```
+
 Script creates file with admin-user token
 - dashboard-admin-token.txt
 
