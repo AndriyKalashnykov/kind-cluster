@@ -44,3 +44,6 @@ help:
 #deploy-app-foo-bar-service: @ Deploy foo-bar-service app
 @deploy-app-foo-bar-service:
 	./scripts/kind-deploy-app-foo-bar-service.sh
+
+@build-kubectl-test-image:
+	docker build -f ./images/Dockerfile -t kubectl-test  .
