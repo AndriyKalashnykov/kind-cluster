@@ -21,7 +21,6 @@ jobs:
 
     - name: Github variables
       run: |
-        echo github.event_name: ${{ github.event_name }}
         echo github.event: '${{ toJson(github.event) }}'
         echo github.event.release.tag_name: ${{ github.event.release.tag_name }}
         echo github.ref: ${{ github.ref }}
@@ -38,6 +37,7 @@ jobs:
         config: ./k8s/kind-config.yaml
         kubectl_version: ${{ matrix.kubectl-version }}
         node_image: kindest/node:${{ matrix.k8s-version }}
+
     - run: kubectl cluster-info
 
     - name: kubectl version
