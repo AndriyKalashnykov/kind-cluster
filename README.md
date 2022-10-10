@@ -15,6 +15,27 @@ Create local Kubernetes clusters using Docker container "nodes" with [kind](http
 * [jq](https://github.com/stedolan/jq/wiki/Installation)
 * [base64](https://command-not-found.com/base64)
 
+## Help
+
+```bash
+make help
+```
+
+```text
+help                               - List available tasks
+install-all                        - Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
+create-cluster                     - Create k8s cluster
+export-cert                        - Export k8s keys(client) and certificates(client, cluster CA)
+k8s-dashboard                      - Install k8s dashboard
+nginx-ingress                      - Install Nginx ingress
+metallb                            - Install MetalLB load balancer
+deploy-app-nginx-ingress-localhost - Deploy httpd web server and create an ingress rule for a localhost (http://demo.localdev.me:80/), Patch ingress-nginx-controller service type -> LoadBlancer
+deploy-app-helloweb                - Deploy helloweb
+deploy-app-golang-hello-world-web  - Deploy golang-hello-world-web app
+deploy-app-foo-bar-service         - Deploy foo-bar-service app
+delete-cluster                     - Delete K8s cluster
+```
+
 ## Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
 
 

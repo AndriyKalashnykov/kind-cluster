@@ -20,8 +20,7 @@ cd $SCRIPT_PARENT_DIR
 
 # case insensitive comparison
 shopt -s nocasematch
-if [[ $INSTALL_DEMO_WORKLOADS == no ]]; then
-    echo "here"
+if [[ $INSTALL_DEMO_WORKLOADS == yes ]]; then
     ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
     ./scripts/kind-deploy-app-helloweb.sh
     ./scripts/kind-deploy-app-golang-hello-world-web.sh
