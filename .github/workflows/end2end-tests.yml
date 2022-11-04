@@ -17,7 +17,7 @@ jobs:
         kind-version: ['v0.14.0']
 
     steps:
-    - uses: actions/checkout@2.5.0
+    - uses: actions/checkout@v3
 
     - name: Github variables
       run: |
