@@ -7,7 +7,11 @@ help:
 
 #install-all: @ Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
 install-all:
-	./scripts/kind-install-all.sh
+	./scripts/kind-install-all.sh yes
+
+#install-all-no-demo-workloads: @ Install all (kind k8s cluster, Nginx ingress, MetaLB)
+install-all-no-demo-workloads:
+	./scripts/kind-install-all.sh no
 
 #create-cluster: @ Create k8s cluster
 create-cluster:

@@ -3,5 +3,8 @@
     "yaml.completion": true,
     "yaml.schemas": {
         "Kubernetes": "*.yaml"
-    }
+    },
+    "githubPullRequests.ignoredPullRequestBranches": [
+        "main"
+    ]
 }
