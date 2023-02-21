@@ -140,6 +140,42 @@ In Dashboard UI select "Token' and `Ctrl+V`
 ./scripts/kind-deploy-app-foo-bar-service.sh
 ```
 
+### Deploy Prometheus
+
+Add prometheus and stable repo to local helm repository
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add stable https://charts.helm.sh/stable
+helm repo update
+```
+
+Create namespace monitoring to deploy all services in that namespace
+```bash
+kubectl create namespace monitoring
+```
+
+Install kube-prometheus stack
+```bash
+helm template kind-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring \
+--set prometheus.service.nodePort=30000 \
+--set prometheus.service.type=LoadBalancer \
+--set grafana.service.nodePort=31000 \
+--set grafana.service.type=LoadBalancer \
+--set alertmanager.service.nodePort=32000 \
+--set alertmanager.service.type=LoadBalancer \
+--set prometheus-node-exporter.service.nodePort=32001 \
+--set prometheus-node-exporter.service.type=LoadBalancer \
+> ./k8s/prometheus.yaml
+
+kubectl apply -f ./k8s/prometheus.yaml
+kubectl --namespace monitoring get pods -l release=kind-prometheus
+```
+
+Delete kube-prometheus stack
+```bash
+kubectl delete -f ./k8s/prometheus.yaml
+```
+
 ## Delete k8s cluster
 
 

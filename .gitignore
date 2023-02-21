@@ -13,7 +13,7 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
-
+.idea/
 client.crt
 client.key
 client.pfx
