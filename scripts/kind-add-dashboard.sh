@@ -20,7 +20,7 @@ cd $SCRIPT_PARENT_DIR
 # https://www.containiq.com/post/intro-to-kubernetes-dashboards
 # https://rancher.com/docs/k3s/latest/en/installation/kube-dashboard/
 
-kubectl apply -f  https://raw.githubusercontent.com/kubernetes/dashboard/${VERSION}/aio/deploy/recommended.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/${VERSION}/charts/kubernetes-dashboard.yaml
 kubectl apply -f ./k8s/dashboard-admin.yaml
 
 # export dashboard_admin_token=$(kubectl -n kubernetes-dashboard create token admin-user)
