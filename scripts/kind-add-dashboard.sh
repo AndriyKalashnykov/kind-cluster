@@ -19,9 +19,16 @@ cd $SCRIPT_PARENT_DIR
 # https://upcloud.com/resources/tutorials/deploy-kubernetes-dashboard
 # https://www.containiq.com/post/intro-to-kubernetes-dashboards
 # https://rancher.com/docs/k3s/latest/en/installation/kube-dashboard/
+# https://yamenshabankabakibo.medium.com/how-i-enabled-k8s-dashboard-on-docker-desktop-7dff3a9755c9
 
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/${VERSION}/charts/kubernetes-dashboard.yaml
-kubectl apply -f ./k8s/dashboard-admin.yaml
+kubectl delete clusterrolebinding --ignore-not-found=true kubernetes-dashboard
+kubectl delete clusterrole --ignore-not-found=true kubernetes-dashboard
+# kubectl apply --namespace=kubernetes-dashboard -f https://raw.githubusercontent.com/kubernetes/dashboard/${VERSION}/charts/kubernetes-dashboard.yaml
+helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+kubectl apply -n kubernetes-dashboard -f ./k8s/dashboard-admin.yaml
+# kubectl -n kubernetes-dashboard create token admin-user
+# kubectl --namespace kubernetes-dashboard patch svc kubernetes-dashboard-web -p '{"spec": {"type": "LoadBalancer"}}'
 
 # export dashboard_admin_token=$(kubectl -n kubernetes-dashboard create token admin-user)
 # export dashboard_admin_token=$(kubectl -n kubernetes-dashboard describe secret admin-user-token | grep '^token')

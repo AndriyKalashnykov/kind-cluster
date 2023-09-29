@@ -80,8 +80,27 @@ Script creates file with admin-user token
 
 ## Launch k8s Dashboard
 
-In terminal
+v3.0.0-alpha0
 
+```bash
+helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+kubectl apply -n kubernetes-dashboard -f ./k8s/dashboard-admin.yaml
+export dashboard_admin_token=$(kubectl get secret -n kubernetes-dashboard admin-user-token -o jsonpath="{.data.token}" | base64 --decode)
+echo "${dashboard_admin_token}" > dashboard-admin-token.txt
+kubectl config set-credentials cluster-admin --token=${dashboard_admin_token}
+echo "Dashboard Token: ${dashboard_admin_token}"
+
+export POD_NAME=$(kubectl get pods -n kubernetes-dashboard -l "app.kubernetes.io/name=kubernetes-dashboard,app.kubernetes.io/instance=kubernetes-dashboard" -o jsonpath="{.items[0].metadata.name}")
+kubectl -n kubernetes-dashboard port-forward $POD_NAME 8443:8443
+xdg-open "https://localhost:8443"
+
+# helm delete kubernetes-dashboard --namespace kubernetes-dashboard
+# kubectl delete clusterrolebinding --ignore-not-found=true kubernetes-dashboard
+# kubectl delete clusterrole --ignore-not-found=true kubernetes-dashboard
+```
+
+v2.x
 
 ```bash
 # kill kubectl proxy if already running
