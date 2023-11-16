@@ -24,5 +24,6 @@ until kubectl get service/golang-hello-world-web-service -n default --output=jso
 service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
 
 curl -s ${service_ip}:8080/myhello/
+curl -s ${service_ip}:8080/healthz
 
 cd $LAUNCH_DIR
