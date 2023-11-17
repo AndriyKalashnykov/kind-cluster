@@ -12,6 +12,8 @@ fi
 
 cd $SCRIPT_PARENT_DIR
 
+kind load docker-image ghcr.io/andriykalashnykov/golang-web:v0.0.1
+
 echo "deploying golang-hello-world-web"
 kubectl apply -f ./k8s/golang-hello-world-web.yaml
 
@@ -21,7 +23,7 @@ kubectl wait deployment -n default golang-hello-world-web --for condition=Availa
 
 echo "waiting for golang-hello-world-web service to get External-IP"
 until kubectl get service/golang-hello-world-web-service -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done 
-service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
+service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadloadBalancer.ingress[0].ip}")
 
 curl -s ${service_ip}:8080/myhello/
 curl -s ${service_ip}:8080/healthz

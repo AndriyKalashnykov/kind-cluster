@@ -28,7 +28,7 @@ spec:
 
       containers:
         - name: golang-hello-world-web
-          image: fabianlee/docker-golang-hello-world-web:1.0.0
+          image: ghcr.io/andriykalashnykov/golang-web:v0.0.1
           env:
             # default variables available to be overridden
             - name: APP_CONTEXT
