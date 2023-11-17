@@ -12,6 +12,7 @@ fi
 
 cd $SCRIPT_PARENT_DIR
 
+docker pull ghcr.io/andriykalashnykov/golang-web:v0.0.1
 kind load docker-image ghcr.io/andriykalashnykov/golang-web:v0.0.1
 
 echo "deploying golang-hello-world-web"
