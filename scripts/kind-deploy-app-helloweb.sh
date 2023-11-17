@@ -12,6 +12,9 @@ fi
 
 cd $SCRIPT_PARENT_DIR
 
+docker pull us-docker.pkg.dev/google-samples/containers/gke/hello-app:1.0
+kind load docker-image us-docker.pkg.dev/google-samples/containers/gke/hello-app:1.0
+
 echo "deploying helloweb"
 kubectl apply -f ./k8s/helloweb-deployment.yaml
 

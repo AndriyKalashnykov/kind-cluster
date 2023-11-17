@@ -12,6 +12,9 @@ fi
 
 cd $SCRIPT_PARENT_DIR
 
+docker pull hashicorp/http-echo:0.2.3
+kind load docker-image hashicorp/http-echo:0.2.3
+
 echo "deploying foo-bar-service"
 kubectl apply -f ./k8s/foo-bar-deployment.yaml
 
