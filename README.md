@@ -150,14 +150,14 @@ hostname -I | awk '{print $1}'
 $ 192.168.1.27
 ```
 
-let's allow whole subnetwork `192.168.1.0/24`
+let's allow any IP `*` (or you whole subnetwork `192.168.1.0/24`)
 
 ```bash
 sudo vi /etc/exports
 ```
 
 ```txt
-/mnt/k8s_nfs_storage 192.168.1.0/24(rw,sync,no_subtree_check)
+/mnt/k8s_nfs_storage *(rw,sync,no_subtree_check)
 ```
 
 ```bash
@@ -190,6 +190,7 @@ mount it test if it worked
 ```
 sudo mkdir -p /mnt/nfs_clientshare/
 sudo mount -t nfs 192.168.1.27:/mnt/k8s_nfs_storage /mnt/nfs_clientshare/
+sudo umount -f -l /mnt/nfs_clientshare/
 ```
 
 Install the nfs-subdir-external-provisioner
@@ -203,7 +204,9 @@ docker pull registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
 kind load docker-image registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
 
 helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner
+
 helm install -n nfs-provisioning --create-namespace nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --set nfs.server=192.168.1.27 --set nfs.path=/mnt/k8s_nfs_storage
+
 kubectl get all -n nfs-provisioning
 kubectl get sc -n nfs-provisioning
 ```
