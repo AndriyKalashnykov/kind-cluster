@@ -129,6 +129,87 @@ In Dashboard UI select "Token' and `Ctrl+V`
 ./scripts/kind-add-metallb.sh
 ```
 
+## Install NFS & nfs-subdir-external-provisioner to achieve RWX
+
+* [Dynamic NFS Provisioning in Kubernetes Cluster](https://www.linuxtechi.com/dynamic-nfs-provisioning-kubernetes/)
+* [ NFS Server and Client on Ubuntu 22.04](https://www.tecmint.com/install-nfs-server-on-ubuntu/)
+
+```bash
+sudo apt install -y nfs-kernel-server nfs-common
+
+sudo mkdir -p /mnt/k8s_nfs_storage
+sudo chown -R nobody:nogroup /mnt/k8s_nfs_storage
+sudo chmod 777 /mnt/k8s_nfs_storage
+```
+
+get your host IP
+```bash
+hostname -I | awk '{print $1}'
+```
+```terminal
+$ 192.168.1.27
+```
+
+let's allow whole subnetwork `192.168.1.0/24`
+
+```bash
+sudo vi /etc/exports
+```
+
+```txt
+/mnt/k8s_nfs_storage 192.168.1.0/24(rw,sync,no_subtree_check)
+```
+
+```bash
+sudo exportfs -a
+sudo systemctl restart nfs-kernel-server
+sudo systemctl status nfs-kernel-server
+
+# add firewall rules
+sudo ufw status
+sudo ufw allow from 192.168.1.27 to any port nfs
+sudo ufw enable
+sudo ufw status
+```
+```terminal
+Status: active
+
+To                         Action      From
+--                         ------      ----
+Nginx HTTP                 ALLOW       Anywhere                  
+Nginx Full                 ALLOW       Anywhere                  
+22/tcp                     DENY        Anywhere                  
+2049                       ALLOW       192.168.1.27              
+Nginx HTTP (v6)            ALLOW       Anywhere (v6)             
+Nginx Full (v6)            ALLOW       Anywhere (v6)             
+22/tcp (v6)                DENY        Anywhere (v6) 
+```
+
+mount it test if it worked
+
+```
+sudo mkdir -p /mnt/nfs_clientshare/
+sudo mount -t nfs 192.168.1.27:/mnt/k8s_nfs_storage /mnt/nfs_clientshare/
+```
+
+Install the nfs-subdir-external-provisioner
+
+```bash
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+chmod 700 get_helm.sh
+./get_helm.sh
+
+docker pull registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+kind load docker-image registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+
+helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner
+helm install -n nfs-provisioning --create-namespace nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --set nfs.server=192.168.1.27 --set nfs.path=/mnt/k8s_nfs_storage
+kubectl get all -n nfs-provisioning
+kubectl get sc -n nfs-provisioning
+```
+
+
+
 ## Deploy demo workloads
 
 ### Deploy httpd web server and create an ingress rule for a localhost `http://demo.localdev.me:80/`
