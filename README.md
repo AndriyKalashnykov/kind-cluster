@@ -134,6 +134,7 @@ In Dashboard UI select "Token' and `Ctrl+V`
 * [NFS Server and Client on Ubuntu 22.04](https://www.tecmint.com/install-nfs-server-on-ubuntu/)
 * [Dynamic NFS Provisioning in Kubernetes Cluster](https://www.linuxtechi.com/dynamic-nfs-provisioning-kubernetes/)
 * [Kubernetes – Setup Dynamic NFS Storage Provisioning – helm](https://www.unixarena.com/2022/10/kubernetes-setup-dynamic-nfs-storage-provisioning-helm.html/)
+* [Mounting Volume with RWX mode in KIND Cluster using NFS](https://cloudyuga.guru/hands_on_lab/nfs-kind)
 
 
 ```bash
