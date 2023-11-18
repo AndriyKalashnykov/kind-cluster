@@ -166,9 +166,10 @@ sudo systemctl restart nfs-kernel-server
 sudo systemctl status nfs-kernel-server
 
 # add firewall rules
-sudo ufw status
-sudo ufw allow from 192.168.1.27 to any port nfs
-sudo ufw enable
+# sudo ufw status
+# sudo ufw allow from 192.168.1.27 to any port nfs
+sudo ufw allow nfs
+sudo ufw disable
 sudo ufw status
 ```
 ```terminal
@@ -200,17 +201,23 @@ curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scrip
 chmod 700 get_helm.sh
 ./get_helm.sh
 
-docker pull registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
-kind load docker-image registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
-
 helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner
 
+docker pull registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+kind load docker-image registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
 helm install -n nfs-provisioning --create-namespace nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --set nfs.server=192.168.1.27 --set nfs.path=/mnt/k8s_nfs_storage
 
 kubectl get all -n nfs-provisioning
 kubectl get sc -n nfs-provisioning
 ```
 
+```bash
+kubectl create -f ./k8s/nfs/pvc.yaml
+kubectl get pv,pvc -n nfs-provisioning
+kubectl create -f ./k8s/nfs/pod.yaml
+kubectl get pods -n nfs-provisioning
+kubectl exec --stdin --tty -n nfs-provisioning test-pod -- /bin/sh
+```
 
 
 ## Deploy demo workloads
