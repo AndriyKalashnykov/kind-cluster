@@ -131,8 +131,10 @@ In Dashboard UI select "Token' and `Ctrl+V`
 
 ## Install NFS & nfs-subdir-external-provisioner to achieve RWX
 
+* [NFS Server and Client on Ubuntu 22.04](https://www.tecmint.com/install-nfs-server-on-ubuntu/)
 * [Dynamic NFS Provisioning in Kubernetes Cluster](https://www.linuxtechi.com/dynamic-nfs-provisioning-kubernetes/)
-* [ NFS Server and Client on Ubuntu 22.04](https://www.tecmint.com/install-nfs-server-on-ubuntu/)
+* [Kubernetes – Setup Dynamic NFS Storage Provisioning – helm](https://www.unixarena.com/2022/10/kubernetes-setup-dynamic-nfs-storage-provisioning-helm.html/)
+
 
 ```bash
 sudo apt install -y nfs-kernel-server nfs-common
