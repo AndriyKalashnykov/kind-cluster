@@ -1,6 +1,6 @@
 [![End to End Tests](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/end2end-tests.yml/badge.svg)](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/end2end-tests.yml)
-[![Hits](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster.svg)](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Hits](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster.svg?view=today-total&style=plastic)](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 # kind-cluster
 Create local Kubernetes clusters using Docker with [KinD](https://kind.sigs.k8s.io/)
 
