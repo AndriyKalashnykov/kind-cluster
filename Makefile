@@ -1,6 +1,5 @@
 #help: @ List available tasks
 help:
-	@clear
 	@echo "Usage: make COMMAND"
 	@echo "Commands :"
 	@grep -E '[a-zA-Z\.\-]+:.*?@ .*$$' $(MAKEFILE_LIST)| tr -d '#' | awk 'BEGIN {FS = ":.*?@ "}; {printf "\033[32m%-34s\033[0m - %s\n", $$1, $$2}'
@@ -55,3 +54,8 @@ build-kubectl-test-image:
 #delete-cluster: @ Delete K8s cluster
 delete-cluster:
 	./scripts/kind-delete.sh
+
+.PHONY: help install-all install-all-no-demo-workloads create-cluster export-cert \
+	k8s-dashboard nginx-ingress metallb deploy-app-nginx-ingress-localhost \
+	deploy-app-helloweb deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
+	build-kubectl-test-image delete-cluster
