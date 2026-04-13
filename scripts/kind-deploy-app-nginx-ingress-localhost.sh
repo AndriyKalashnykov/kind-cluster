@@ -57,6 +57,6 @@ echo "ingress demo-localhost hostname: $hostname"
 
 # kubectl port-forward --namespace=ingress-nginx service/ingress-nginx-controller 8080:${DEMO_SVC_PORT}
 
-curl -s http://demo.localdev.me:80/
+curl -s --max-time 10 http://demo.localdev.me:80/ || echo "(curl demo.localdev.me failed)"
 
 cd $LAUNCH_DIR

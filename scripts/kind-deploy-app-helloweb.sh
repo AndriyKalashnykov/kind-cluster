@@ -30,6 +30,6 @@ done
 kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: helloweb did not get an External-IP after 180s"; kubectl get svc helloweb; exit 1; }
 
 service_ip=$(kubectl get services helloweb -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
-curl -s ${service_ip}:80
+curl -s --max-time 10 ${service_ip}:80 || echo "(curl ${service_ip}:80 failed)"
 
 cd $LAUNCH_DIR

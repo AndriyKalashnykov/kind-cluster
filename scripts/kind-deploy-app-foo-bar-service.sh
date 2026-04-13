@@ -31,7 +31,7 @@ kubectl get service/foo-service -n default --output=jsonpath='{.status.loadBalan
 LB_IP=$(kubectl get svc/foo-service -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 for _ in {1..10}; do
-  curl -s ${LB_IP}:5678
+  curl -s --max-time 10 ${LB_IP}:5678 || echo "  (curl ${LB_IP}:5678 failed)"
 done
 
 cd $LAUNCH_DIR

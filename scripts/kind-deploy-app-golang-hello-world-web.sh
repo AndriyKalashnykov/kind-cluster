@@ -29,9 +29,9 @@ for i in $(seq 1 90); do
 done
 kubectl get service/golang-hello-world-web-service -n default --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: golang-hello-world-web-service did not get an External-IP after 180s"; kubectl get svc golang-hello-world-web-service; exit 1; }
 
-service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadloadBalancer.ingress[0].ip}")
+service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
 
-curl -s ${service_ip}:8080/myhello/
-curl -s ${service_ip}:8080/healthz
+curl -s --max-time 10 ${service_ip}:8080/myhello/ || echo "(curl myhello failed)"
+curl -s --max-time 10 ${service_ip}:8080/healthz || echo "(curl healthz failed)"
 
 cd $LAUNCH_DIR
