@@ -413,31 +413,65 @@ Browser: `https://localhost:8443`
 
 ### kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
 
-The script installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace and patches the `grafana` Service to `LoadBalancer` (served via MetalLB). Reuses the `kube` function from [Access services · Step 1](#step-1--point-kubectl-at-the-cluster), so this block works for both bare-host and VM paths.
+Installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace and patches the `grafana` Service to `LoadBalancer` (served via MetalLB). Prometheus and Alertmanager stay as ClusterIPs — reach them via `kubectl port-forward`.
+
+The credential-discovery snippets reuse the `kube` function from [Access services · Step 1](#step-1--point-kubectl-at-the-cluster). Paths labelled **[HOST]** run on your laptop; **[VM]** run inside the Multipass VM.
+
+#### Path A — bare host (`make kind-up`)
+
+`port-forward` from your laptop binds host-local ports — directly reachable in your browser.
 
 ```bash
+# [HOST]
 make kube-prometheus-stack
 
-# Grafana — reachable directly via MetalLB LB IP (Path A or Path B · Option 2);
-# via SSH tunnel for Path B · Option 1.
 GRAFANA_IP=$(kube get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 GRAFANA_PASSWORD=$(kube get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d)
-echo "Grafana:  http://$GRAFANA_IP/   (admin / $GRAFANA_PASSWORD)"
+echo "Grafana:       http://$GRAFANA_IP/   (admin / $GRAFANA_PASSWORD)"
 
-# Prometheus + Alertmanager — port-forward (no LoadBalancer patch by default).
-kube port-forward -n monitoring svc/kube-prometheus-stack-prometheus    9090:9090 &
-kube port-forward -n monitoring svc/kube-prometheus-stack-alertmanager  9093:9093 &
+kube port-forward -n monitoring svc/kube-prometheus-stack-prometheus    9090:9090 >/dev/null 2>&1 &
+kube port-forward -n monitoring svc/kube-prometheus-stack-alertmanager  9093:9093 >/dev/null 2>&1 &
 echo "Prometheus:    http://localhost:9090/   (targets: /targets)"
 echo "Alertmanager:  http://localhost:9093/"
 ```
 
-| Component | URL | Exposed via | Credentials |
-|---|---|---|---|
-| Grafana | `http://$GRAFANA_IP/` | MetalLB LoadBalancer | `admin` / `$GRAFANA_PASSWORD` |
-| Prometheus | `http://localhost:9090/` (UI), `/targets` | `kube port-forward` | none |
-| Alertmanager | `http://localhost:9093/` | `kube port-forward` | none |
+#### Path B — Multipass VM (`make vm-install-all`)
 
-For Path B · Option 1 (SSH tunnel), wrap the port-forwards in an outer `ssh -fN -L 9090:localhost:9090 ubuntu@"$VM_IP"` (and `9093` similarly) — same pattern as the Dashboard flow.
+Install runs inside the VM. `kube port-forward` would bind the VM's localhost (not your host's) — so the port-forward stays in the VM and you add an outer SSH tunnel from the host. Grafana goes through MetalLB so the access mode depends on which Option from §Access services Step 3 you picked.
+
+```bash
+# [VM] — install + start in-VM port-forwards
+multipass exec "$NAME" -- bash -lc 'cd ~/kind-cluster && make kube-prometheus-stack'
+multipass exec "$NAME" -- bash -lc 'nohup kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus    9090:9090 >/dev/null 2>&1 & disown'
+multipass exec "$NAME" -- bash -lc 'nohup kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager  9093:9093 >/dev/null 2>&1 & disown'
+
+# [HOST] — discover credentials
+GRAFANA_IP=$(kube get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+GRAFANA_PASSWORD=$(kube get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d)
+
+# [HOST] — outer SSH tunnels for Prometheus + Alertmanager (always needed for Path B)
+ssh -fN -L 9090:localhost:9090 ubuntu@"$VM_IP"
+ssh -fN -L 9093:localhost:9093 ubuntu@"$VM_IP"
+
+# [HOST] — Grafana access depends on which §Access services Option you picked:
+#   Path B · Option 1 (SSH tunnel):  add another tunnel on a free local port
+ssh -fN -L 3000:"$GRAFANA_IP":80 ubuntu@"$VM_IP"
+echo "Grafana (Option 1):  http://localhost:3000/  (admin / $GRAFANA_PASSWORD)"
+#   Path B · Option 2 (static route): the LB IP is already routable from host
+echo "Grafana (Option 2):  http://$GRAFANA_IP/      (admin / $GRAFANA_PASSWORD)"
+
+echo "Prometheus:    http://localhost:9090/   (targets: /targets)"
+echo "Alertmanager:  http://localhost:9093/"
+```
+
+Summary — pick the column matching your install path:
+
+| Component | Path A (`http://…`) | Path B · Option 1 | Path B · Option 2 |
+|---|---|---|---|
+| Grafana | `http://$GRAFANA_IP/` | `http://localhost:3000/` | `http://$GRAFANA_IP/` |
+| Prometheus | `http://localhost:9090/` | `http://localhost:9090/` | `http://localhost:9090/` |
+| Alertmanager | `http://localhost:9093/` | `http://localhost:9093/` | `http://localhost:9093/` |
+| Login (Grafana) | `admin` / `$GRAFANA_PASSWORD` | same | same |
 
 If you're running inside a Multipass VM, prefix with `multipass exec $NAME --` or run the port-forward inside the VM and add a host-side SSH tunnel exactly like the Dashboard flow in §4 above (replace `8443` with `9090` / `9093`).
 
