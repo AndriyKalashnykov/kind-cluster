@@ -57,15 +57,15 @@ echo "ingress demo-localhost hostname: $hostname"
 
 # kubectl port-forward --namespace=ingress-nginx service/ingress-nginx-controller 8080:${DEMO_SVC_PORT}
 
-# demo.localdev.me NXDOMAIN on many hosts (GH runners included); curl from INSIDE
-# the kind control-plane node with an explicit Host header to hit the ingress.
-# Retry for up to 30s because ingress programming is async (the rule reaches the
-# controller a few seconds after `kubectl create ingress` returns).
+# demo.localdev.me NXDOMAIN on many hosts (GH runners included); curl the
+# ingress-nginx LoadBalancer IP directly from INSIDE the kind control-plane
+# node with an explicit Host header. Retry up to 30s for async rule propagation.
 KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
+INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 for i in $(seq 1 15); do
-    RESP=$(docker exec "${KIND_NODE}" curl -sf --max-time 5 -H "Host: demo.localdev.me" "http://localhost:80/" 2>/dev/null) && { echo "$RESP" | head -c 200; echo; break; }
+    RESP=$(docker exec "${KIND_NODE}" curl -sf --max-time 5 -H "Host: demo.localdev.me" "http://${INGRESS_IP}:80/" 2>/dev/null) && { echo "$RESP" | head -c 200; echo; break; }
     sleep 2
 done
-[ -n "${RESP:-}" ] || echo "(curl demo.localdev.me via ${KIND_NODE} failed after 30s)"
+[ -n "${RESP:-}" ] || echo "(curl http://${INGRESS_IP} via ${KIND_NODE} with Host demo.localdev.me failed after 30s)"
 
 cd $LAUNCH_DIR
