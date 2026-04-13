@@ -100,6 +100,22 @@ deploy-app-foo-bar-service: deps
 image-build:
 	@docker build -f ./images/Dockerfile -t kubectl-test .
 
+#vm-up: @ Launch Ubuntu VM via Multipass with the full stack pre-provisioned (NAME=kind-host)
+vm-up:
+	@./scripts/vm-up.sh $(if $(NAME),$(NAME),) $(if $(CPUS),$(CPUS),) $(if $(MEMORY),$(MEMORY),) $(if $(DISK),$(DISK),)
+
+#vm-down: @ Stop, delete and purge the VM (NAME=kind-host)
+vm-down:
+	@./scripts/vm-down.sh $(if $(NAME),$(NAME),)
+
+#vm-ssh: @ Open an interactive shell inside the VM (NAME=kind-host)
+vm-ssh:
+	@./scripts/vm-ssh.sh $(if $(NAME),$(NAME),)
+
+#vm-install-all: @ Run 'make install-all' inside the VM (NAME=kind-host)
+vm-install-all:
+	@./scripts/vm-install-all.sh $(if $(NAME),$(NAME),)
+
 #renovate-validate: @ Validate renovate.json configuration
 renovate-validate:
 	@command -v npx >/dev/null 2>&1 || { echo "Error: npx required (install Node.js)."; exit 1; }
@@ -116,4 +132,5 @@ delete-cluster: deps
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
-	image-build renovate-validate delete-cluster
+	image-build renovate-validate delete-cluster \
+	vm-up vm-down vm-ssh vm-install-all

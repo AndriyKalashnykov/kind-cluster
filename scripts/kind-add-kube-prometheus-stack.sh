@@ -22,7 +22,11 @@ echo "changing kube-prometheus-stack-grafana service type to LoadBlancer"
 kubectl patch svc kube-prometheus-stack-grafana -n monitoring --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
 
 echo "waiting for golang-hello-world-web service to get External-IP"
-until kubectl get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done &&
+for i in $(seq 1 90); do
+    kubectl get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
+    sleep 2
+done
+kubectl get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: grafana did not get an External-IP after 180s"; kubectl get svc -n monitoring kube-prometheus-stack-grafana; exit 1; }
 
 # User: admin
 # Pwd:  prom-operator

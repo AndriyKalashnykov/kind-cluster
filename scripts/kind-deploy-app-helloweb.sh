@@ -23,7 +23,11 @@ kubectl wait deployment -n default helloweb --for condition=Available=True --tim
 
 # https://stackoverflow.com/questions/70108499/kubectl-wait-for-service-on-aws-eks-to-expose-elastic-load-balancer-elb-addres/70108500#70108500
 echo "waiting for helloweb service to get External-IP"
-until kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done
+for i in $(seq 1 90); do
+    kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
+    sleep 2
+done
+kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: helloweb did not get an External-IP after 180s"; kubectl get svc helloweb; exit 1; }
 
 service_ip=$(kubectl get services helloweb -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
 curl -s ${service_ip}:80

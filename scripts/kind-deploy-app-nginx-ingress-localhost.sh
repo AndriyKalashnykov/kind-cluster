@@ -17,7 +17,11 @@ cd $SCRIPT_PARENT_DIR
 echo "changing ingress-nginx-controller service type to LoadBlancer"
 kubectl patch svc ingress-nginx-controller -n ingress-nginx --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
 echo "waiting for ingress-nginx-controller service to get External-IP"
-until kubectl get service/ingress-nginx-controller -n ingress-nginx --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done &&
+for i in $(seq 1 90); do
+    kubectl get service/ingress-nginx-controller -n ingress-nginx --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
+    sleep 2
+done
+kubectl get service/ingress-nginx-controller -n ingress-nginx --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: ingress-nginx-controller did not get an External-IP after 180s"; kubectl get svc -n ingress-nginx ingress-nginx-controller; exit 1; }
 service_ip=$(kubectl get services ingress-nginx-controller -n ingress-nginx -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
 echo "nginx ingress External-IP: ${service_ip}"
 

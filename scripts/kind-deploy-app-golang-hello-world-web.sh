@@ -23,7 +23,12 @@ echo "waiting for golang-hello-world-web pods"
 kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout=${TIMEOUT}
 
 echo "waiting for golang-hello-world-web service to get External-IP"
-until kubectl get service/golang-hello-world-web-service -n default --output=jsonpath='{.status.loadBalancer}' | grep "ingress"; do : ; done 
+for i in $(seq 1 90); do
+    kubectl get service/golang-hello-world-web-service -n default --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
+    sleep 2
+done
+kubectl get service/golang-hello-world-web-service -n default --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: golang-hello-world-web-service did not get an External-IP after 180s"; kubectl get svc golang-hello-world-web-service; exit 1; }
+
 service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadloadBalancer.ingress[0].ip}")
 
 curl -s ${service_ip}:8080/myhello/

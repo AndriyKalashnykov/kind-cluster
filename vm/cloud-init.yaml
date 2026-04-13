@@ -1,0 +1,98 @@
+#cloud-config
+# Provisions an Ubuntu VM with everything needed to run the kind-cluster stack:
+# - Docker (rootless-capable, group membership for ubuntu)
+# - KinD, kubectl, helm
+# - nfs-kernel-server with /srv/k8s_nfs_storage exported (Option 2 host-NFS)
+# - jq, git, curl, make
+#
+# Consumed by scripts/vm-up.sh via `multipass launch --cloud-init`.
+# Test locally with: cloud-init schema -c vm/cloud-init.yaml
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - jq
+  - lsb-release
+  - make
+  - nfs-kernel-server
+  - nfs-common
+
+write_files:
+  - path: /etc/exports.d/kind-cluster.exports
+    owner: root:root
+    permissions: "0644"
+    content: |
+      /srv/k8s_nfs_storage *(rw,sync,no_subtree_check,no_root_squash)
+
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: "0644"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {"max-size": "10m", "max-file": "3"}
+      }
+
+  - path: /usr/local/bin/kind-cluster-bootstrap.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Idempotent bootstrap run once at first boot.
+      set -euo pipefail
+
+      KIND_VERSION=v0.31.0
+      KUBECTL_VERSION=v1.35.1
+      HELM_VERSION=v3.19.0
+
+      # Docker repo
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+        > /etc/apt/sources.list.d/docker.list
+      apt-get update -y
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      usermod -aG docker ubuntu
+      systemctl enable --now docker
+
+      # kind
+      curl -fsSL -o /usr/local/bin/kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-$(dpkg --print-architecture)"
+      chmod +x /usr/local/bin/kind
+
+      # kubectl
+      curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/$(dpkg --print-architecture)/kubectl"
+      chmod +x /usr/local/bin/kubectl
+
+      # helm
+      curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-$(dpkg --print-architecture).tar.gz" | \
+        tar -xz -C /tmp
+      install -m 0755 "/tmp/linux-$(dpkg --print-architecture)/helm" /usr/local/bin/helm
+
+      # NFS export directory
+      mkdir -p /srv/k8s_nfs_storage
+      chown nobody:nogroup /srv/k8s_nfs_storage
+      chmod 777 /srv/k8s_nfs_storage
+      exportfs -a
+      systemctl enable --now nfs-kernel-server
+
+      # Checkout the project (public repo — no auth needed)
+      sudo -u ubuntu -H bash -c '
+        cd /home/ubuntu
+        if [ ! -d kind-cluster ]; then
+          git clone https://github.com/AndriyKalashnykov/kind-cluster.git
+        fi
+      '
+
+      touch /var/lib/kind-cluster-bootstrapped
+
+runcmd:
+  - /usr/local/bin/kind-cluster-bootstrap.sh
+
+final_message: "kind-cluster VM ready. SSH and run: cd ~/kind-cluster && make install-all"

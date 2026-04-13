@@ -71,6 +71,15 @@ Run `make help` to list targets.
 | `make metrics-server` | Install metrics-server (for `kubectl top` / HPA) |
 | `make kube-prometheus-stack` | Install Prometheus + Grafana + Alertmanager |
 
+### Virtual Ubuntu Host (Multipass)
+
+| Target | Description |
+|--------|-------------|
+| `make vm-up` | Launch Ubuntu 22.04 VM via Multipass, cloud-init provisions Docker + kind + kubectl + helm + nfs-kernel-server |
+| `make vm-ssh` | Open interactive shell inside the VM |
+| `make vm-install-all` | Run `make install-all` inside the VM (remote bootstrap) |
+| `make vm-down` | Stop, delete, and purge the VM |
+
 ### RWX Storage (NFS)
 
 | Target | Description |
@@ -209,6 +218,47 @@ kubectl apply -f ./k8s/nfs/pvc.yaml             # sample RWX PVC
 Pinned versions: `nfs-subdir-external-provisioner` chart 4.0.18. Sources: `scripts/kind-add-nfs-host-setup.sh`, `scripts/kind-add-nfs-host-provisioner.sh`.
 
 **References:** [NFS Server on Ubuntu](https://www.tecmint.com/install-nfs-server-on-ubuntu/) · [Dynamic NFS Provisioning in k8s](https://www.linuxtechi.com/dynamic-nfs-provisioning-kubernetes/) · [RWX in KinD with NFS](https://cloudyuga.guru/hands_on_lab/nfs-kind).
+
+## Run in a VM (Multipass)
+
+For full reproducibility — and to keep Docker, kind, and the host NFS server off your main machine — the whole stack can run inside a throwaway Ubuntu VM. [Multipass](https://multipass.run/) ships the image, and a cloud-init YAML does the bootstrap.
+
+```mermaid
+flowchart LR
+    DEV[Developer<br/>laptop] -->|make vm-ssh| M[Multipass<br/>Ubuntu 22.04 VM]
+    subgraph M[Multipass VM: kind-host]
+      D[Docker] --> K[KinD cluster<br/>control-plane + worker]
+      NFS[nfs-kernel-server<br/>/srv/k8s_nfs_storage]
+      K -->|Option 2| NFS
+    end
+    DEV -.ports.-> K
+```
+
+```bash
+# 1. One-time: install Multipass (https://multipass.run)
+#    Ubuntu/Debian: sudo snap install multipass
+#    macOS:         brew install --cask multipass
+#    Windows:       winget install Canonical.Multipass
+
+# 2. Launch the VM (~3-5 min first boot: image download + bootstrap)
+make vm-up
+
+# 3. SSH in
+make vm-ssh
+
+# 4. Inside the VM, run the stack
+cd ~/kind-cluster && make install-all
+
+# Or do it remotely (one-shot):
+make vm-install-all
+
+# Tear down
+make vm-down
+```
+
+The VM clones this repo to `~/kind-cluster` at first boot, exports `/srv/k8s_nfs_storage` over NFS, and has everything needed to use either the in-cluster NFS or host-NFS approach above.
+
+Override VM resources: `make vm-up CPUS=6 MEMORY=12G DISK=60G NAME=my-kind`.
 
 
 ## Observability
