@@ -1,41 +1,89 @@
 [![End to End Tests](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/end2end-tests.yml/badge.svg)](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/end2end-tests.yml)
 [![Hits](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster.svg?view=today-total&style=plastic)](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
+[![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://app.renovatebot.com/dashboard#github/AndriyKalashnykov/kind-cluster)
+
 # kind-cluster
-Create local Kubernetes clusters using Docker with [KinD](https://kind.sigs.k8s.io/)
 
+Shell-script toolkit for provisioning local Kubernetes clusters with [KinD](https://kind.sigs.k8s.io/) and installing common cluster add-ons (Nginx ingress, MetalLB, Kubernetes Dashboard, NFS provisioner, Prometheus stack) plus demo workloads.
 
-## Requirements
+| Component | Technology |
+|-----------|-----------|
+| Cluster | [KinD](https://kind.sigs.k8s.io/) on Docker |
+| Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) |
+| Load Balancer | [MetalLB](https://metallb.universe.tf/) |
+| Storage (RWX) | [nfs-subdir-external-provisioner](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) |
+| Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) |
+| Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) |
+| CI | GitHub Actions (`helm/kind-action`) |
 
-* [Docker](https://docs.docker.com/engine/install/)
-* [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation)
-* [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
-* [helm](https://helm.sh/docs/intro/install/)
-* [curl](https://help.ubidots.com/en/articles/2165289-learn-how-to-install-run-curl-on-windows-macosx-linux)
-* [jq](https://github.com/stedolan/jq/wiki/Installation)
-* [base64](https://command-not-found.com/base64)
-
-## Help
+## Quick Start
 
 ```bash
-make help
+make install-all                     # create cluster + Nginx ingress + MetalLB + demo workloads
+kubectl cluster-info --context kind-kind
+# Open http://demo.localdev.me/
+make delete-cluster                  # tear down
 ```
 
-```text
-help                               - List available tasks
-install-all                        - Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
-install-all-no-demo-workloads      - Install all (kind k8s cluster, Nginx ingress, MetaLB)
-create-cluster                     - Create k8s cluster
-export-cert                        - Export k8s keys(client) and certificates(client, cluster CA)
-k8s-dashboard                      - Install k8s dashboard
-nginx-ingress                      - Install Nginx ingress
-metallb                            - Install MetalLB load balancer
-deploy-app-nginx-ingress-localhost - Deploy httpd web server and create an ingress rule for a localhost (http://demo.localdev.me:80/), Patch ingress-nginx-controller service type -> LoadBlancer
-deploy-app-helloweb                - Deploy helloweb
-deploy-app-golang-hello-world-web  - Deploy golang-hello-world-web app
-deploy-app-foo-bar-service         - Deploy foo-bar-service app
-delete-cluster                     - Delete K8s cluste
-```
+To provision the cluster and add-ons without the demo apps, use `make install-all-no-demo-workloads`.
+
+## Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Task orchestration |
+| [Git](https://git-scm.com/) | latest | Version control |
+| [Docker](https://www.docker.com/) | latest | Container runtime for KinD nodes |
+| [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation) | v0.14.0+ | Local Kubernetes in Docker |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.25.0+ | Kubernetes CLI |
+| [helm](https://helm.sh/docs/intro/install/) | v3+ | Chart-based installs (dashboard, Prometheus, NFS) |
+| [curl](https://curl.se/) | latest | Download helpers used by scripts |
+| [jq](https://github.com/jqlang/jq) | latest | JSON parsing in scripts |
+| [base64](https://command-not-found.com/base64) | latest | Token decoding for dashboard access |
+
+## Available Make Targets
+
+Run `make help` to list targets.
+
+### Cluster Lifecycle
+
+| Target | Description |
+|--------|-------------|
+| `make install-all` | Create cluster + Nginx ingress + MetalLB + demo workloads |
+| `make install-all-no-demo-workloads` | Create cluster + Nginx ingress + MetalLB (no demo apps) |
+| `make create-cluster` | Create KinD cluster |
+| `make delete-cluster` | Delete KinD cluster |
+| `make export-cert` | Export k8s client keys and CA certificates |
+
+### Cluster Add-ons
+
+| Target | Description |
+|--------|-------------|
+| `make k8s-dashboard` | Install Kubernetes Dashboard |
+| `make nginx-ingress` | Install Nginx ingress controller |
+| `make metallb` | Install MetalLB load balancer |
+
+### Demo Workloads
+
+| Target | Description |
+|--------|-------------|
+| `make deploy-app-nginx-ingress-localhost` | Deploy httpd with ingress rule at `http://demo.localdev.me/` |
+| `make deploy-app-helloweb` | Deploy helloweb sample app |
+| `make deploy-app-golang-hello-world-web` | Deploy golang-hello-world-web sample app |
+| `make deploy-app-foo-bar-service` | Deploy foo-bar-service sample app |
+
+## CI/CD
+
+GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
+
+| Job | Triggers | Steps |
+|-----|----------|-------|
+| **test-e2e** | push, PR, tags | Spin up KinD via `helm/kind-action`, install ingress + MetalLB, deploy all demo workloads |
+
+A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
+
+[Renovate](https://docs.renovatebot.com/) keeps action versions and container images up to date.
 
 ## Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
 

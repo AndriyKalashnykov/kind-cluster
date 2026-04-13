@@ -38,6 +38,15 @@ make delete-cluster                    # Tear down cluster
 - Docker, kind, kubectl, helm, curl, jq, base64
 - No Go modules; no package manager lockfiles
 
-## Improvement Backlog
+## Skills
 
-- Add `renovate.json` for automated dependency updates
+Use the following skills when working on related files:
+
+| File(s) | Skill |
+|---------|-------|
+| `Makefile` | `/makefile` |
+| `renovate.json` | `/renovate` |
+| `README.md` | `/readme` |
+| `.github/workflows/*.{yml,yaml}` | `/ci-workflow` |
+
+When spawning subagents, always pass conventions from the respective skill into the agent's prompt.
