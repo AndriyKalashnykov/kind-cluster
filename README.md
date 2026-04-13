@@ -30,6 +30,8 @@ make kind-down   # tear down
 
 `kind-up` is a docker-compose-style alias for `install-all`. For the cluster and add-ons without the demo apps, run `make install-all-no-demo-workloads`.
 
+Once the stack is up, see [**Access services**](#access-services) for discovering LoadBalancer IPs and opening service URLs — the same section covers both bare-host (`make kind-up`) and VM (`make vm-install-all`) paths.
+
 ## Prerequisites
 
 | Tool | Version | Purpose |
@@ -145,7 +147,7 @@ make dashboard-forward   # kubectl port-forward svc/kubernetes-dashboard-kong-pr
 make dashboard-token     # print the admin-user token
 ```
 
-At the login screen, select **Token** and paste the token printed by `make dashboard-token`.
+At the login screen, select **Token** and paste the token printed by `make dashboard-token`. See [Access services · Kubernetes Dashboard](#kubernetes-dashboard) for the bare-host vs VM port-forward/tunnel recipes.
 
 Uninstall: `helm delete kubernetes-dashboard --namespace kubernetes-dashboard`.
 
@@ -255,125 +257,7 @@ cd ~/kind-cluster && make install-all
 make vm-install-all
 ```
 
-### 4. Access services from your host browser
-
-> Commands below are labelled `[HOST]` (your laptop shell) or `[VM]` (after `make vm-ssh`). `multipass` only exists on the host.
-
-MetalLB `LoadBalancer` IPs and the ingress IP live on the VM's internal `kind` docker network (typically `172.18.0.0/16`) and are **not directly routable from your host**. Pick one of the two approaches below.
-
-First, capture the VM name and its IPv4 (you'll reuse both):
-
-```bash
-# [HOST]
-NAME=${NAME:-kind-host}                                                            # match make vm-up default
-VM_IP=$(multipass info "$NAME" --format json | jq -r '.info | to_entries[0].value.ipv4[0]')
-echo "NAME=$NAME  VM_IP=$VM_IP"
-```
-
-#### Option A — SSH tunnel per service (no sudo, works everywhere)
-
-One tunnel per service. The host URL becomes `http://localhost:<port>`.
-
-`multipass launch` does not inject your host SSH key, so do this once per VM before tunneling:
-
-```bash
-# [HOST] — authorize your key in the VM (idempotent; adjust the key path if needed)
-PUBKEY=$(cat ~/.ssh/id_ed25519.pub)
-multipass exec $NAME -- bash -c "mkdir -p /home/ubuntu/.ssh && grep -qxF '$PUBKEY' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || echo '$PUBKEY' >> /home/ubuntu/.ssh/authorized_keys && chown -R ubuntu:ubuntu /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chmod 600 /home/ubuntu/.ssh/authorized_keys"
-```
-
-```bash
-# [HOST] — discover a LB IP from inside the VM
-LB_IP=$(multipass exec $NAME -- kubectl get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-
-# [HOST] — tunnel host:8080 → VM → LB_IP:80 (background, -N = no shell)
-ssh -fN -L 8080:$LB_IP:80 ubuntu@$VM_IP
-
-# Browser: http://localhost:8080
-```
-
-Same pattern for the other demo services — change the `svc/` name and upstream port:
-
-| Service | Upstream port |
-|---|---|
-| `helloweb` | `80` |
-| `golang-hello-world-web-service` | `8080` |
-| `foo-service` | `5678` |
-
-Kill tunnels with `pkill -f "ssh.*-L.*$VM_IP"`.
-
-For ingress-based URLs (`http://demo.localdev.me/`), tunnel to the ingress controller's LB IP on port 80 and add `127.0.0.1 demo.localdev.me` to `/etc/hosts`:
-
-```bash
-# [HOST]
-INGRESS_IP=$(multipass exec $NAME -- kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-ssh -fN -L 8080:$INGRESS_IP:80 ubuntu@$VM_IP
-echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts
-# Browser: http://demo.localdev.me:8080/
-```
-
-#### Option B — Static route to the kind subnet (Linux/macOS, sudo once, natural URLs)
-
-Route the VM's kind docker subnet through the VM. After this, MetalLB IPs and the ingress IP are reachable directly from the host — the real URLs work in your browser.
-
-```bash
-# [HOST] — discover the kind IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
-KIND_NET=$(multipass exec $NAME -- bash -lc "docker network inspect kind | jq -r '.[0].IPAM.Config[] | select(.Subnet | test(\"^[0-9]+\\\\.\")) | .Subnet' | head -1")
-
-# [HOST] — Linux
-sudo ip route add "$KIND_NET" via "$VM_IP"
-
-# [HOST] — macOS
-# sudo route -n add -net "$KIND_NET" "$VM_IP"
-
-# [HOST] — resolve the demo hostname to the ingress IP
-INGRESS_IP=$(multipass exec $NAME -- kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "$INGRESS_IP demo.localdev.me" | sudo tee -a /etc/hosts
-
-# Browser: http://demo.localdev.me/   (and any LB IP directly)
-```
-
-Clean up after `make vm-down`:
-
-```bash
-# [HOST]
-sudo ip route del "$KIND_NET"                              # Linux
-# sudo route -n delete -net "$KIND_NET"                    # macOS
-sudo sed -i.bak '/demo\.localdev\.me/d' /etc/hosts
-```
-
-Caveat: routes are kernel-wide and collide if another tool uses the same `172.18.0.0/16` subnet on the host (e.g., local Docker Desktop). If so, recreate the VM with a different docker bridge subnet or stick with Option A.
-
-#### Kubernetes Dashboard
-
-The dashboard forwards to `localhost:8443` *inside* the VM. Tunnel it to your host:
-
-```bash
-# [HOST] — terminal 1
-make vm-ssh
-
-# [VM] — terminal 1
-make dashboard-forward                # serves https://localhost:8443 inside the VM
-
-# [HOST] — terminal 2
-ssh -fN -L 8443:localhost:8443 ubuntu@$VM_IP
-# Browser: https://localhost:8443
-
-# [HOST] — grab the login token
-multipass exec $NAME -- bash -lc 'cd ~/kind-cluster && make dashboard-token'
-```
-
-Demo endpoints once installed (the `<LB_IP>` values come from the `multipass exec ... kubectl get svc` commands above):
-
-| App | URL from host (after tunnel/route) | Port |
-|-----|------------------------------------|------|
-| httpd + ingress | `http://demo.localdev.me/` | 80 |
-| helloweb | `http://<LB_IP>/` | 80 |
-| golang-hello-world-web | `http://<LB_IP>:8080/myhello/` · `/healthz` | 8080 |
-| foo-bar-service | `http://<LB_IP>:5678/` | 5678 |
-| Kubernetes Dashboard | `https://localhost:8443` (after `make dashboard-forward` + SSH tunnel) | 8443 |
-
-### 5. Tear down
+### 4. Tear down
 
 ```bash
 make vm-down
@@ -382,6 +266,138 @@ make vm-down
 Runs `multipass stop && multipass delete && multipass purge` — no stale VMs left behind.
 
 Override `NAME` to target a specific VM: `make vm-down NAME=my-kind`.
+
+## Access services
+
+This section applies to **both** install paths — `make kind-up` (cluster runs in host Docker) and `make vm-install-all` (cluster runs inside a Multipass VM). Pick your path below; the rest of the section uses shell variables that are populated by commands you can copy-paste, so no `<LB_IP>`-style hand-editing.
+
+### Step 1 — point `kubectl` at the cluster
+
+```bash
+# Path A — bare host (you ran `make kind-up` on your laptop)
+KUBECTL="kubectl"
+
+# Path B — Multipass VM (you ran `make vm-install-all`)
+NAME=${NAME:-kind-host}
+VM_IP=$(multipass info "$NAME" --format json | jq -r '.info | to_entries[0].value.ipv4[0]')
+KUBECTL="multipass exec $NAME -- kubectl"
+echo "NAME=$NAME  VM_IP=$VM_IP"
+```
+
+From here on, every `kubectl` command is written as `$KUBECTL …` so both paths run the same snippets.
+
+### Step 2 — discover the LoadBalancer IPs
+
+```bash
+INGRESS_IP=$($KUBECTL get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+HELLOWEB_IP=$($KUBECTL get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+GOLANG_IP=$($KUBECTL get svc golang-hello-world-web-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+FOO_IP=$($KUBECTL get svc foo-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "INGRESS_IP=$INGRESS_IP  HELLOWEB_IP=$HELLOWEB_IP  GOLANG_IP=$GOLANG_IP  FOO_IP=$FOO_IP"
+```
+
+### Step 3 — make the IPs reachable from your host
+
+**Path A (bare host).** The MetalLB LoadBalancer IPs live on your laptop's `kind` docker bridge and are already reachable. Skip to Step 4.
+
+**Path B (Multipass VM).** The IPs live on the VM's internal docker bridge and are **not routable from your host by default**. Pick one of the two approaches:
+
+#### Path B · Option 1 — SSH tunnel per service (no sudo, works everywhere)
+
+`multipass launch` does not inject your host SSH key, so do this once per VM:
+
+```bash
+# [HOST] — authorize your key in the VM (idempotent; adjust the key path if needed)
+PUBKEY=$(cat ~/.ssh/id_ed25519.pub)
+multipass exec "$NAME" -- bash -c "mkdir -p /home/ubuntu/.ssh && grep -qxF '$PUBKEY' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || echo '$PUBKEY' >> /home/ubuntu/.ssh/authorized_keys && chown -R ubuntu:ubuntu /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chmod 600 /home/ubuntu/.ssh/authorized_keys"
+```
+
+Open one tunnel per service. The host URL becomes `http://localhost:<local-port>`:
+
+```bash
+ssh -fN -L 8080:"$INGRESS_IP":80  ubuntu@"$VM_IP"   # ingress (use with demo.localdev.me below)
+ssh -fN -L 8081:"$HELLOWEB_IP":80 ubuntu@"$VM_IP"   # helloweb
+ssh -fN -L 8082:"$GOLANG_IP":8080 ubuntu@"$VM_IP"   # golang-hello-world-web
+ssh -fN -L 8083:"$FOO_IP":5678    ubuntu@"$VM_IP"   # foo-bar-service
+
+# one-time: resolve the demo hostname to the tunnel endpoint
+echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts
+```
+
+With Option 1 the URLs change: replace `$INGRESS_IP`/`$HELLOWEB_IP`/`$GOLANG_IP`/`$FOO_IP` with `localhost:8080`/`localhost:8081`/`localhost:8082`/`localhost:8083` when hitting them from the browser. Kill tunnels with `pkill -f "ssh.*-L.*$VM_IP"`.
+
+#### Path B · Option 2 — Static route to the kind subnet (Linux/macOS, sudo once, natural URLs)
+
+Route the VM's kind docker subnet through the VM. After this, the MetalLB IPs are reachable directly from your host — the URLs in Step 4 work unchanged in your browser.
+
+```bash
+# [HOST] — discover the kind IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
+KIND_NET=$(multipass exec "$NAME" -- bash -lc "docker network inspect kind | jq -r '.[0].IPAM.Config[] | select(.Subnet | test(\"^[0-9]+\\\\.\")) | .Subnet' | head -1")
+
+sudo ip route add "$KIND_NET" via "$VM_IP"                             # Linux
+# sudo route -n add -net "$KIND_NET" "$VM_IP"                          # macOS
+
+# resolve the demo hostname to the ingress IP
+echo "$INGRESS_IP demo.localdev.me" | sudo tee -a /etc/hosts
+```
+
+Clean up when you're done:
+
+```bash
+sudo ip route del "$KIND_NET"                                          # Linux
+# sudo route -n delete -net "$KIND_NET"                                # macOS
+sudo sed -i.bak '/demo\.localdev\.me/d' /etc/hosts
+```
+
+Caveat: routes are kernel-wide and collide if another tool on your host already uses `172.18.0.0/16` (e.g., local Docker Desktop). If so, recreate the VM with a different docker bridge subnet or stick with Option 1.
+
+### Step 4 — hit the URLs
+
+With `$INGRESS_IP`/`$HELLOWEB_IP`/`$GOLANG_IP`/`$FOO_IP` in scope and `/etc/hosts` updated, these commands work verbatim from your host shell:
+
+```bash
+# Path A (bare host) and Path B · Option 2 — direct LB IPs
+curl "http://$HELLOWEB_IP/"
+curl "http://$GOLANG_IP:8080/myhello/"
+curl "http://$GOLANG_IP:8080/healthz"
+curl "http://$FOO_IP:5678/"
+curl "http://demo.localdev.me/"
+
+# Path B · Option 1 — SSH tunnels: swap LB IPs for localhost:<local-port>
+curl "http://localhost:8081/"
+curl "http://localhost:8082/myhello/"
+curl "http://localhost:8083/"
+curl -H 'Host: demo.localdev.me' "http://localhost:8080/"
+```
+
+Or paste the URLs directly into your browser:
+
+| Service | Path A (bare host) / Path B · Option 2 | Path B · Option 1 (SSH tunnel) |
+|---------|----------------------------------------|--------------------------------|
+| ingress (httpd via `demo.localdev.me`) | `http://demo.localdev.me/` | `http://demo.localdev.me:8080/` |
+| helloweb | `http://$HELLOWEB_IP/` | `http://localhost:8081/` |
+| golang-hello-world-web | `http://$GOLANG_IP:8080/myhello/` · `/healthz` | `http://localhost:8082/myhello/` · `/healthz` |
+| foo-bar-service | `http://$FOO_IP:5678/` | `http://localhost:8083/` |
+
+### Kubernetes Dashboard
+
+The dashboard listens on port 8443 inside the cluster. Same flow on both paths — just a `kubectl port-forward`; Path B adds an outer SSH tunnel to reach the VM.
+
+```bash
+# Path A — port-forward directly from your host (foreground; Ctrl+C to stop)
+make dashboard-forward
+
+# Path B — port-forward runs inside the VM (terminal 1), outer tunnel from host (terminal 2)
+# terminal 1:  make vm-ssh   →   make dashboard-forward
+# terminal 2:
+ssh -fN -L 8443:localhost:8443 ubuntu@"$VM_IP"
+
+# Both paths — grab the admin token for the login screen
+make dashboard-token                         # Path A
+multipass exec "$NAME" -- bash -lc 'cd ~/kind-cluster && make dashboard-token'   # Path B
+```
+
+Browser: `https://localhost:8443`
 
 ## Observability
 
