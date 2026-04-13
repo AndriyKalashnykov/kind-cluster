@@ -59,8 +59,13 @@ echo "ingress demo-localhost hostname: $hostname"
 
 # demo.localdev.me NXDOMAIN on many hosts (GH runners included); curl from INSIDE
 # the kind control-plane node with an explicit Host header to hit the ingress.
+# Retry for up to 30s because ingress programming is async (the rule reaches the
+# controller a few seconds after `kubectl create ingress` returns).
 KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
-docker exec "${KIND_NODE}" curl -s --max-time 10 -H "Host: demo.localdev.me" "http://localhost:80/" \
-  || echo "(curl demo.localdev.me via ${KIND_NODE} failed)"
+for i in $(seq 1 15); do
+    RESP=$(docker exec "${KIND_NODE}" curl -sf --max-time 5 -H "Host: demo.localdev.me" "http://localhost:80/" 2>/dev/null) && { echo "$RESP" | head -c 200; echo; break; }
+    sleep 2
+done
+[ -n "${RESP:-}" ] || echo "(curl demo.localdev.me via ${KIND_NODE} failed after 30s)"
 
 cd $LAUNCH_DIR
