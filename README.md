@@ -234,7 +234,49 @@ cd ~/kind-cluster && make install-all
 make vm-install-all
 ```
 
-### 4. Tear down
+### 4. Access services from your host
+
+The VM has its own IP (`multipass info $NAME` → `IPv4`). MetalLB `LoadBalancer` IPs (helloweb, golang-hello-world-web, foo-bar-service) live on the VM's internal `kind` docker network and are **not routable from your laptop** out of the box.
+
+Three options, simplest first:
+
+**a. Exec into the VM and curl from there** (no host plumbing)
+
+```bash
+multipass exec $NAME -- bash -lc 'curl -s -H "Host: demo.localdev.me" http://localhost/'
+multipass exec $NAME -- bash -lc 'kubectl get svc -A | grep LoadBalancer'
+multipass exec $NAME -- bash -lc 'curl -s http://<LB_IP>:8080/myhello/'
+```
+
+**b. SSH port-forward individual services to your laptop**
+
+```bash
+make vm-ssh   # inside the VM:
+kubectl port-forward svc/helloweb 8080:80 --address 0.0.0.0
+# on the host: open http://<VM_IPv4>:8080
+```
+
+**c. Kubernetes Dashboard** — forwards to `localhost:8443` *inside* the VM. To reach it from the host, tunnel over SSH:
+
+```bash
+make vm-ssh                                    # terminal 1 — inside the VM:
+make dashboard-forward                         # serves https://localhost:8443 in the VM
+ssh -L 8443:localhost:8443 ubuntu@<VM_IPv4>    # terminal 2 — on the host
+# Browser: https://localhost:8443
+multipass exec $NAME -- bash -lc 'cd ~/kind-cluster && make dashboard-token'
+```
+
+Demo endpoints once installed:
+
+| App | URL (inside VM) | Port |
+|-----|-----------------|------|
+| httpd + ingress | `http://demo.localdev.me/` | 80 |
+| helloweb | `http://<LB_IP>/` | 80 |
+| golang-hello-world-web | `http://<LB_IP>:8080/myhello/` · `/healthz` | 8080 |
+| foo-bar-service | `http://<LB_IP>:5678/` | 5678 |
+| Kubernetes Dashboard | `https://localhost:8443` (after `make dashboard-forward`) | 8443 |
+
+### 5. Tear down
 
 ```bash
 make vm-down
