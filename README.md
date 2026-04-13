@@ -413,24 +413,31 @@ Browser: `https://localhost:8443`
 
 ### kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
 
+The script installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace and patches the `grafana` Service to `LoadBalancer` (served via MetalLB). Reuses the `kube` function from [Access services · Step 1](#step-1--point-kubectl-at-the-cluster), so this block works for both bare-host and VM paths.
+
 ```bash
 make kube-prometheus-stack
-```
 
-The script installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace, patches the `grafana` Service to `LoadBalancer` (served via MetalLB), and prints the Grafana URL and admin credentials.
+# Grafana — reachable directly via MetalLB LB IP (Path A or Path B · Option 2);
+# via SSH tunnel for Path B · Option 1.
+GRAFANA_IP=$(kube get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+GRAFANA_PASSWORD=$(kube get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d)
+echo "Grafana:  http://$GRAFANA_IP/   (admin / $GRAFANA_PASSWORD)"
+
+# Prometheus + Alertmanager — port-forward (no LoadBalancer patch by default).
+kube port-forward -n monitoring svc/kube-prometheus-stack-prometheus    9090:9090 &
+kube port-forward -n monitoring svc/kube-prometheus-stack-alertmanager  9093:9093 &
+echo "Prometheus:    http://localhost:9090/   (targets: /targets)"
+echo "Alertmanager:  http://localhost:9093/"
+```
 
 | Component | URL | Exposed via | Credentials |
 |---|---|---|---|
-| Grafana | `http://<LB_IP>/` (printed by the script; discover with `kubectl get svc -n monitoring kube-prometheus-stack-grafana`) | MetalLB LoadBalancer | `admin` / password printed by `make kube-prometheus-stack` (retrieve later with `kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' \| base64 -d`) |
-| Prometheus | `http://localhost:9090/` — UI at `/`, scrape targets at `/targets` | `kubectl port-forward` (below) | none |
-| Alertmanager | `http://localhost:9093/` | `kubectl port-forward` (below) | none |
+| Grafana | `http://$GRAFANA_IP/` | MetalLB LoadBalancer | `admin` / `$GRAFANA_PASSWORD` |
+| Prometheus | `http://localhost:9090/` (UI), `/targets` | `kube port-forward` | none |
+| Alertmanager | `http://localhost:9093/` | `kube port-forward` | none |
 
-```bash
-# Prometheus UI
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
-# Alertmanager UI
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
-```
+For Path B · Option 1 (SSH tunnel), wrap the port-forwards in an outer `ssh -fN -L 9090:localhost:9090 ubuntu@"$VM_IP"` (and `9093` similarly) — same pattern as the Dashboard flow.
 
 If you're running inside a Multipass VM, prefix with `multipass exec $NAME --` or run the port-forward inside the VM and add a host-side SSH tunnel exactly like the Dashboard flow in §4 above (replace `8443` with `9090` / `9093`).
 
