@@ -273,26 +273,28 @@ This section applies to **both** install paths — `make kind-up` (cluster runs 
 
 ### Step 1 — point `kubectl` at the cluster
 
+Define a `kube` shell function that both paths use identically. A function (rather than a variable holding a multi-word command) works in both **bash** and **zsh** — zsh doesn't word-split unquoted `$VAR` references, so `KUBECTL="multipass exec … -- kubectl"; $KUBECTL get svc` fails there.
+
 ```bash
 # Path A — bare host (you ran `make kind-up` on your laptop)
-KUBECTL="kubectl"
+kube() { kubectl "$@"; }
 
 # Path B — Multipass VM (you ran `make vm-install-all`)
 NAME=${NAME:-kind-host}
 VM_IP=$(multipass info "$NAME" --format json | jq -r '.info | to_entries[0].value.ipv4[0]')
-KUBECTL="multipass exec $NAME -- kubectl"
+kube() { multipass exec "$NAME" -- kubectl "$@"; }
 echo "NAME=$NAME  VM_IP=$VM_IP"
 ```
 
-From here on, every `kubectl` command is written as `$KUBECTL …` so both paths run the same snippets.
+From here on, every `kubectl` command is written as `kube …` so both paths run the same snippets.
 
 ### Step 2 — discover the LoadBalancer IPs
 
 ```bash
-INGRESS_IP=$($KUBECTL get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-HELLOWEB_IP=$($KUBECTL get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-GOLANG_IP=$($KUBECTL get svc golang-hello-world-web-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-FOO_IP=$($KUBECTL get svc foo-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+INGRESS_IP=$(kube get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+HELLOWEB_IP=$(kube get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+GOLANG_IP=$(kube get svc golang-hello-world-web-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+FOO_IP=$(kube get svc foo-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo "INGRESS_IP=$INGRESS_IP  HELLOWEB_IP=$HELLOWEB_IP  GOLANG_IP=$GOLANG_IP  FOO_IP=$FOO_IP"
 ```
 
@@ -392,9 +394,8 @@ make dashboard-forward
 # terminal 2:
 ssh -fN -L 8443:localhost:8443 ubuntu@"$VM_IP"
 
-# Both paths — grab the admin token for the login screen
-make dashboard-token                         # Path A
-multipass exec "$NAME" -- bash -lc 'cd ~/kind-cluster && make dashboard-token'   # Path B
+# Both paths — grab the admin token for the login screen (reuses the `kube` function from Step 1)
+kube -n kubernetes-dashboard create token admin-user
 ```
 
 Browser: `https://localhost:8443`
