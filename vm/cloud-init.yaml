@@ -47,8 +47,11 @@ write_files:
       # Idempotent bootstrap run once at first boot.
       set -euo pipefail
 
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION=v0.31.0
+      # renovate: datasource=github-tags depName=kubernetes/kubernetes
       KUBECTL_VERSION=v1.35.1
+      # renovate: datasource=github-releases depName=helm/helm
       HELM_VERSION=v3.19.0
 
       # Docker repo

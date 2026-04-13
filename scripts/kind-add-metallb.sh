@@ -3,8 +3,8 @@
 # set -x
 LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd $SCRIPT_DIR; cd ..; SCRIPT_PARENT_DIR=$(pwd);
 
-GITHUB_URL=https://github.com/metallb/metallb/releases
-METALLB_VERSION=$(curl -w '%{url_effective}' -I -L -s -S ${GITHUB_URL}/latest -o /dev/null | sed -e 's|.*/||')
+# renovate: datasource=github-releases depName=metallb/metallb
+METALLB_VERSION=v0.15.3
 
 VERSION=${1:-$METALLB_VERSION}
 TIMEOUT=${2:-180s}

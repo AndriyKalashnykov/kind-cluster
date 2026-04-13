@@ -27,10 +27,13 @@
     },
     {
       "customType": "regex",
-      "description": "Update shell-script tool versions via inline renovate comments",
-      "managerFilePatterns": ["/^scripts/.*\\.sh$/"],
+      "description": "Update shell-script and cloud-init tool versions via inline renovate comments",
+      "managerFilePatterns": [
+        "/^scripts/.*\\.sh$/",
+        "/^vm/cloud-init\\.yaml$/"
+      ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( extractVersion=(?<extractVersion>\\S+))?( registryUrl=(?<registryUrl>\\S+))?( versioning=(?<versioning>\\S+))?\\s*\\n[A-Z_]+=(?<currentValue>\\S+)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( extractVersion=(?<extractVersion>\\S+))?( registryUrl=(?<registryUrl>\\S+))?( versioning=(?<versioning>\\S+))?\\s*\\n[ \\t]*[A-Z_]+=(?<currentValue>\\S+)"
       ]
     }
   ],
