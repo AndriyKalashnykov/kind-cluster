@@ -5,7 +5,7 @@
 
 # kind-cluster
 
-Shell-script toolkit for provisioning local Kubernetes clusters with [KinD](https://kind.sigs.k8s.io/) and installing common cluster add-ons (Nginx ingress, MetalLB, Kubernetes Dashboard, NFS provisioner, Prometheus stack) plus demo workloads.
+Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, MetalLB, Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
 | Component | Technology |
 |-----------|-----------|
