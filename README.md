@@ -23,6 +23,7 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 make deps        # verify required tools are installed
 make kind-up     # create cluster + Nginx ingress + MetalLB + demo workloads
 kubectl cluster-info --context kind-kind
+echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts   # one-time
 # Open http://demo.localdev.me/
 make kind-down   # tear down
 ```
@@ -36,8 +37,8 @@ make kind-down   # tear down
 | [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Task orchestration |
 | [Git](https://git-scm.com/) | latest | Version control |
 | [Docker](https://www.docker.com/) | latest | Container runtime for KinD nodes |
-| [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation) | v0.14.0+ | Local Kubernetes in Docker |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.25.0+ | Kubernetes CLI |
+| [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation) | v0.31.0+ | Local Kubernetes in Docker |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.35.0+ | Kubernetes CLI |
 | [helm](https://helm.sh/docs/intro/install/) | v3+ | Chart-based installs (dashboard, Prometheus, NFS) |
 | [curl](https://curl.se/) | latest | Download helpers used by scripts |
 | [jq](https://github.com/jqlang/jq) | latest | JSON parsing in scripts |
@@ -161,7 +162,7 @@ The **host machine** runs `nfs-kernel-server` and exports a directory; [nfs-subd
 flowchart LR
     A[app pod] -->|RWX PVC<br/>storageClassName: nfs-client| SC[StorageClass<br/>nfs-client]
     SC --> P[nfs-subdir-external-provisioner<br/>namespace: nfs-provisioning]
-    P -.NFSv4.-> HOST[host NFS server<br/>/mnt/k8s_nfs_storage]
+    P -.NFSv4.-> HOST[host NFS server<br/>/srv/k8s_nfs_storage]
     HOST --> DISK[(host disk<br/>persistent)]
 ```
 
@@ -253,6 +254,14 @@ echo "NAME=$NAME  VM_IP=$VM_IP"
 
 One tunnel per service. The host URL becomes `http://localhost:<port>`.
 
+`multipass launch` does not inject your host SSH key, so do this once per VM before tunneling:
+
+```bash
+# [HOST] — authorize your key in the VM (idempotent; adjust the key path if needed)
+PUBKEY=$(cat ~/.ssh/id_ed25519.pub)
+multipass exec $NAME -- bash -c "mkdir -p /home/ubuntu/.ssh && grep -qxF '$PUBKEY' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || echo '$PUBKEY' >> /home/ubuntu/.ssh/authorized_keys && chown -R ubuntu:ubuntu /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chmod 600 /home/ubuntu/.ssh/authorized_keys"
+```
+
 ```bash
 # [HOST] — discover a LB IP from inside the VM
 LB_IP=$(multipass exec $NAME -- kubectl get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
@@ -263,7 +272,15 @@ ssh -fN -L 8080:$LB_IP:80 ubuntu@$VM_IP
 # Browser: http://localhost:8080
 ```
 
-Same pattern for the other demo services — change the `svc/` name and upstream port (`:8080` for `golang-hello-world-web-service`, `:5678` for `foo-bar-service`). Kill tunnels with `pkill -f "ssh.*-L.*$VM_IP"`.
+Same pattern for the other demo services — change the `svc/` name and upstream port:
+
+| Service | Upstream port |
+|---|---|
+| `helloweb` | `80` |
+| `golang-hello-world-web-service` | `8080` |
+| `foo-service` | `5678` |
+
+Kill tunnels with `pkill -f "ssh.*-L.*$VM_IP"`.
 
 For ingress-based URLs (`http://demo.localdev.me/`), tunnel to the ingress controller's LB IP on port 80 and add `127.0.0.1 demo.localdev.me` to `/etc/hosts`:
 
@@ -280,8 +297,8 @@ echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts
 Route the VM's kind docker subnet through the VM. After this, MetalLB IPs and the ingress IP are reachable directly from the host — the real URLs work in your browser.
 
 ```bash
-# [HOST] — discover the kind subnet
-KIND_NET=$(multipass exec $NAME -- docker network inspect kind -f '{{(index .IPAM.Config 0).Subnet}}')
+# [HOST] — discover the kind IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
+KIND_NET=$(multipass exec $NAME -- bash -lc "docker network inspect kind | jq -r '.[0].IPAM.Config[] | select(.Subnet | test(\"^[0-9]+\\\\.\")) | .Subnet' | head -1")
 
 # [HOST] — Linux
 sudo ip route add "$KIND_NET" via "$VM_IP"
@@ -326,15 +343,15 @@ ssh -fN -L 8443:localhost:8443 ubuntu@$VM_IP
 multipass exec $NAME -- bash -lc 'cd ~/kind-cluster && make dashboard-token'
 ```
 
-Demo endpoints once installed:
+Demo endpoints once installed (the `<LB_IP>` values come from the `multipass exec ... kubectl get svc` commands above):
 
-| App | URL (inside VM) | Port |
-|-----|-----------------|------|
+| App | URL from host (after tunnel/route) | Port |
+|-----|------------------------------------|------|
 | httpd + ingress | `http://demo.localdev.me/` | 80 |
 | helloweb | `http://<LB_IP>/` | 80 |
 | golang-hello-world-web | `http://<LB_IP>:8080/myhello/` · `/healthz` | 8080 |
 | foo-bar-service | `http://<LB_IP>:5678/` | 5678 |
-| Kubernetes Dashboard | `https://localhost:8443` (after `make dashboard-forward`) | 8443 |
+| Kubernetes Dashboard | `https://localhost:8443` (after `make dashboard-forward` + SSH tunnel) | 8443 |
 
 ### 5. Tear down
 

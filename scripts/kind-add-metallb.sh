@@ -32,12 +32,13 @@ kubectl apply -f  https://raw.githubusercontent.com/metallb/metallb/${METALLB_VE
 echo "waiting for metallb"
 kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout=${TIMEOUT}
 
-# get kind IP
+# get kind IP — pick the IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
 echo "getting kind network IP"
-ip_subclass=$(docker network inspect kind -f '{{(index .IPAM.Config 0).Subnet}}' | awk -F. '{printf "%d.%d\n", $1, $2}')
+ipv4_subnet=$(docker network inspect kind | jq -r '.[0].IPAM.Config[] | select(.Subnet | test("^[0-9]+\\.")) | .Subnet' | head -1)
+ip_subclass=$(echo "${ipv4_subnet}" | awk -F. '{printf "%d.%d\n", $1, $2}')
 if [ -z "${ip_subclass}" ] || [ "${ip_subclass}" = "0.0" ]; then
-    echo "ERROR: failed to extract kind network subnet from 'docker network inspect kind'"
-    docker network inspect kind -f '{{(index .IPAM.Config 0).Subnet}}'
+    echo "ERROR: failed to extract kind network IPv4 subnet from 'docker network inspect kind'"
+    docker network inspect kind | jq '.[0].IPAM.Config'
     exit 1
 fi
 echo "kind network /16 prefix: ${ip_subclass}"

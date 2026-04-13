@@ -6,7 +6,7 @@
 # Companion: kind-add-nfs-host-provisioner.sh installs the in-cluster provisioner.
 #
 # Usage: kind-add-nfs-host-setup.sh [EXPORT_PATH] [ALLOW_FROM]
-#   EXPORT_PATH  default: /mnt/k8s_nfs_storage
+#   EXPORT_PATH  default: /srv/k8s_nfs_storage
 #   ALLOW_FROM   default: *   (any IP — tighten to a CIDR for anything real)
 #
 # After running, note the host IP (hostname -I | awk '{print $1}') and pass
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-EXPORT_PATH=${1:-/mnt/k8s_nfs_storage}
+EXPORT_PATH=${1:-/srv/k8s_nfs_storage}
 ALLOW_FROM=${2:-*}
 
 if ! command -v apt-get >/dev/null 2>&1; then

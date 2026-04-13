@@ -4,11 +4,11 @@
 # kind-add-nfs-host-setup.sh first.
 #
 # Architecture:
-#   app-pod --(RWX PVC)--> nfs-client StorageClass --(subdir-provisioner)--> Host NFS server --> /mnt/...
+#   app-pod --(RWX PVC)--> nfs-client StorageClass --(subdir-provisioner)--> Host NFS server --> /srv/...
 #
 # Usage: kind-add-nfs-host-provisioner.sh NFS_SERVER_IP [NFS_PATH]
 #   NFS_SERVER_IP  required, e.g. 192.168.1.27
-#   NFS_PATH       default: /mnt/k8s_nfs_storage
+#   NFS_PATH       default: /srv/k8s_nfs_storage
 #
 # References:
 #   https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
 NFS_SERVER=$1
-NFS_PATH=${2:-/mnt/k8s_nfs_storage}
+NFS_PATH=${2:-/srv/k8s_nfs_storage}
 
 # renovate: datasource=helm depName=nfs-subdir-external-provisioner registryUrl=https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
 NFS_SUBDIR_PROVISIONER_VERSION=4.0.18
