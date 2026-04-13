@@ -57,6 +57,10 @@ echo "ingress demo-localhost hostname: $hostname"
 
 # kubectl port-forward --namespace=ingress-nginx service/ingress-nginx-controller 8080:${DEMO_SVC_PORT}
 
-curl -s --max-time 10 http://demo.localdev.me:80/ || echo "(curl demo.localdev.me failed)"
+# demo.localdev.me NXDOMAIN on many hosts (GH runners included); curl from INSIDE
+# the kind control-plane node with an explicit Host header to hit the ingress.
+KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
+docker exec "${KIND_NODE}" curl -s --max-time 10 -H "Host: demo.localdev.me" "http://localhost:80/" \
+  || echo "(curl demo.localdev.me via ${KIND_NODE} failed)"
 
 cd $LAUNCH_DIR

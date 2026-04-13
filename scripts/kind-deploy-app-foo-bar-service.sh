@@ -30,8 +30,12 @@ kubectl get service/foo-service -n default --output=jsonpath='{.status.loadBalan
 
 LB_IP=$(kubectl get svc/foo-service -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
+# MetalLB IPs are on the Docker bridge network and not routable from the host;
+# curl from INSIDE the kind control-plane node instead (same bridge).
+KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
 for _ in {1..10}; do
-  curl -s --max-time 10 ${LB_IP}:5678 || echo "  (curl ${LB_IP}:5678 failed)"
+  docker exec "${KIND_NODE}" curl -s --max-time 10 "http://${LB_IP}:5678" \
+    || echo "  (curl http://${LB_IP}:5678 via ${KIND_NODE} failed)"
 done
 
 cd $LAUNCH_DIR

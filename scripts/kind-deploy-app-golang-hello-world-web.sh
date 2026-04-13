@@ -12,8 +12,8 @@ fi
 
 cd $SCRIPT_PARENT_DIR
 
-docker pull ghcr.io/andriykalashnykov/golang-web:v0.0.1
-kind load docker-image ghcr.io/andriykalashnykov/golang-web:v0.0.1
+docker pull ghcr.io/andriykalashnykov/golang-web:0.0.3
+kind load docker-image ghcr.io/andriykalashnykov/golang-web:0.0.3
 
 echo "deploying golang-hello-world-web"
 kubectl apply -f ./k8s/golang-hello-world-web.yaml
@@ -31,7 +31,11 @@ kubectl get service/golang-hello-world-web-service -n default --output=jsonpath=
 
 service_ip=$(kubectl get services golang-hello-world-web-service -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
 
-curl -s --max-time 10 ${service_ip}:8080/myhello/ || echo "(curl myhello failed)"
-curl -s --max-time 10 ${service_ip}:8080/healthz || echo "(curl healthz failed)"
+# MetalLB IPs are only reachable from inside the kind Docker bridge network.
+KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
+docker exec "${KIND_NODE}" curl -s --max-time 10 "http://${service_ip}:8080/myhello/" \
+  || echo "(curl http://${service_ip}:8080/myhello/ via ${KIND_NODE} failed)"
+docker exec "${KIND_NODE}" curl -s --max-time 10 "http://${service_ip}:8080/healthz" \
+  || echo "(curl http://${service_ip}:8080/healthz via ${KIND_NODE} failed)"
 
 cd $LAUNCH_DIR

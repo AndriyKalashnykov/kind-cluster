@@ -30,6 +30,9 @@ done
 kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: helloweb did not get an External-IP after 180s"; kubectl get svc helloweb; exit 1; }
 
 service_ip=$(kubectl get services helloweb -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
-curl -s --max-time 10 ${service_ip}:80 || echo "(curl ${service_ip}:80 failed)"
+# MetalLB IPs are only reachable from inside the kind Docker bridge network.
+KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
+docker exec "${KIND_NODE}" curl -s --max-time 10 "http://${service_ip}:80" \
+  || echo "(curl http://${service_ip}:80 via ${KIND_NODE} failed)"
 
 cd $LAUNCH_DIR

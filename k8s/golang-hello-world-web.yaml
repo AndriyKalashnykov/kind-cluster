@@ -28,8 +28,8 @@ spec:
 
       containers:
         - name: golang-hello-world-web
-          image: ghcr.io/andriykalashnykov/golang-web:v0.0.1
-          imagePullPolicy: Never
+          image: ghcr.io/andriykalashnykov/golang-web:0.0.3
+          imagePullPolicy: IfNotPresent
           env:
             # default variables available to be overridden
             - name: APP_CONTEXT

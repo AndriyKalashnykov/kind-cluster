@@ -234,31 +234,55 @@ flowchart LR
     DEV -.ports.-> K
 ```
 
+### 1. Install Multipass
+
+| Platform | Install command | Notes |
+|----------|-----------------|-------|
+| Ubuntu / Debian / other Linux with snap | `sudo snap install multipass` | Uses snap confinement; nested virtualization works on KVM-capable hosts |
+| macOS (Apple Silicon / Intel) | `brew install --cask multipass` | Uses `hypervisor.framework` on M1/M2/M3 |
+| Windows 10/11 | `winget install Canonical.Multipass` or [direct download](https://multipass.run/download/windows) | Requires Hyper-V (Pro/Enterprise) or VirtualBox |
+
+Verify: `multipass version` should print a version string and the daemon should be reachable (`multipass list` returns a table, even if empty).
+
+Other install methods and troubleshooting: <https://multipass.run/install>.
+
+### 2. Launch the VM
+
 ```bash
-# 1. One-time: install Multipass (https://multipass.run)
-#    Ubuntu/Debian: sudo snap install multipass
-#    macOS:         brew install --cask multipass
-#    Windows:       winget install Canonical.Multipass
+make vm-up                                # defaults: 4 CPU / 8 GB RAM / 40 GB disk
+# or override:
+make vm-up CPUS=6 MEMORY=12G DISK=60G NAME=my-kind
+```
 
-# 2. Launch the VM (~3-5 min first boot: image download + bootstrap)
-make vm-up
+First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docker pull, kind/kubectl/helm fetch). Subsequent `vm-up` on the same `NAME` is a no-op — the command prints `VM already exists` and shows `multipass info`.
 
-# 3. SSH in
+The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
+
+1. Installs Docker CE, KinD v0.31.0, kubectl v1.35.1, helm v3.19.0
+2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
+3. Clones this repo to `/home/ubuntu/kind-cluster`
+4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.
+
+### 3. Run the stack
+
+```bash
+# Option A: interactive — SSH in, then run inside
 make vm-ssh
-
-# 4. Inside the VM, run the stack
 cd ~/kind-cluster && make install-all
 
-# Or do it remotely (one-shot):
+# Option B: remote one-shot (git pulls latest + runs install-all)
 make vm-install-all
+```
 
-# Tear down
+### 4. Tear down
+
+```bash
 make vm-down
 ```
 
-The VM clones this repo to `~/kind-cluster` at first boot, exports `/srv/k8s_nfs_storage` over NFS, and has everything needed to use either the in-cluster NFS or host-NFS approach above.
+Runs `multipass stop && multipass delete && multipass purge` — no stale VMs left behind.
 
-Override VM resources: `make vm-up CPUS=6 MEMORY=12G DISK=60G NAME=my-kind`.
+Override `NAME` to target a specific VM: `make vm-down NAME=my-kind`.
 
 
 ## Observability
