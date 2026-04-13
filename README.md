@@ -20,13 +20,14 @@ Shell-script toolkit for provisioning local Kubernetes clusters with [KinD](http
 ## Quick Start
 
 ```bash
-make install-all                     # create cluster + Nginx ingress + MetalLB + demo workloads
+make deps        # verify required tools are installed
+make kind-up     # create cluster + Nginx ingress + MetalLB + demo workloads
 kubectl cluster-info --context kind-kind
 # Open http://demo.localdev.me/
-make delete-cluster                  # tear down
+make kind-down   # tear down
 ```
 
-To provision the cluster and add-ons without the demo apps, use `make install-all-no-demo-workloads`.
+`kind-up` is a docker-compose-style alias for `install-all`. For the cluster and add-ons without the demo apps, run `make install-all-no-demo-workloads`.
 
 ## Prerequisites
 
@@ -50,19 +51,33 @@ Run `make help` to list targets.
 
 | Target | Description |
 |--------|-------------|
-| `make install-all` | Create cluster + Nginx ingress + MetalLB + demo workloads |
+| `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
+| `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
+| `make install-all` | Create cluster + Nginx ingress + MetalLB + demo workloads (granular) |
 | `make install-all-no-demo-workloads` | Create cluster + Nginx ingress + MetalLB (no demo apps) |
-| `make create-cluster` | Create KinD cluster |
-| `make delete-cluster` | Delete KinD cluster |
+| `make create-cluster` | Create KinD cluster (granular) |
+| `make delete-cluster` | Delete KinD cluster (granular) |
 | `make export-cert` | Export k8s client keys and CA certificates |
 
 ### Cluster Add-ons
 
 | Target | Description |
 |--------|-------------|
-| `make k8s-dashboard` | Install Kubernetes Dashboard |
+| `make dashboard-install` | Install Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
+| `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
+| `make dashboard-token` | Print the admin-user token |
 | `make nginx-ingress` | Install Nginx ingress controller |
 | `make metallb` | Install MetalLB load balancer |
+| `make metrics-server` | Install metrics-server (for `kubectl top` / HPA) |
+| `make kube-prometheus-stack` | Install Prometheus + Grafana + Alertmanager |
+
+### RWX Storage (NFS)
+
+| Target | Description |
+|--------|-------------|
+| `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
+| `make nfs-host-setup` | Option 2, step 1 — configure HOST as NFS server (sudo, Ubuntu/Debian) |
+| `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install `nfs-subdir-external-provisioner` pointing at the host |
 
 ### Demo Workloads
 
@@ -72,6 +87,14 @@ Run `make help` to list targets.
 | `make deploy-app-helloweb` | Deploy helloweb sample app |
 | `make deploy-app-golang-hello-world-web` | Deploy golang-hello-world-web sample app |
 | `make deploy-app-foo-bar-service` | Deploy foo-bar-service sample app |
+
+### Utilities
+
+| Target | Description |
+|--------|-------------|
+| `make deps` | Verify required tools are installed |
+| `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
+| `make renovate-validate` | Validate `renovate.json` configuration |
 
 ## CI/CD
 
@@ -114,232 +137,97 @@ Script creates:
 - client.pfx
 - cluster-ca.crt
 
-## Install k8s dashboard
+## k8s Dashboard
 
-Install k8s dashboard
+Pinned to Helm chart [`kubernetes-dashboard`](https://github.com/kubernetes/dashboard) **v7.14.0**. Dashboard v7 splits the monolithic v2 service into microservices (`api`, `web`, `auth`, `metrics-scraper`) behind a **Kong Gateway** reverse proxy — you port-forward the `kong-proxy` Service, not a pod.
 
-
-```bash
-./scripts/kind-add-dashboard.sh
-```
-
-Script creates file with admin-user token
-- dashboard-admin-token.txt
-
-## Launch k8s Dashboard
-
-v3.0.0-alpha0
-
-```bash
-helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
-helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
-kubectl apply -n kubernetes-dashboard -f ./k8s/dashboard-admin.yaml
-export dashboard_admin_token=$(kubectl get secret -n kubernetes-dashboard admin-user-token -o jsonpath="{.data.token}" | base64 --decode)
-echo "${dashboard_admin_token}" > dashboard-admin-token.txt
-kubectl config set-credentials cluster-admin --token=${dashboard_admin_token}
-echo "Dashboard Token: ${dashboard_admin_token}"
-
-export POD_NAME=$(kubectl get pods -n kubernetes-dashboard -l "app.kubernetes.io/name=kubernetes-dashboard,app.kubernetes.io/instance=kubernetes-dashboard" -o jsonpath="{.items[0].metadata.name}")
-kubectl -n kubernetes-dashboard port-forward $POD_NAME 8443:8443
-xdg-open "https://localhost:8443"
-
-# helm delete kubernetes-dashboard --namespace kubernetes-dashboard
-# kubectl delete clusterrolebinding --ignore-not-found=true kubernetes-dashboard
-# kubectl delete clusterrole --ignore-not-found=true kubernetes-dashboard
-```
-
-v2.x
-
-```bash
-# kill kubectl proxy if already running
-pkill -9 -f "kubectl proxy"
-# start new kubectl proxy
-kubectl proxy –address=’0.0.0.0′ –accept-hosts=’^*$’ &
-# copy admin-user token to the clipboard
-cat ./dashboard-admin-token.txt | xclip -i
-# open dashboard
-xdg-open "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/" &
-```
-
-In Dashboard UI select "Token' and `Ctrl+V` 
-
-## Install Nginx ingress
-
-
-```bash
-./scripts/kind-add-ingress-nginx.sh
-```
-
-## Install MetalLB load balancer
-
-
-```bash
-./scripts/kind-add-metallb.sh
-```
-
-## Install NFS & nfs-subdir-external-provisioner to achieve RWX
-
-* [NFS Server and Client on Ubuntu 22.04](https://www.tecmint.com/install-nfs-server-on-ubuntu/)
-* [Dynamic NFS Provisioning in Kubernetes Cluster](https://www.linuxtechi.com/dynamic-nfs-provisioning-kubernetes/)
-* [Kubernetes – Setup Dynamic NFS Storage Provisioning – helm](https://www.unixarena.com/2022/10/kubernetes-setup-dynamic-nfs-storage-provisioning-helm.html/)
-* [Mounting Volume with RWX mode in KIND Cluster using NFS](https://cloudyuga.guru/hands_on_lab/nfs-kind)
-
-
-```bash
-sudo apt install -y nfs-kernel-server nfs-common
-
-sudo mkdir -p /mnt/k8s_nfs_storage
-sudo chown -R nobody:nogroup /mnt/k8s_nfs_storage
-sudo chmod 777 /mnt/k8s_nfs_storage
-```
-
-get your host IP
-```bash
-hostname -I | awk '{print $1}'
-```
-```terminal
-$ 192.168.1.27
-```
-
-let's allow any IP `*` (or you whole subnetwork `192.168.1.0/24`)
-
-```bash
-sudo vi /etc/exports
-```
-
-```txt
-/mnt/k8s_nfs_storage *(rw,sync,no_subtree_check)
+```mermaid
+flowchart LR
+    B[Browser<br/>https://localhost:8443] -->|kubectl port-forward| K[Service<br/>kubernetes-dashboard-kong-proxy]
+    K --> W[web]
+    K --> A[api]
+    K --> U[auth]
+    K --> M[metrics-scraper]
 ```
 
 ```bash
-sudo exportfs -a
-sudo systemctl restart nfs-kernel-server
-sudo systemctl status nfs-kernel-server
-
-# add firewall rules
-# sudo ufw status
-# sudo ufw allow from 192.168.1.27 to any port nfs
-sudo ufw allow nfs
-sudo ufw disable
-sudo ufw status
-```
-```terminal
-Status: active
-
-To                         Action      From
---                         ------      ----
-Nginx HTTP                 ALLOW       Anywhere                  
-Nginx Full                 ALLOW       Anywhere                  
-22/tcp                     DENY        Anywhere                  
-2049                       ALLOW       192.168.1.27              
-Nginx HTTP (v6)            ALLOW       Anywhere (v6)             
-Nginx Full (v6)            ALLOW       Anywhere (v6)             
-22/tcp (v6)                DENY        Anywhere (v6) 
+make dashboard-install   # helm upgrade --install + apply admin ServiceAccount + write token to dashboard-admin-token.txt
+make dashboard-forward   # kubectl port-forward svc/kubernetes-dashboard-kong-proxy 8443:443 + xdg-open
+make dashboard-token     # print the admin-user token
 ```
 
-mount it test if it worked
+At the login screen, select **Token** and paste the token printed by `make dashboard-token`.
 
-```
-sudo mkdir -p /mnt/nfs_clientshare/
-sudo mount -t nfs 192.168.1.27:/mnt/k8s_nfs_storage /mnt/nfs_clientshare/
-sudo umount -f -l /mnt/nfs_clientshare/
-```
+Uninstall: `helm delete kubernetes-dashboard --namespace kubernetes-dashboard`.
 
-Install the nfs-subdir-external-provisioner
+## NFS & RWX storage
 
-```bash
-curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-chmod 700 get_helm.sh
-./get_helm.sh
+Kubernetes default storage classes only support `ReadWriteOnce` (a PV can be mounted by a single node). To run workloads that need `ReadWriteMany` (multiple pods writing to the same volume) — e.g., CI shared caches, content-processing pipelines, WordPress clusters — you need an NFS-backed StorageClass.
 
-helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner
+Two approaches are provided. Pick one.
 
-docker pull registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
-kind load docker-image registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
-helm install -n nfs-provisioning --create-namespace nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --set nfs.server=192.168.1.27 --set nfs.path=/mnt/k8s_nfs_storage
+### Option 1 — in-cluster NFS (recommended for local dev)
 
-kubectl get all -n nfs-provisioning
-kubectl get sc -n nfs-provisioning
+An NFS server runs as a pod inside the cluster. [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) provisions PVs backed by that pod. **No host config, no sudo, no `/etc/exports`.** Tears down cleanly with the cluster; data does not survive `make kind-down`.
+
+```mermaid
+flowchart LR
+    A[app pod] -->|RWX PVC<br/>storageClassName: nfs-csi| SC[StorageClass<br/>nfs-csi]
+    SC --> CSI[csi-driver-nfs<br/>kube-system]
+    CSI -->|NFSv4.1| NS[nfs-server pod<br/>namespace: nfs-server]
+    NS --> ED[(emptyDir<br/>ephemeral)]
 ```
 
 ```bash
-kubectl create -f ./k8s/nfs/pvc.yaml
-kubectl get pv,pvc -n nfs-provisioning
-kubectl create -f ./k8s/nfs/pod.yaml
-kubectl get pods -n nfs-provisioning
-kubectl exec --stdin --tty -n nfs-provisioning test-pod -- /bin/sh
+make nfs-incluster
+kubectl apply -f ./k8s/nfs/pvc-incluster.yaml   # sample RWX PVC
 ```
 
+Pinned versions: `csi-driver-nfs` v4.13.1. Source: `scripts/kind-add-nfs-incluster.sh`.
 
-## Deploy demo workloads
+### Option 2 — host-side NFS (persistent across cluster recreates)
 
-### Deploy httpd web server and create an ingress rule for a localhost `http://demo.localdev.me:80/`
+The **host machine** runs `nfs-kernel-server` and exports a directory; [nfs-subdir-external-provisioner](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) inside the cluster provisions PVs backed by that host export. Data survives cluster teardown — useful when you want state to outlive `kind-down`. Requires sudo on the host and only works on Linux.
 
+```mermaid
+flowchart LR
+    A[app pod] -->|RWX PVC<br/>storageClassName: nfs-client| SC[StorageClass<br/>nfs-client]
+    SC --> P[nfs-subdir-external-provisioner<br/>namespace: nfs-provisioning]
+    P -.NFSv4.| HOST[host NFS server<br/>/mnt/k8s_nfs_storage]
+    HOST --> DISK[(host disk<br/>persistent)]
+```
 
 ```bash
-./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+# 1. Host-side: install nfs-kernel-server, create export, open firewall (interactive sudo)
+make nfs-host-setup
+
+# 2. In-cluster: install the provisioner pointing at the host (replace NFS_SERVER with your host IP)
+make nfs-host-provisioner NFS_SERVER=192.168.1.27
+kubectl apply -f ./k8s/nfs/pvc.yaml             # sample RWX PVC
 ```
 
-### Deploy helloweb
+Pinned versions: `nfs-subdir-external-provisioner` chart 4.0.18. Sources: `scripts/kind-add-nfs-host-setup.sh`, `scripts/kind-add-nfs-host-provisioner.sh`.
 
+**References:** [NFS Server on Ubuntu](https://www.tecmint.com/install-nfs-server-on-ubuntu/) · [Dynamic NFS Provisioning in k8s](https://www.linuxtechi.com/dynamic-nfs-provisioning-kubernetes/) · [RWX in KinD with NFS](https://cloudyuga.guru/hands_on_lab/nfs-kind).
+
+
+## Observability
+
+### kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
 
 ```bash
-./scripts/kind-deploy-app-helloweb.sh
+make kube-prometheus-stack
 ```
 
-### Deploy golang-hello-world-web
+The script installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace, patches the `grafana` Service to `LoadBalancer` (served via MetalLB), and prints the Grafana URL and admin credentials.
 
+Default Grafana login: **admin / prom-operator**.
+
+### metrics-server
+
+Required for `kubectl top` and HorizontalPodAutoscalers. On KinD, the default manifest is patched with `--kubelet-insecure-tls` (the KinD kubelet serving cert isn't signed by the cluster CA).
 
 ```bash
-./scripts/kind-deploy-app-golang-hello-world-web.sh
+make metrics-server
 ```
 
-### Deploy foo-bar-service
-
-
-```bash
-./scripts/kind-deploy-app-foo-bar-service.sh
-```
-
-### Deploy Prometheus
-
-Add prometheus and stable repo to local helm repository
-```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo add stable https://charts.helm.sh/stable
-helm repo update
-```
-
-Create namespace monitoring to deploy all services in that namespace
-```bash
-kubectl create namespace monitoring
-```
-
-Install kube-prometheus stack
-```bash
-helm template kind-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring \
---set prometheus.service.nodePort=30000 \
---set prometheus.service.type=LoadBalancer \
---set grafana.service.nodePort=31000 \
---set grafana.service.type=LoadBalancer \
---set alertmanager.service.nodePort=32000 \
---set alertmanager.service.type=LoadBalancer \
---set prometheus-node-exporter.service.nodePort=32001 \
---set prometheus-node-exporter.service.type=LoadBalancer \
-> ./k8s/prometheus.yaml
-
-kubectl apply -f ./k8s/prometheus.yaml
-kubectl --namespace monitoring get pods -l release=kind-prometheus
-```
-
-Delete kube-prometheus stack
-```bash
-kubectl delete -f ./k8s/prometheus.yaml
-```
-
-## Delete k8s cluster
-
-
-```bash
-./scripts/kind-delete.sh
-```
