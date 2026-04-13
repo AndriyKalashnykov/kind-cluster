@@ -1,6 +1,59 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:best-practices",
+    ":semanticCommitType(chore)"
+  ],
+  "enabledManagers": ["github-actions", "dockerfile", "custom.regex"],
+  "commitMessagePrefix": "chore(all): ",
+  "commitMessageAction": "update",
+  "commitBody": "Signed-off-by: Renovate Bot <bot@renovateapp.com>",
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 50,
+  "prHourlyLimit": 0,
+  "platformAutomerge": true,
+  "automerge": true,
+  "automergeType": "branch",
+  "automergeStrategy": "squash",
+  "ignoreTests": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update Makefile tool versions via inline renovate comments",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( versioning=(?<versioning>\\S+))?\\s*\\n[A-Z_]+\\s*:=\\s*(?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update shell-script tool versions via inline renovate comments",
+      "managerFilePatterns": ["/^scripts/.*\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( extractVersion=(?<extractVersion>\\S+))?( registryUrl=(?<registryUrl>\\S+))?( versioning=(?<versioning>\\S+))?\\s*\\n[A-Z_]+=(?<currentValue>\\S+)"
+      ]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "automerge": true,
+    "minimumReleaseAge": "0 days"
+  },
+  "packageRules": [
+    {
+      "description": "Wait 3 days before automerging major updates",
+      "matchUpdateTypes": ["major"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Group GitHub Actions into one PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Group Docker base images",
+      "matchManagers": ["dockerfile"],
+      "groupName": "Docker dependencies"
+    }
   ]
 }
