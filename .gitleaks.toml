@@ -4,7 +4,10 @@ useDefault = true
 [allowlist]
 description = "Files containing known-safe content or local artifacts"
 paths = [
-  # Local-only artifact written by `make dashboard-install`; in .gitignore,
-  # but gitleaks in filesystem mode doesn't honor .gitignore.
+  # Local-only artifacts produced by `make dashboard-install` and
+  # `make export-cert`; all in .gitignore, but gitleaks in filesystem
+  # mode doesn't honor .gitignore.
   '''^dashboard-admin-token\.txt$''',
+  '''^client\.(crt|key|pfx)$''',
+  '''^cluster-ca\.crt$''',
 ]

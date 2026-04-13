@@ -34,3 +34,14 @@ misconfigurations:
     paths:
       - "**/Dockerfile"
 
+secrets:
+  # Local-only artifacts from `make export-cert` (client cert/key/pfx and
+  # cluster CA). Already in .gitignore, but trivy fs scans the working tree.
+  - id: private-key
+    paths:
+      - "client.key"
+      - "client.pfx"
+  - id: pkcs12-file
+    paths:
+      - "client.pfx"
+

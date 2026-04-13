@@ -336,6 +336,14 @@ Route the VM's kind docker subnet through the VM. After this, the MetalLB IPs ar
 # [HOST] — discover the kind IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
 KIND_NET=$(multipass exec "$NAME" -- bash -lc "docker network inspect kind | jq -r '.[0].IPAM.Config[] | select(.Subnet | test(\"^[0-9]+\\\\.\")) | .Subnet' | head -1")
 
+# [VM] — Docker installs a default `FORWARD DROP` policy that blocks packets
+# routed from your host through the VM into the kind bridge. Allow the kind
+# subnet explicitly in DOCKER-USER (Docker runs this chain before its own
+# isolation rules).
+multipass exec "$NAME" -- sudo iptables -I DOCKER-USER -s "$KIND_NET" -j ACCEPT
+multipass exec "$NAME" -- sudo iptables -I DOCKER-USER -d "$KIND_NET" -j ACCEPT
+
+# [HOST] — add the static route
 sudo ip route add "$KIND_NET" via "$VM_IP"                             # Linux
 # sudo route -n add -net "$KIND_NET" "$VM_IP"                          # macOS
 
@@ -349,6 +357,7 @@ Clean up when you're done:
 sudo ip route del "$KIND_NET"                                          # Linux
 # sudo route -n delete -net "$KIND_NET"                                # macOS
 sudo sed -i.bak '/demo\.localdev\.me/d' /etc/hosts
+# DOCKER-USER rules go away with the VM; no cleanup needed if you'll `make vm-down`.
 ```
 
 Caveat: routes are kernel-wide and collide if another tool on your host already uses `172.18.0.0/16` (e.g., local Docker Desktop). If so, recreate the VM with a different docker bridge subnet or stick with Option 1.
