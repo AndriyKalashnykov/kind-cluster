@@ -26,17 +26,36 @@ make create-cluster                    # Create KinD cluster
 make install-all                       # Full install: cluster + ingress + MetalLB + demo apps
 make install-all-no-demo-workloads     # Cluster + ingress + MetalLB (no demo apps)
 make delete-cluster                    # Tear down cluster
+
+# Multipass VM (host-agnostic alternative)
+make vm-up [NAME=…]                    # Launch Ubuntu 22.04 VM (cloud-init provisions Docker + kind + kubectl + helm)
+make vm-install-all                    # Run `make install-all` inside the VM
+make vm-ssh                            # Open shell inside the VM
+make vm-down                           # Stop + delete + purge the VM
+
+# Local quality gates (all auto-install pinned tools into ~/.local/bin on first run)
+make lint                              # shellcheck + actionlint + hadolint
+make secrets                           # gitleaks (suppressions: .gitleaks.toml)
+make trivy-fs                          # Trivy CVE/secret/misconfig scan (suppressions: .trivyignore.yaml)
+make trivy-config                      # Trivy K8s manifest scan
+make mermaid-lint                      # Validate mermaid diagrams in markdown (via docker)
+make static-check                      # Composite: all of the above
+make ci                                # static-check + renovate-validate
+make ci-run                            # Run GitHub Actions workflow locally via act
 ```
 
 ## CI/CD
 
-- **end2end-tests.yml** -- runs on push to `main`, tags `v*`, and PRs. Uses `helm/kind-action` to spin up a KinD cluster, then runs all install and deploy scripts.
-- **cleanup-runs.yml** -- weekly cron (Sunday midnight) to prune old workflow runs.
+- **end2end-tests.yml** — runs on push to `main`, tags `v*`, and PRs. Pinned kind v0.31.0 / kubectl v1.35.1 / kindest/node v1.35.0 (tracked by Renovate). Uses `helm/kind-action` to spin up a KinD cluster, then runs all install/deploy scripts and smoke-tests LoadBalancer endpoints via `docker exec` curl.
+- **cleanup-runs.yml** — weekly cron (Sunday midnight) to prune old workflow runs, keeping the latest 5.
 
 ## Dependencies
 
-- Docker, kind, kubectl, helm, curl, jq, base64
-- No Go modules; no package manager lockfiles
+Runtime (user provides): Docker, kind, kubectl, helm, curl, jq, base64.
+
+Quality-gate tools (auto-installed on first `make lint` / `make static-check` into `$HOME/.local/bin`, pinned via `# renovate:` comments in the Makefile): shellcheck, actionlint, hadolint, gitleaks, trivy, act. Plus `minlag/mermaid-cli` via docker.
+
+No Go modules; no package manager lockfiles.
 
 ## Skills
 

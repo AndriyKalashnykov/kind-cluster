@@ -17,6 +17,10 @@ GITLEAKS_VERSION := v8.30.1
 TRIVY_VERSION := v0.69.3
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION := 11.12.0
+# renovate: datasource=github-releases depName=hadolint/hadolint
+HADOLINT_VERSION := v2.14.0
+# renovate: datasource=github-releases depName=nektos/act
+ACT_VERSION := v0.2.87
 
 #help: @ List available tasks
 help:
@@ -64,10 +68,26 @@ deps-trivy:
 		curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b $$HOME/.local/bin $(TRIVY_VERSION); \
 	}
 
-#lint: @ Run shellcheck on all scripts + actionlint on all workflows
-lint: deps-shellcheck deps-actionlint
+#deps-hadolint: @ Install hadolint
+deps-hadolint:
+	@command -v hadolint >/dev/null 2>&1 || { echo "Installing hadolint $(HADOLINT_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o /tmp/hadolint https://github.com/hadolint/hadolint/releases/download/$(HADOLINT_VERSION)/hadolint-Linux-x86_64 && \
+		install -m 755 /tmp/hadolint $$HOME/.local/bin/hadolint && rm -f /tmp/hadolint; \
+	}
+
+#deps-act: @ Install act (run GitHub Actions locally)
+deps-act:
+	@command -v act >/dev/null 2>&1 || { echo "Installing act $(ACT_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL https://raw.githubusercontent.com/nektos/act/master/install.sh | bash -s -- -b $$HOME/.local/bin $(ACT_VERSION); \
+	}
+
+#lint: @ Run shellcheck on scripts, actionlint on workflows, hadolint on Dockerfile
+lint: deps-shellcheck deps-actionlint deps-hadolint
 	@shellcheck scripts/*.sh
 	@actionlint .github/workflows/*.yml
+	@hadolint images/Dockerfile
 
 #secrets: @ Scan for leaked secrets (gitleaks)
 secrets: deps-gitleaks
@@ -109,6 +129,12 @@ static-check: lint secrets trivy-fs trivy-config mermaid-lint
 #ci: @ Full local CI pipeline (static-check + renovate-validate)
 ci: static-check renovate-validate
 	@echo "Local CI pipeline passed."
+
+#ci-run: @ Run GitHub Actions workflow locally via act
+ci-run: deps-act
+	@docker container prune -f 2>/dev/null || true
+	@act push --container-architecture linux/amd64 \
+		--artifact-server-path /tmp/act-artifacts
 
 #install-all: @ Install all (kind k8s cluster, Nginx ingress, MetalLB, demo workloads)
 install-all: deps
@@ -230,7 +256,8 @@ delete-cluster: deps
 	@./scripts/kind-delete.sh
 
 .PHONY: help deps deps-shellcheck deps-actionlint deps-gitleaks deps-trivy \
-	lint secrets trivy-fs trivy-config mermaid-lint static-check ci \
+	deps-hadolint deps-act \
+	lint secrets trivy-fs trivy-config mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	create-cluster export-cert k8s-dashboard dashboard-install \
 	dashboard-forward dashboard-token nginx-ingress metallb \

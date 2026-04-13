@@ -16,7 +16,6 @@ misconfigurations:
       - "**/helloweb-deployment-local.yaml"
       - "**/helloweb-deployment.yaml"
       - "**/nfs-server.yaml"
-      - "**/pod.yaml"
   - id: KSV-0118
     paths:
       - "**/foo-bar-deployment.yaml"
@@ -24,7 +23,6 @@ misconfigurations:
       - "**/helloweb-deployment-local.yaml"
       - "**/helloweb-deployment.yaml"
       - "**/nfs-server.yaml"
-      - "**/pod.yaml"
 
   # In-cluster nfs-server requires privileged mode to kernel-export NFS.
   - id: KSV-0017
@@ -36,8 +34,3 @@ misconfigurations:
     paths:
       - "**/Dockerfile"
 
-  # k8s/prometheus.yaml is a vendored kube-prometheus-stack bundle — upstream
-  # tuning is outside this repo's scope. Suppress all misconfig findings in
-  # this single vendored file.
-  - paths:
-      - "**/prometheus.yaml"

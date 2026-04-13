@@ -102,11 +102,29 @@ Run `make help` to list targets.
 
 | Target | Description |
 |--------|-------------|
-| `make deps` | Verify required tools are installed |
+| `make deps` | Verify required runtime tools are installed |
 | `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
 | `make registry` | Create a KinD cluster wired to a local Docker registry at `localhost:5001` |
 | `make registry-test` | Push `hello-app:1.0` to the local registry and deploy it (run after `make registry`) |
 | `make renovate-validate` | Validate `renovate.json` configuration |
+
+### Quality Gates
+
+| Target | Description |
+|--------|-------------|
+| `make lint` | shellcheck on scripts + actionlint on workflows + hadolint on `images/Dockerfile` |
+| `make secrets` | gitleaks scan (suppressions in `.gitleaks.toml`) |
+| `make trivy-fs` | Trivy filesystem scan for vulns, secrets, misconfigs (CRITICAL/HIGH) |
+| `make trivy-config` | Trivy scan of `k8s/` manifests for K8s misconfigurations |
+| `make mermaid-lint` | Validate Mermaid diagrams in `README.md` / `CLAUDE.md` via `mermaid-cli` |
+| `make static-check` | Composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint |
+| `make ci` | Full local CI pipeline: `static-check` + `renovate-validate` |
+| `make ci-run` | Run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
+
+Suppressions (intentional, justified inline):
+- `.gitleaks.toml` — allowlist for the local `dashboard-admin-token.txt`.
+- `.trivyignore.yaml` — demo workloads use default securityContext, the in-cluster NFS pod needs privileged mode.
+- `.hadolint.yaml` — `kubectl-test` is a throwaway debug image; alpine-package pinning is overkill.
 
 ## k8s Dashboard
 

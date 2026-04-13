@@ -1,6 +1,6 @@
 FROM alpine:3.16.2
 
-LABEL MAINTAINER="Andriy Kalashnykov" description="Kubernetes testing image"
+LABEL maintainer="Andriy Kalashnykov" description="Kubernetes testing image"
 
 ARG APK_PACKAGES="bash \
                   bind-tools \

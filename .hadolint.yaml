@@ -1,0 +1,6 @@
+ignored:
+  # kubectl-test is a throwaway debug utility image — pinning every alpine
+  # package version is overkill. Pinning kubectl via a `stable.txt` lookup is
+  # intentional (always the latest release).
+  - DL3018  # Pin versions in apk add
+  - DL4006  # SHELL -o pipefail not required inside a single RUN with `curl | sh`
