@@ -347,7 +347,10 @@ multipass exec "$NAME" -- sudo iptables -I DOCKER-USER -d "$KIND_NET" -j ACCEPT
 sudo ip route add "$KIND_NET" via "$VM_IP"                             # Linux
 # sudo route -n add -net "$KIND_NET" "$VM_IP"                          # macOS
 
-# resolve the demo hostname to the ingress IP
+# [HOST] — point demo.localdev.me at the ingress LB IP. If you also ran
+# Quick Start (which mapped it to 127.0.0.1), remove that entry first
+# so resolution doesn't pick the wrong IP.
+sudo sed -i.bak '/demo\.localdev\.me/d' /etc/hosts
 echo "$INGRESS_IP demo.localdev.me" | sudo tee -a /etc/hosts
 ```
 
