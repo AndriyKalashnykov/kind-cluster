@@ -12,7 +12,7 @@ Shell-script toolkit for provisioning local Kubernetes clusters with [KinD](http
 | Cluster | [KinD](https://kind.sigs.k8s.io/) on Docker |
 | Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) |
 | Load Balancer | [MetalLB](https://metallb.universe.tf/) |
-| Storage (RWX) | [nfs-subdir-external-provisioner](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) |
+| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) (in-cluster) or [nfs-subdir-external-provisioner](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) (host-backed) |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) |
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) |
 | CI | GitHub Actions (`helm/kind-action`) |
@@ -105,47 +105,6 @@ Run `make help` to list targets.
 | `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
 | `make renovate-validate` | Validate `renovate.json` configuration |
 
-## CI/CD
-
-GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
-
-| Job | Triggers | Steps |
-|-----|----------|-------|
-| **test-e2e** | push, PR, tags | Spin up KinD via `helm/kind-action`, install ingress + MetalLB, deploy all demo workloads |
-
-A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
-
-[Renovate](https://docs.renovatebot.com/) keeps action versions and container images up to date.
-
-## Install all (kind k8s cluster, Nginx ingress, MetaLB, demo workloads)
-
-
-```bash
-./scripts/kind-install-all.sh
-```
-
-Or you can install each component individually
-
-## Create k8s cluster
-
-
-```bash
-./scripts/kind-create.sh
-```
-
-## Export k8s keys(client) and certificates(client, cluster CA)
-
-
-```bash
-./scripts/kind-create.sh
-```
-
-Script creates:
-- client.key
-- client.crt
-- client.pfx
-- cluster-ca.crt
-
 ## k8s Dashboard
 
 Pinned to Helm chart [`kubernetes-dashboard`](https://github.com/kubernetes/dashboard) **v7.14.0**. Dashboard v7 splits the monolithic v2 service into microservices (`api`, `web`, `auth`, `metrics-scraper`) behind a **Kong Gateway** reverse proxy — you port-forward the `kong-proxy` Service, not a pod.
@@ -202,7 +161,7 @@ The **host machine** runs `nfs-kernel-server` and exports a directory; [nfs-subd
 flowchart LR
     A[app pod] -->|RWX PVC<br/>storageClassName: nfs-client| SC[StorageClass<br/>nfs-client]
     SC --> P[nfs-subdir-external-provisioner<br/>namespace: nfs-provisioning]
-    P -.NFSv4.| HOST[host NFS server<br/>/mnt/k8s_nfs_storage]
+    P -.NFSv4.-> HOST[host NFS server<br/>/mnt/k8s_nfs_storage]
     HOST --> DISK[(host disk<br/>persistent)]
 ```
 
@@ -225,13 +184,14 @@ For full reproducibility — and to keep Docker, kind, and the host NFS server o
 
 ```mermaid
 flowchart LR
-    DEV[Developer<br/>laptop] -->|make vm-ssh| M[Multipass<br/>Ubuntu 22.04 VM]
-    subgraph M[Multipass VM: kind-host]
+    DEV[Developer<br/>laptop]
+    subgraph VM[Multipass VM: kind-host]
       D[Docker] --> K[KinD cluster<br/>control-plane + worker]
       NFS[nfs-kernel-server<br/>/srv/k8s_nfs_storage]
       K -->|Option 2| NFS
     end
-    DEV -.ports.-> K
+    DEV -->|make vm-ssh| VM
+    DEV -.forwarded ports.-> K
 ```
 
 ### 1. Install Multipass
@@ -284,7 +244,6 @@ Runs `multipass stop && multipass delete && multipass purge` — no stale VMs le
 
 Override `NAME` to target a specific VM: `make vm-down NAME=my-kind`.
 
-
 ## Observability
 
 ### kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
@@ -305,3 +264,16 @@ Required for `kubectl top` and HorizontalPodAutoscalers. On KinD, the default ma
 make metrics-server
 ```
 
+## CI/CD
+
+GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
+
+| Job | Triggers | Steps |
+|-----|----------|-------|
+| **test-e2e** | push, PR, tags | Spin up KinD via `helm/kind-action`, install ingress + MetalLB + dashboard, deploy all demo workloads, curl-verify each via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
+
+A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
+
+No repo secrets or variables are required by the workflow — only the default `GITHUB_TOKEN`.
+
+[Renovate](https://docs.renovatebot.com/) keeps action digests, container images, and tool versions pinned in `Makefile` / `scripts/*.sh` (via `# renovate:` inline comments) up to date with platform automerge enabled.
