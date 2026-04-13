@@ -22,7 +22,7 @@ echo "deploying foo-bar-service"
 kubectl apply -f ./k8s/foo-bar-deployment.yaml
 
 echo "waiting for foo-bar-service pods"
-kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout=${TIMEOUT}
+kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout="${TIMEOUT}"
 
 echo "waiting for foo-bar-service service to get External-IP"
 for _ in $(seq 1 90); do

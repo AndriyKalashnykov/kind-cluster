@@ -23,7 +23,7 @@ kubectl apply -f ./k8s/golang-hello-world-web.yaml
 
 # https://fabianlee.org/2022/01/27/kubernetes-using-kubectl-to-wait-for-condition-of-pods-deployments-services/
 echo "waiting for golang-hello-world-web pods"
-kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout=${TIMEOUT}
+kubectl wait deployment -n default golang-hello-world-web --for condition=Available=True --timeout="${TIMEOUT}"
 
 echo "waiting for golang-hello-world-web service to get External-IP"
 for _ in $(seq 1 90); do

@@ -1,0 +1,43 @@
+# Trivy suppressions for this local dev lab.
+# Rationale: manifests under k8s/ are demo workloads for a throwaway local
+# KinD cluster, not a production deployment. If any of these ever ships to
+# a real cluster, remove the corresponding ignore and fix the finding.
+#
+# Paths use glob patterns so they match both `trivy fs .` (which emits
+# `k8s/foo.yaml`) and `trivy config k8s/` (which emits just `foo.yaml`).
+
+misconfigurations:
+  # Demo container workloads — default securityContext + writable rootfs are
+  # acceptable on a throwaway local cluster.
+  - id: KSV-0014
+    paths:
+      - "**/foo-bar-deployment.yaml"
+      - "**/golang-hello-world-web.yaml"
+      - "**/helloweb-deployment-local.yaml"
+      - "**/helloweb-deployment.yaml"
+      - "**/nfs-server.yaml"
+      - "**/pod.yaml"
+  - id: KSV-0118
+    paths:
+      - "**/foo-bar-deployment.yaml"
+      - "**/golang-hello-world-web.yaml"
+      - "**/helloweb-deployment-local.yaml"
+      - "**/helloweb-deployment.yaml"
+      - "**/nfs-server.yaml"
+      - "**/pod.yaml"
+
+  # In-cluster nfs-server requires privileged mode to kernel-export NFS.
+  - id: KSV-0017
+    paths:
+      - "**/nfs-server.yaml"
+
+  # kubectl-test image is built for local debugging, never shipped.
+  - id: DS-0002
+    paths:
+      - "**/Dockerfile"
+
+  # k8s/prometheus.yaml is a vendored kube-prometheus-stack bundle — upstream
+  # tuning is outside this repo's scope. Suppress all misconfig findings in
+  # this single vendored file.
+  - paths:
+      - "**/prometheus.yaml"

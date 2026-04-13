@@ -22,5 +22,5 @@ jobs:
           CUTOFF=$(date -u -d "$RETAIN_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
           gh run list --repo "${{ github.repository }}" \
             --json databaseId,createdAt --limit 200 \
-            --jq "sort_by(.createdAt) | reverse | .[$KEEP_MINIMUM:] | .[] | select(.createdAt < \\"$CUTOFF\\") | .databaseId" \
+            --jq "sort_by(.createdAt) | reverse | .[${KEEP_MINIMUM}:] | .[] | select(.createdAt < \"${CUTOFF}\") | .databaseId" \
           | xargs -r -I{} gh run delete {} --repo "${{ github.repository }}"

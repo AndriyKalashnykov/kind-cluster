@@ -22,7 +22,7 @@ echo "deploying helloweb"
 kubectl apply -f ./k8s/helloweb-deployment.yaml
 
 echo "waiting for helloweb pods"
-kubectl wait deployment -n default helloweb --for condition=Available=True --timeout=${TIMEOUT}
+kubectl wait deployment -n default helloweb --for condition=Available=True --timeout="${TIMEOUT}"
 
 # https://stackoverflow.com/questions/70108499/kubectl-wait-for-service-on-aws-eks-to-expose-elastic-load-balancer-elb-addres/70108500#70108500
 echo "waiting for helloweb service to get External-IP"

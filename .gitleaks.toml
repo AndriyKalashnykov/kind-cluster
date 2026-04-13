@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Files containing known-safe content or local artifacts"
+paths = [
+  # Upstream kube-prometheus-stack bundled manifest — checksum annotations and
+  # the literal default Grafana `admin/prom-operator` base64 (public default).
+  '''^k8s/prometheus\.yaml$''',
+  # Local-only artifact written by `make dashboard-install`; in .gitignore,
+  # but gitleaks in filesystem mode doesn't honor .gitignore.
+  '''^dashboard-admin-token\.txt$''',
+]

@@ -30,7 +30,7 @@ kubectl apply -f  https://raw.githubusercontent.com/metallb/metallb/${METALLB_VE
 
 # https://fabianlee.org/2022/01/27/kubernetes-using-kubectl-to-wait-for-condition-of-pods-deployments-services/
 echo "waiting for metallb"
-kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout=${TIMEOUT}
+kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout="${TIMEOUT}"
 
 # get kind IP — pick the IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
 echo "getting kind network IP"

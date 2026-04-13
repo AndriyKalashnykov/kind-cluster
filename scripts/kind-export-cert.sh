@@ -11,13 +11,10 @@ CERTIFICATE=$(kubectl config view --raw -o json | jq -r '.users[] | select(.name
 KEY=$(kubectl config view --raw -o json | jq -r '.users[] | select(.name == "'${CONTEXT}'") | .user."client-key-data"')
 CLUSTER_CA=$(kubectl config view --raw -o json | jq -r '.clusters[] | select(.name == "'${CONTEXT}'") | .cluster."certificate-authority-data"')
 
-echo ${CERTIFICATE} | base64 -d > client.crt
-echo ${KEY} | base64 -d > client.key
+echo "${CERTIFICATE}" | base64 -d > client.crt
+echo "${KEY}" | base64 -d > client.key
 
 openssl pkcs12 -export -in client.crt -inkey client.key -out client.pfx -passout pass:
 
-# rm client.crt
-# rm client.key
-
-echo ${CLUSTER_CA} | base64 -d > cluster-ca.crt
+echo "${CLUSTER_CA}" | base64 -d > cluster-ca.crt
 

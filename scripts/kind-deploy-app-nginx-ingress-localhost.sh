@@ -30,7 +30,7 @@ DEMO_SVC_NAME=demo-localhost
 DEMO_SVC_PORT=80
 kubectl create deployment demo-localhost --image=httpd --port=${DEMO_SVC_PORT}
 echo "waiting for httpd pods"
-kubectl wait deployment -n default demo-localhost --for condition=Available=True --timeout=${TIMEOUT}
+kubectl wait deployment -n default demo-localhost --for condition=Available=True --timeout="${TIMEOUT}"
 kubectl expose deployment ${DEMO_SVC_NAME}
 
 echo "creating an ingress resource and mapping demo.localdev.me to localhost"
@@ -39,16 +39,16 @@ kubectl create ingress demo-localhost --class=nginx --rule="demo.localdev.me/*=$
 echo "waiting for ingress demo-localhost"
 wait_period=0
 hostname=""
-while [ -z $hostname ]; do
+while [ -z "$hostname" ]; do
   echo "Waiting for hostname ..."
   hostname=$(kubectl get --namespace default ingress/demo-localhost --template="{{range .status.loadBalancer.ingress}}{{.hostname}}{{end}}")
   if [ -z "$hostname" ];then
     sleep 10
-    wait_period=$(($wait_period+10))
+    wait_period=$((wait_period+10))
   fi
 
-  wait_timeout=$(echo $TIMEOUT | sed 's/[^0-9]*//g')
-  if [ $wait_period -gt $wait_timeout ];then
+  wait_timeout=${TIMEOUT//[^0-9]/}
+  if [ "$wait_period" -gt "$wait_timeout" ];then
     echo "Didn't get the hostname, timeout reached"
     break
   fi

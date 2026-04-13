@@ -18,5 +18,5 @@ echo "deploying nginx ingress for kind"
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
 echo "waiting for nginx"
-kubectl wait pods -n ingress-nginx -l app.kubernetes.io/component=controller --for condition=Ready --timeout=${TIMEOUT}
+kubectl wait pods -n ingress-nginx -l app.kubernetes.io/component=controller --for condition=Ready --timeout="${TIMEOUT}"
 
