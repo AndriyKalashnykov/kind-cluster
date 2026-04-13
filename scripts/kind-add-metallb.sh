@@ -34,7 +34,13 @@ kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeo
 
 # get kind IP
 echo "getting kind network IP"
-ip_subclass=$(docker network inspect kind -f '{{index .IPAM.Config 0 "Subnet"}}' | awk -F. '{printf "%d.%d\n", $1, $2}')
+ip_subclass=$(docker network inspect kind -f '{{(index .IPAM.Config 0).Subnet}}' | awk -F. '{printf "%d.%d\n", $1, $2}')
+if [ -z "${ip_subclass}" ] || [ "${ip_subclass}" = "0.0" ]; then
+    echo "ERROR: failed to extract kind network subnet from 'docker network inspect kind'"
+    docker network inspect kind -f '{{(index .IPAM.Config 0).Subnet}}'
+    exit 1
+fi
+echo "kind network /16 prefix: ${ip_subclass}"
 
 # https://thr3a.hatenablog.com/entry/20220718/1658127951
 # https://github.com/metallb/metallb/issues/1473

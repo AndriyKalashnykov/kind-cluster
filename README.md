@@ -240,12 +240,13 @@ make vm-install-all
 
 MetalLB `LoadBalancer` IPs and the ingress IP live on the VM's internal `kind` docker network (typically `172.18.0.0/16`) and are **not directly routable from your host**. Pick one of the two approaches below.
 
-First, capture the VM's IPv4 (you'll reuse it):
+First, capture the VM name and its IPv4 (you'll reuse both):
 
 ```bash
 # [HOST]
-VM_IP=$(multipass info $NAME --format json | jq -r ".info.\"$NAME\".ipv4[0]")
-echo "$VM_IP"
+NAME=${NAME:-kind-host}                                                            # match make vm-up default
+VM_IP=$(multipass info "$NAME" --format json | jq -r '.info | to_entries[0].value.ipv4[0]')
+echo "NAME=$NAME  VM_IP=$VM_IP"
 ```
 
 #### Option A — SSH tunnel per service (no sudo, works everywhere)
