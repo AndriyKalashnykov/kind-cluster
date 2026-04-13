@@ -21,7 +21,7 @@ kubectl --namespace monitoring get pods -l "release=kube-prometheus-stack"
 echo "changing kube-prometheus-stack-grafana service type to LoadBlancer"
 kubectl patch svc kube-prometheus-stack-grafana -n monitoring --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
 
-echo "waiting for golang-hello-world-web service to get External-IP"
+echo "waiting for kube-prometheus-stack-grafana service to get External-IP"
 for i in $(seq 1 90); do
     kubectl get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
     sleep 2
