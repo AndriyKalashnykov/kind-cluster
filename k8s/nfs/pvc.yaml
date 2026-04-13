@@ -2,9 +2,8 @@ kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
   name: demo-claim
-  namespace: nfs-provisioning
 spec:
-  storageClassName: nfs-client
+  storageClassName: nfs-host
   accessModes:
     - ReadWriteMany
   resources:

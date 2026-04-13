@@ -1,17 +1,21 @@
 #!/bin/bash
-# Install nfs-subdir-external-provisioner pointing at a HOST-SIDE NFS server.
-# The host must already export a directory over NFS — run
+# Install csi-driver-nfs and create a StorageClass pointing at a HOST-SIDE
+# NFS server. The host must already export a directory over NFS — run
 # kind-add-nfs-host-setup.sh first.
 #
+# Uses the same csi-driver-nfs as Option 1, so the two options coexist: only
+# the StorageClass differs. Replaces the unmaintained
+# nfs-subdir-external-provisioner (last release 2023-03-13).
+#
 # Architecture:
-#   app-pod --(RWX PVC)--> nfs-client StorageClass --(subdir-provisioner)--> Host NFS server --> /srv/...
+#   app-pod --(RWX PVC)--> StorageClass nfs-host --(csi-driver-nfs)--> Host NFS server --> /srv/...
 #
 # Usage: kind-add-nfs-host-provisioner.sh NFS_SERVER_IP [NFS_PATH]
 #   NFS_SERVER_IP  required, e.g. 192.168.1.27
 #   NFS_PATH       default: /srv/k8s_nfs_storage
 #
 # References:
-#   https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
+#   https://github.com/kubernetes-csi/csi-driver-nfs
 
 set -euo pipefail
 
@@ -28,29 +32,47 @@ cd "$SCRIPT_DIR/.."
 NFS_SERVER=$1
 NFS_PATH=${2:-/srv/k8s_nfs_storage}
 
-# renovate: datasource=helm depName=nfs-subdir-external-provisioner registryUrl=https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
-NFS_SUBDIR_PROVISIONER_VERSION=4.0.18
+# renovate: datasource=github-releases depName=kubernetes-csi/csi-driver-nfs
+CSI_DRIVER_NFS_VERSION=v4.13.1
 
-NS=nfs-provisioning
+NS_DRIVER=kube-system
+RELEASE=csi-driver-nfs
+SC_NAME=nfs-host
 
-echo "=== Installing nfs-subdir-external-provisioner ${NFS_SUBDIR_PROVISIONER_VERSION} ==="
+echo "=== Ensuring csi-driver-nfs ${CSI_DRIVER_NFS_VERSION} is installed ==="
 echo "    NFS server: ${NFS_SERVER}:${NFS_PATH}"
 
-helm repo add nfs-subdir-external-provisioner \
-    https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner >/dev/null 2>&1 || true
-helm repo update nfs-subdir-external-provisioner >/dev/null
+helm repo add csi-driver-nfs https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts >/dev/null 2>&1 || true
+helm repo update csi-driver-nfs >/dev/null
 
-helm upgrade --install nfs-subdir-external-provisioner \
-    nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
-    --namespace "$NS" --create-namespace \
-    --version "${NFS_SUBDIR_PROVISIONER_VERSION}" \
-    --set nfs.server="${NFS_SERVER}" \
-    --set nfs.path="${NFS_PATH}" \
+helm upgrade --install "$RELEASE" csi-driver-nfs/csi-driver-nfs \
+    --namespace "$NS_DRIVER" \
+    --version "${CSI_DRIVER_NFS_VERSION}" \
     --wait --timeout 5m
 
-kubectl get sc nfs-client
 echo
-echo "Ready. Create a RWX PVC with:  storageClassName: nfs-client"
+echo "=== Creating StorageClass '${SC_NAME}' pointing at ${NFS_SERVER}:${NFS_PATH} ==="
+cat <<EOF | kubectl apply -f -
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${SC_NAME}
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: ${NFS_SERVER}
+  share: ${NFS_PATH}
+  mountPermissions: "0777"
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+mountOptions:
+  - nfsvers=4.1
+  - nolock
+EOF
+
+echo
+kubectl get sc "${SC_NAME}"
+echo
+echo "Ready. Create a RWX PVC with:  storageClassName: ${SC_NAME}"
 echo "Test with:  kubectl apply -f ./k8s/nfs/pvc.yaml"
 
 cd "$LAUNCH_DIR"

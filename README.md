@@ -12,7 +12,7 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 | Cluster | [KinD](https://kind.sigs.k8s.io/) on Docker |
 | Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) |
 | Load Balancer | [MetalLB](https://metallb.universe.tf/) |
-| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) (in-cluster) or [nfs-subdir-external-provisioner](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) (host-backed) |
+| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) — same driver for both in-cluster and host-backed NFS |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) |
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) |
 | CI | GitHub Actions (`helm/kind-action`) |
@@ -104,6 +104,8 @@ Run `make help` to list targets.
 |--------|-------------|
 | `make deps` | Verify required tools are installed |
 | `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
+| `make registry` | Create a KinD cluster wired to a local Docker registry at `localhost:5001` |
+| `make registry-test` | Push `hello-app:1.0` to the local registry and deploy it (run after `make registry`) |
 | `make renovate-validate` | Validate `renovate.json` configuration |
 
 ## k8s Dashboard
@@ -156,13 +158,13 @@ Pinned versions: `csi-driver-nfs` v4.13.1. Source: `scripts/kind-add-nfs-inclust
 
 ### Option 2 — host-side NFS (persistent across cluster recreates)
 
-The **host machine** runs `nfs-kernel-server` and exports a directory; [nfs-subdir-external-provisioner](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) inside the cluster provisions PVs backed by that host export. Data survives cluster teardown — useful when you want state to outlive `kind-down`. Requires sudo on the host and only works on Linux.
+The **host machine** runs `nfs-kernel-server` and exports a directory; the same `csi-driver-nfs` used by Option 1 provisions PVs backed by that host export. Data survives cluster teardown — useful when you want state to outlive `kind-down`. Requires sudo on the host and only works on Linux.
 
 ```mermaid
 flowchart LR
-    A[app pod] -->|RWX PVC<br/>storageClassName: nfs-client| SC[StorageClass<br/>nfs-client]
-    SC --> P[nfs-subdir-external-provisioner<br/>namespace: nfs-provisioning]
-    P -.NFSv4.-> HOST[host NFS server<br/>/srv/k8s_nfs_storage]
+    A[app pod] -->|RWX PVC<br/>storageClassName: nfs-host| SC[StorageClass<br/>nfs-host]
+    SC --> CSI[csi-driver-nfs<br/>kube-system]
+    CSI -.NFSv4.-> HOST[host NFS server<br/>/srv/k8s_nfs_storage]
     HOST --> DISK[(host disk<br/>persistent)]
 ```
 
@@ -170,12 +172,12 @@ flowchart LR
 # 1. Host-side: install nfs-kernel-server, create export, open firewall (interactive sudo)
 make nfs-host-setup
 
-# 2. In-cluster: install the provisioner pointing at the host (replace NFS_SERVER with your host IP)
+# 2. In-cluster: install csi-driver-nfs + StorageClass pointing at the host (replace NFS_SERVER with your host IP)
 make nfs-host-provisioner NFS_SERVER=192.168.1.27
 kubectl apply -f ./k8s/nfs/pvc.yaml             # sample RWX PVC
 ```
 
-Pinned versions: `nfs-subdir-external-provisioner` chart 4.0.18. Sources: `scripts/kind-add-nfs-host-setup.sh`, `scripts/kind-add-nfs-host-provisioner.sh`.
+Option 1 and Option 2 differ only in backend: `csi-driver-nfs` is installed once, and you pick a StorageClass (`nfs-csi` for in-cluster, `nfs-host` for host-backed). Sources: `scripts/kind-add-nfs-host-setup.sh`, `scripts/kind-add-nfs-host-provisioner.sh`.
 
 **References:** [NFS Server on Ubuntu](https://www.tecmint.com/install-nfs-server-on-ubuntu/) · [Dynamic NFS Provisioning in k8s](https://www.linuxtechi.com/dynamic-nfs-provisioning-kubernetes/) · [RWX in KinD with NFS](https://cloudyuga.guru/hands_on_lab/nfs-kind).
 
@@ -373,7 +375,20 @@ make kube-prometheus-stack
 
 The script installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace, patches the `grafana` Service to `LoadBalancer` (served via MetalLB), and prints the Grafana URL and admin credentials.
 
-Default Grafana login: **admin / prom-operator**.
+| Component | URL | Exposed via | Credentials |
+|---|---|---|---|
+| Grafana | `http://<LB_IP>/` (printed by the script; discover with `kubectl get svc -n monitoring kube-prometheus-stack-grafana`) | MetalLB LoadBalancer | `admin` / password printed by `make kube-prometheus-stack` (retrieve later with `kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' \| base64 -d`) |
+| Prometheus | `http://localhost:9090/` — UI at `/`, scrape targets at `/targets` | `kubectl port-forward` (below) | none |
+| Alertmanager | `http://localhost:9093/` | `kubectl port-forward` (below) | none |
+
+```bash
+# Prometheus UI
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+# Alertmanager UI
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
+```
+
+If you're running inside a Multipass VM, prefix with `multipass exec $NAME --` or run the port-forward inside the VM and add a host-side SSH tunnel exactly like the Dashboard flow in §4 above (replace `8443` with `9090` / `9093`).
 
 ### metrics-server
 
@@ -382,6 +397,17 @@ Required for `kubectl top` and HorizontalPodAutoscalers. On KinD, the default ma
 ```bash
 make metrics-server
 ```
+
+## Local Docker Registry
+
+For pushing locally-built images without going through Docker Hub/GHCR, `make registry` creates a fresh KinD cluster wired to a Docker registry at `localhost:5001` — containerd on the kind nodes mirrors that registry, so pods can pull `localhost:5001/<image>:<tag>` directly.
+
+```bash
+make registry         # create cluster + registry container
+make registry-test    # pull hello-app, retag to localhost:5001, push, deploy, curl
+```
+
+This is an **alternative** to the default `make install-all` flow — the registry cluster doesn't include ingress, MetalLB, or the demo workloads. Useful for iterating on an image you're building locally. Tear down with `make delete-cluster` and remove the registry container with `docker rm -f kind-registry`.
 
 ## CI/CD
 

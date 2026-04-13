@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # set -x
-LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd $SCRIPT_DIR; cd ..; SCRIPT_PARENT_DIR=$(pwd);
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.." || exit 1
 
-cd $SCRIPT_PARENT_DIR
 
 # https://medium.com/@charled.breteche/kind-fix-missing-prometheus-operator-targets-1a1ff5d8c8ad
 
@@ -22,7 +22,7 @@ echo "changing kube-prometheus-stack-grafana service type to LoadBlancer"
 kubectl patch svc kube-prometheus-stack-grafana -n monitoring --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
 
 echo "waiting for kube-prometheus-stack-grafana service to get External-IP"
-for i in $(seq 1 90); do
+for _ in $(seq 1 90); do
     kubectl get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
     sleep 2
 done
@@ -40,4 +40,3 @@ echo "Grafana URL: ${service_ip}:80/"
 # kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
 # xdg-open http://localhost:9090/targets
 
-cd $LAUNCH_DIR

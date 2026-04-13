@@ -15,65 +15,88 @@ concurrency:
 
 jobs:
   test-e2e:
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    strategy:
-      matrix:
-        k8s-version: ['v1.24.2']
-        kubectl-version: ['v1.25.0']
-        kind-version: ['v0.14.0']
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: v0.31.0
+      # renovate: datasource=github-tags depName=kubernetes/kubernetes
+      KUBECTL_VERSION: v1.35.1
+      # renovate: datasource=docker depName=kindest/node
+      K8S_NODE_IMAGE_VERSION: v1.35.0
 
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-    # - name: Github variables
-    #   run: |
-    #     echo github.event: '${{ toJson(github.event) }}'
-    #     echo github.event.release.tag_name: ${{ github.event.release.tag_name }}
-    #     echo github.ref: ${{ github.ref }}
-    #     echo github.sha: ${{ github.sha }}
-    #     echo github.head_ref: ${{ github.head_ref }}
-    #     echo github.base_ref: ${{ github.base_reg }}
+      # https://github.com/helm/kind-action
+      - name: Install KinD ${{ env.KIND_VERSION }} with K8s ${{ env.K8S_NODE_IMAGE_VERSION }}
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          version: ${{ env.KIND_VERSION }}
+          cluster_name: kind
+          config: ./k8s/kind-config.yaml
+          kubectl_version: ${{ env.KUBECTL_VERSION }}
+          node_image: kindest/node:${{ env.K8S_NODE_IMAGE_VERSION }}
 
-    # https://github.com/helm/kind-action 
-    - name: Install k8s ${{ matrix.k8s-version }}
-      uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
-      with:
-        version: ${{ matrix.kind-version }}
-        cluster_name: kind
-        config: ./k8s/kind-config.yaml
-        kubectl_version: ${{ matrix.kubectl-version }}
-        node_image: kindest/node:${{ matrix.k8s-version }}
+      - name: Cluster info
+        timeout-minutes: 1
+        run: |
+          kubectl cluster-info
+          kubectl version --client
+          kubectl get pods -n kube-system
 
-    - run: kubectl cluster-info
+      - name: Export k8s client keys and cluster CA cert
+        timeout-minutes: 1
+        run: ./scripts/kind-export-cert.sh
 
-    - name: kubectl version
-      run: kubectl
+      - name: Install Kubernetes Dashboard
+        timeout-minutes: 3
+        run: ./scripts/kind-add-dashboard.sh
 
-    - name: k8s pods
-      run: kubectl get pods -n kube-system
+      - name: Install Nginx ingress
+        timeout-minutes: 3
+        run: ./scripts/kind-add-ingress-nginx.sh
 
-    - name: Export k8s keys(client) and certificates(client, cluster CA)
-      run: ./scripts/kind-export-cert.sh
+      - name: Install MetalLB
+        timeout-minutes: 3
+        run: ./scripts/kind-add-metallb.sh
 
-    - name: Install k8s dashboard
-      run: ./scripts/kind-add-dashboard.sh
+      - name: Install metrics-server
+        timeout-minutes: 3
+        run: ./scripts/kind-add-metrics-server.sh
 
-    - name: Install Nginx ingress
-      run: ./scripts/kind-add-ingress-nginx.sh
+      - name: Install in-cluster NFS (csi-driver-nfs + nfs-server pod)
+        timeout-minutes: 3
+        run: ./scripts/kind-add-nfs-incluster.sh
 
-    - name: Install MetalLB
-      run: ./scripts/kind-add-metallb.sh
+      - name: Deploy httpd + ingress rule at http://demo.localdev.me/
+        timeout-minutes: 2
+        run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
 
-    - name: Deploy httpd web server and create an ingress rule for a localhost (http://demo.localdev.me:80/), Patch ingress-nginx-controller service type -> LoadBlancer
-      run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+      - name: Deploy helloweb app
+        timeout-minutes: 2
+        run: ./scripts/kind-deploy-app-helloweb.sh
 
-    - name: Deploy helloweb app
-      run: ./scripts/kind-deploy-app-helloweb.sh
+      - name: Deploy golang-hello-world-web app
+        timeout-minutes: 2
+        run: ./scripts/kind-deploy-app-golang-hello-world-web.sh
 
-    - name: Deploy golang-hello-world-web app
-      run: ./scripts/kind-deploy-app-golang-hello-world-web.sh
-      
-    - name: Deploy foo-bar-service app
-      run: ./scripts/kind-deploy-app-foo-bar-service.sh
+      - name: Deploy foo-bar-service app
+        timeout-minutes: 2
+        run: ./scripts/kind-deploy-app-foo-bar-service.sh
+
+      - name: Smoke-test deployed services
+        timeout-minutes: 2
+        run: |
+          KIND_NODE=kind-control-plane
+          INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          HELLOWEB_IP=$(kubectl get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          GOLANG_IP=$(kubectl get svc golang-hello-world-web-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          FOO_IP=$(kubectl get svc foo-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          docker exec "$KIND_NODE" curl -sf -H 'Host: demo.localdev.me' "http://${INGRESS_IP}/" | head -c 80; echo
+          docker exec "$KIND_NODE" curl -sf "http://${HELLOWEB_IP}/" | head -c 80; echo
+          docker exec "$KIND_NODE" curl -sf "http://${GOLANG_IP}:8080/healthz"; echo
+          docker exec "$KIND_NODE" curl -sf "http://${FOO_IP}:5678/" | head -c 80; echo

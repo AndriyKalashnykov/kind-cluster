@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # set -x
-LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd $SCRIPT_DIR; cd ..; SCRIPT_PARENT_DIR=$(pwd);
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.." || exit 1
 
 # renovate: datasource=github-releases depName=metallb/metallb
 METALLB_VERSION=v0.15.3
@@ -19,7 +20,6 @@ if [ -z "$TIMEOUT" ]; then
     exit 1
 fi
 
-cd $SCRIPT_PARENT_DIR
 
 # https://metallb.universe.tf/
 # https://github.com/metallb/metallb
@@ -68,4 +68,3 @@ spec:
   - default
 EOF
 
-cd $LAUNCH_DIR

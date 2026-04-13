@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # set -x
-LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd $SCRIPT_DIR; cd ..; SCRIPT_PARENT_DIR=$(pwd);
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.." || exit 1
 
 TIMEOUT=${1:-180s}
 
@@ -10,7 +11,6 @@ if [ -z "$TIMEOUT" ]; then
     exit 1
 fi
 
-cd $SCRIPT_PARENT_DIR
 
 # Force single-platform pull — avoids kind#3795 where a multi-arch manifest list
 # in docker's content store breaks `kind load docker-image` (ctr: content digest not found).
@@ -25,7 +25,7 @@ echo "waiting for foo-bar-service pods"
 kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout=${TIMEOUT}
 
 echo "waiting for foo-bar-service service to get External-IP"
-for i in $(seq 1 90); do
+for _ in $(seq 1 90); do
     kubectl get service/foo-service -n default --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
     sleep 2
 done
@@ -41,4 +41,3 @@ for _ in {1..10}; do
     || echo "  (curl http://${LB_IP}:5678 via ${KIND_NODE} failed)"
 done
 
-cd $LAUNCH_DIR

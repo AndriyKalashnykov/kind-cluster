@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # set -x
-LAUNCH_DIR=$(pwd); SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd $SCRIPT_DIR; cd ..; SCRIPT_PARENT_DIR=$(pwd);
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.." || exit 1
 
 TIMEOUT=${1:-180s}
 
@@ -10,14 +11,13 @@ if [ -z "$TIMEOUT" ]; then
     exit 1
 fi
 
-cd $SCRIPT_PARENT_DIR
 
 # https://github.com/kubernetes/ingress-nginx/blob/main/docs/deploy/index.md
 
 echo "changing ingress-nginx-controller service type to LoadBlancer"
 kubectl patch svc ingress-nginx-controller -n ingress-nginx --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
 echo "waiting for ingress-nginx-controller service to get External-IP"
-for i in $(seq 1 90); do
+for _ in $(seq 1 90); do
     kubectl get service/ingress-nginx-controller -n ingress-nginx --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
     sleep 2
 done
@@ -62,10 +62,9 @@ echo "ingress demo-localhost hostname: $hostname"
 # node with an explicit Host header. Retry up to 30s for async rule propagation.
 KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
 INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-for i in $(seq 1 15); do
+for _ in $(seq 1 15); do
     RESP=$(docker exec "${KIND_NODE}" curl -sf --max-time 5 -H "Host: demo.localdev.me" "http://${INGRESS_IP}:80/" 2>/dev/null) && { echo "$RESP" | head -c 200; echo; break; }
     sleep 2
 done
 [ -n "${RESP:-}" ] || echo "(curl http://${INGRESS_IP} via ${KIND_NODE} with Host demo.localdev.me failed after 30s)"
 
-cd $LAUNCH_DIR

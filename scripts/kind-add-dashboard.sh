@@ -9,10 +9,8 @@
 
 set -euo pipefail
 
-LAUNCH_DIR=$(pwd)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
-SCRIPT_PARENT_DIR=$(pwd)
+cd "$SCRIPT_DIR/.." || exit 1
 
 # renovate: datasource=github-releases depName=kubernetes/dashboard extractVersion=^kubernetes-dashboard-(?<version>.+)$
 DASHBOARD_CHART_VERSION=7.14.0
@@ -48,5 +46,3 @@ echo
 echo "Dashboard installed (chart v${VERSION})."
 echo "Admin token written to: dashboard-admin-token.txt"
 echo "Forward the UI with: make dashboard-forward"
-
-cd "$LAUNCH_DIR"

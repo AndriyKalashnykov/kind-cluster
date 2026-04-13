@@ -100,6 +100,14 @@ deploy-app-foo-bar-service: deps
 image-build:
 	@docker build -f ./images/Dockerfile -t kubectl-test .
 
+#registry: @ Create a KinD cluster wired to a local Docker registry (localhost:5001)
+registry: deps
+	@./scripts/kind-with-registry.sh
+
+#registry-test: @ Push hello-app:1.0 to the local registry and deploy it (run after 'make registry')
+registry-test: deps
+	@./scripts/test-registry.sh
+
 #vm-up: @ Launch Ubuntu VM via Multipass with the full stack pre-provisioned (NAME=kind-host)
 vm-up:
 	@./scripts/vm-up.sh $(if $(NAME),$(NAME),) $(if $(CPUS),$(CPUS),) $(if $(MEMORY),$(MEMORY),) $(if $(DISK),$(DISK),)
@@ -132,5 +140,5 @@ delete-cluster: deps
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
-	image-build renovate-validate delete-cluster \
+	image-build registry registry-test renovate-validate delete-cluster \
 	vm-up vm-down vm-ssh vm-install-all
