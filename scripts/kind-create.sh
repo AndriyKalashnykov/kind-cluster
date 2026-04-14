@@ -13,7 +13,11 @@ if kind get clusters | grep -q '^kind$'; then
     echo "Switching context to kind ..."
     kubectl config use-context kind-kind
 else
-kind create cluster --config=./k8s/kind-config.yaml --name kind --wait 10s
-docker container ls --format "table {{.Image}}\t{{.State}}\t{{.Names}}"
+    KIND_ARGS=(--config=./k8s/kind-config.yaml --name kind --wait 10s)
+    if [ -n "${KIND_NODE_IMAGE:-}" ]; then
+        KIND_ARGS+=(--image="$KIND_NODE_IMAGE")
+    fi
+    kind create cluster "${KIND_ARGS[@]}"
+    docker container ls --format "table {{.Image}}\t{{.State}}\t{{.Names}}"
 fi
 

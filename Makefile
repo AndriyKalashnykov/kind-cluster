@@ -209,9 +209,9 @@ kind-up: install-all
 #kind-down: @ docker-compose-style alias for delete-cluster (tear the whole stack down)
 kind-down: delete-cluster
 
-#create-cluster: @ Create k8s cluster
+#create-cluster: @ Create k8s cluster (pinned to KIND_NODE_IMAGE)
 create-cluster: deps
-	@./scripts/kind-create.sh
+	@KIND_NODE_IMAGE=$(KIND_NODE_IMAGE) ./scripts/kind-create.sh
 
 #export-cert: @ Export k8s keys (client) and certificates (client, cluster CA)
 export-cert: deps

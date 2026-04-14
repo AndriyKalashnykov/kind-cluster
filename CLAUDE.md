@@ -46,7 +46,7 @@ make ci-run                            # Run GitHub Actions workflow locally via
 
 ## CI/CD
 
-- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Three jobs: `static-check` → `e2e` → `ci-pass`. The `e2e` job pins kind v0.31.0 / kubectl v1.35.1 / kindest/node v1.35.0 (tracked by Renovate), uses `helm/kind-action` to spin up a KinD cluster, runs all install/deploy scripts, then runs `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl.
+- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Four jobs: `static-check` → (`image` ‖ `e2e`) → `ci-pass`. The `e2e` job uses `make deps` + `make create-cluster` (kind / kubectl / kindest/node versions pinned in `Makefile`, Renovate-tracked), runs all install/deploy scripts, then runs `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
 - **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
 ## Dependencies

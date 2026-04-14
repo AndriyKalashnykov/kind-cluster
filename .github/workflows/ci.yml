@@ -54,28 +54,21 @@ jobs:
     needs: [static-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
-      KIND_VERSION: v0.31.0
-      # renovate: datasource=github-tags depName=kubernetes/kubernetes
-      KUBECTL_VERSION: v1.35.1
-      # renovate: datasource=docker depName=kindest/node
-      K8S_NODE_IMAGE_VERSION: v1.35.0
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Install KinD
-        # https://github.com/helm/kind-action
-        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
-        with:
-          version: ${{ env.KIND_VERSION }}
-          cluster_name: kind
-          config: ./k8s/kind-config.yaml
-          kubectl_version: ${{ env.KUBECTL_VERSION }}
-          node_image: kindest/node:${{ env.K8S_NODE_IMAGE_VERSION }}
+      - name: Install kind and kubectl
+        # Versions pinned in Makefile (KIND_VERSION, KUBECTL_VERSION,
+        # KIND_NODE_IMAGE), Renovate-tracked. Avoids helm/kind-action's
+        # auto-teardown which can flake on Docker daemon "did not receive
+        # an exit event" errors at job-end.
+        run: make deps
+
+      - name: Create cluster
+        run: make create-cluster
 
       - name: Show cluster info
         run: |

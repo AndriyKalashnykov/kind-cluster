@@ -17,7 +17,7 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 | Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.1 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
-| CI | GitHub Actions (`helm/kind-action`) | Same `helm/kind-action` users hit locally; CI verifies install scripts on every push |
+| CI | GitHub Actions | `make deps` + `make create-cluster` — same Makefile path users hit locally; CI verifies install scripts on every push |
 
 ## Architecture
 
@@ -516,7 +516,7 @@ GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
 | Job | Needs | Steps |
 |-----|-------|-------|
 | **static-check** | — | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint) |
-| **e2e** | static-check | Spin up KinD via `helm/kind-action`, install ingress + MetalLB + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
+| **e2e** | static-check | `make deps` + `make create-cluster` (uses pinned kind binary), install ingress + MetalLB + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
 | **ci-pass** | static-check, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
 
 A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
