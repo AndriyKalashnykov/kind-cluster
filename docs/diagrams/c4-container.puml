@@ -1,0 +1,38 @@
+@startuml c4-container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/v2.10.0/C4_Container.puml
+
+title Container View — kind-cluster
+
+Person(dev, "Developer")
+
+System_Boundary(host, "Host or Multipass VM") {
+  Container(docker, "Docker Engine", "containerd", "Hosts KinD nodes")
+
+  System_Boundary(kind, "KinD cluster") {
+    Container(cp, "control-plane node", "kindest/node v1.35.0", "API server, scheduler, etcd, kubelet")
+    Container(worker, "worker node", "kindest/node v1.35.0", "Pod runtime")
+
+    Container(ingress, "ingress-nginx", "Helm chart", "L7 routing; pinned to control-plane via nodeSelector")
+    Container(lb, "MetalLB", "Helm chart, L2 mode", "Allocates LoadBalancer IPs from the docker bridge subnet")
+    Container(metrics, "metrics-server", "manifest", "Serves metrics.k8s.io for kubectl top / HPA")
+    Container(dash, "Kubernetes Dashboard", "Helm chart v7.x, Kong proxy", "https://localhost:8443 via port-forward")
+    ContainerDb(nfs, "NFS server + csi-driver-nfs", "in-cluster pod or host NFS", "ReadWriteMany PVCs")
+    Container(prom, "kube-prometheus-stack", "Helm chart", "Prometheus + Grafana + Alertmanager")
+    Container(apps, "Demo workloads", "httpd / hello-app / golang-web / http-echo", "Routed via ingress + LoadBalancer Services")
+  }
+}
+
+Rel(dev, docker, "docker / kind CLI")
+Rel(dev, ingress, "HTTP via Host: demo.localdev.me", "127.0.0.1")
+Rel(dev, lb, "HTTP to LoadBalancer IPs (host-routable via docker bridge)")
+Rel(ingress, apps, "Routes /")
+Rel(lb, apps, "Allocates LoadBalancer IP")
+Rel(apps, nfs, "Mounts RWX PVCs (optional)")
+
+Lay_D(docker, kind)
+Lay_R(cp, worker)
+Lay_D(ingress, apps)
+Lay_R(lb, apps)
+
+SHOW_LEGEND()
+@enduml

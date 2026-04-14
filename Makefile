@@ -17,6 +17,8 @@ GITLEAKS_VERSION := v8.30.1
 TRIVY_VERSION := v0.69.3
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION := 11.12.0
+# renovate: datasource=docker depName=plantuml/plantuml
+PLANTUML_VERSION := 1.2026.2
 # renovate: datasource=github-releases depName=hadolint/hadolint
 HADOLINT_VERSION := v2.14.0
 # renovate: datasource=github-releases depName=nektos/act
@@ -155,8 +157,30 @@ mermaid-lint: deps
 	done; \
 	if [ "$$FAILED" -gt 0 ]; then echo "Mermaid lint: $$FAILED file(s) failed."; exit 1; fi
 
-#static-check: @ Composite quality gate (lint + secrets + trivy + mermaid-lint)
-static-check: lint secrets trivy-fs trivy-config mermaid-lint
+DIAGRAM_DIR := docs/diagrams
+DIAGRAM_SRC := $(wildcard $(DIAGRAM_DIR)/*.puml)
+DIAGRAM_OUT := $(patsubst $(DIAGRAM_DIR)/%.puml,$(DIAGRAM_DIR)/out/%.png,$(DIAGRAM_SRC))
+
+#diagrams: @ Render PlantUML architecture diagrams to PNG via pinned plantuml/plantuml docker image
+diagrams: $(DIAGRAM_OUT)
+
+$(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml
+	@mkdir -p $(DIAGRAM_DIR)/out
+	@docker run --rm --user $$(id -u):$$(id -g) -v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
+		plantuml/plantuml:$(PLANTUML_VERSION) -tpng -o out $(notdir $<)
+
+#diagrams-check: @ Verify committed diagram PNGs match current .puml source
+diagrams-check: diagrams
+	@git diff --exit-code -- $(DIAGRAM_DIR)/out >/dev/null 2>&1 || \
+		{ echo "ERROR: Diagram source changed but rendered PNG was not committed. Run 'make diagrams' and commit."; exit 1; }
+	@echo "Diagrams in sync."
+
+#diagrams-clean: @ Remove rendered diagram PNGs
+diagrams-clean:
+	@rm -rf $(DIAGRAM_DIR)/out
+
+#static-check: @ Composite quality gate (lint + secrets + trivy + mermaid-lint + diagrams-check)
+static-check: lint secrets trivy-fs trivy-config mermaid-lint diagrams-check
 	@echo "Static check passed."
 
 #ci: @ Full local CI pipeline (static-check + renovate-validate)
@@ -313,5 +337,5 @@ clean:
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
 	image-build image-test registry registry-test renovate-validate delete-cluster \
-	e2e clean \
+	e2e clean diagrams diagrams-check diagrams-clean \
 	vm-up vm-down vm-ssh vm-install-all

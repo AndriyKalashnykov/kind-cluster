@@ -7,25 +7,7 @@
 
 Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, MetalLB, Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
-```mermaid
-C4Context
-  title System Context — kind-cluster
-
-  Person(dev, "Developer", "Runs make targets to bring up a local k8s lab")
-
-  System_Boundary(host, "Workstation or Multipass VM") {
-    System(kind, "kind-cluster", "Local KinD stack: ingress, MetalLB, Dashboard, NFS, Prometheus")
-    System_Ext(docker, "Docker", "Container runtime hosting the KinD nodes")
-  }
-
-  System_Ext(registries, "Container registries", "Docker Hub, GHCR, k8s.gcr.io, quay.io")
-  System_Ext(charts, "Helm chart repos", "ingress-nginx, MetalLB, kube-prometheus, dashboard, csi-driver-nfs")
-
-  Rel(dev, kind, "make kind-up / kind-down", "shell + kubectl")
-  Rel(kind, docker, "Runs nodes as containers")
-  Rel(kind, registries, "Pulls workload images")
-  Rel(kind, charts, "helm install/upgrade")
-```
+<img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="700">
 
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
@@ -39,36 +21,9 @@ C4Context
 
 ## Architecture
 
-```mermaid
-C4Container
-  title Container View — kind-cluster
+<img src="docs/diagrams/out/c4-container.png" alt="Container View — kind-cluster" width="900">
 
-  Person(dev, "Developer")
-
-  System_Boundary(host, "Host or Multipass VM") {
-    Container(docker, "Docker Engine", "containerd", "Hosts KinD nodes")
-
-    System_Boundary(kind, "KinD cluster") {
-      Container(cp, "control-plane node", "kindest/node v1.35.0", "API server, scheduler, etcd, kubelet")
-      Container(worker, "worker node", "kindest/node v1.35.0", "Pod runtime")
-
-      Container(ingress, "ingress-nginx", "Helm chart", "L7 routing; pinned to control-plane via nodeSelector")
-      Container(lb, "MetalLB", "Helm chart, L2 mode", "Allocates LoadBalancer IPs from the docker bridge subnet")
-      Container(metrics, "metrics-server", "manifest", "Serves metrics.k8s.io for kubectl top / HPA")
-      Container(dash, "Kubernetes Dashboard", "Helm chart v7.x, Kong proxy", "https://localhost:8443 via port-forward")
-      ContainerDb(nfs, "NFS server + csi-driver-nfs", "in-cluster pod or host NFS", "ReadWriteMany PVCs")
-      Container(prom, "kube-prometheus-stack", "Helm chart", "Prometheus + Grafana + Alertmanager")
-      Container(apps, "Demo workloads", "httpd / hello-app / golang-web / http-echo", "Routed via ingress + LoadBalancer Services")
-    }
-  }
-
-  Rel(dev, docker, "docker / kind CLI")
-  Rel(dev, ingress, "HTTP via Host: demo.localdev.me", "127.0.0.1")
-  Rel(dev, lb, "HTTP to LoadBalancer IPs (host-routable via docker bridge)")
-  Rel(ingress, apps, "Routes /")
-  Rel(lb, apps, "Allocates LoadBalancer IP")
-  Rel(apps, nfs, "Mounts RWX PVCs", "(optional)")
-```
+Source: [`docs/diagrams/c4-container.puml`](./docs/diagrams/c4-container.puml). Render with `make diagrams` (uses pinned `plantuml/plantuml` Docker image).
 
 The cluster runs entirely on the local Docker bridge. MetalLB hands out LoadBalancer IPs from the bridge's IPv4 subnet so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host. Ingress is bound to the control-plane node and patched to type `LoadBalancer` so `http://demo.localdev.me/` works without `kubectl port-forward`. The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
 
