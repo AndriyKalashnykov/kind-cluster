@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - '!CLAUDE.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - '!CLAUDE.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run static checks
+        run: make static-check
+
+  image:
+    needs: [static-check]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Build and runtime-test kubectl-test image
+        run: make image-test
+
+  e2e:
+    needs: [static-check]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: v0.31.0
+      # renovate: datasource=github-tags depName=kubernetes/kubernetes
+      KUBECTL_VERSION: v1.35.1
+      # renovate: datasource=docker depName=kindest/node
+      K8S_NODE_IMAGE_VERSION: v1.35.0
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install KinD
+        # https://github.com/helm/kind-action
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          version: ${{ env.KIND_VERSION }}
+          cluster_name: kind
+          config: ./k8s/kind-config.yaml
+          kubectl_version: ${{ env.KUBECTL_VERSION }}
+          node_image: kindest/node:${{ env.K8S_NODE_IMAGE_VERSION }}
+
+      - name: Show cluster info
+        run: |
+          kubectl cluster-info
+          kubectl version --client
+          kubectl get pods -n kube-system
+
+      - name: Export certs
+        run: ./scripts/kind-export-cert.sh
+
+      - name: Install Kubernetes Dashboard
+        run: ./scripts/kind-add-dashboard.sh
+
+      - name: Install Nginx ingress
+        run: ./scripts/kind-add-ingress-nginx.sh
+
+      - name: Install MetalLB
+        run: ./scripts/kind-add-metallb.sh
+
+      - name: Install metrics-server
+        run: ./scripts/kind-add-metrics-server.sh
+
+      - name: Install in-cluster NFS
+        run: ./scripts/kind-add-nfs-incluster.sh
+
+      - name: Deploy ingress demo
+        run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+
+      - name: Deploy helloweb
+        run: ./scripts/kind-deploy-app-helloweb.sh
+
+      - name: Deploy golang-hello-world-web
+        run: ./scripts/kind-deploy-app-golang-hello-world-web.sh
+
+      - name: Deploy foo-bar-service
+        run: ./scripts/kind-deploy-app-foo-bar-service.sh
+
+      - name: Smoke test
+        run: make e2e
+
+      - name: Idempotency check (re-run deploy scripts)
+        run: |
+          ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+          ./scripts/kind-deploy-app-helloweb.sh
+          ./scripts/kind-deploy-app-foo-bar-service.sh
+
+      - name: Teardown is idempotent
+        run: |
+          ./scripts/kind-delete.sh
+          ./scripts/kind-delete.sh
+
+  ci-pass:
+    needs: [static-check, image, e2e]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify all jobs passed
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "One or more upstream jobs failed."
+            exit 1
+          fi
+          echo "All CI jobs passed."

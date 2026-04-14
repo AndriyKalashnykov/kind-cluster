@@ -38,7 +38,7 @@ make lint                              # shellcheck + actionlint + hadolint
 make secrets                           # gitleaks (suppressions: .gitleaks.toml)
 make trivy-fs                          # Trivy CVE/secret/misconfig scan (suppressions: .trivyignore.yaml)
 make trivy-config                      # Trivy K8s manifest scan
-make mermaid-lint                      # Validate mermaid diagrams in markdown (via docker)
+make mermaid-lint                      # Validate mermaid diagrams in all *.md files (via docker)
 make static-check                      # Composite: all of the above
 make ci                                # static-check + renovate-validate
 make ci-run                            # Run GitHub Actions workflow locally via act
@@ -46,8 +46,8 @@ make ci-run                            # Run GitHub Actions workflow locally via
 
 ## CI/CD
 
-- **end2end-tests.yml** — runs on push to `main`, tags `v*`, and PRs. Pinned kind v0.31.0 / kubectl v1.35.1 / kindest/node v1.35.0 (tracked by Renovate). Uses `helm/kind-action` to spin up a KinD cluster, then runs all install/deploy scripts and smoke-tests LoadBalancer endpoints via `docker exec` curl.
-- **cleanup-runs.yml** — weekly cron (Sunday midnight) to prune old workflow runs, keeping the latest 5.
+- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Three jobs: `static-check` → `e2e` → `ci-pass`. The `e2e` job pins kind v0.31.0 / kubectl v1.35.1 / kindest/node v1.35.0 (tracked by Renovate), uses `helm/kind-action` to spin up a KinD cluster, runs all install/deploy scripts, then runs `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl.
+- **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
 ## Dependencies
 

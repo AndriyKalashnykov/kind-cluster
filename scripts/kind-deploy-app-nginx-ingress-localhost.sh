@@ -28,13 +28,14 @@ echo "nginx ingress External-IP: ${service_ip}"
 echo "deploying a httpd web server and the associated service"
 DEMO_SVC_NAME=demo-localhost
 DEMO_SVC_PORT=80
-kubectl create deployment demo-localhost --image=httpd --port=${DEMO_SVC_PORT}
+# Use dry-run + apply for idempotency (re-running install-all must not error)
+kubectl create deployment demo-localhost --image=httpd --port=${DEMO_SVC_PORT} --dry-run=client -o yaml | kubectl apply -f -
 echo "waiting for httpd pods"
 kubectl wait deployment -n default demo-localhost --for condition=Available=True --timeout="${TIMEOUT}"
-kubectl expose deployment ${DEMO_SVC_NAME}
+kubectl expose deployment ${DEMO_SVC_NAME} --dry-run=client -o yaml | kubectl apply -f -
 
 echo "creating an ingress resource and mapping demo.localdev.me to localhost"
-kubectl create ingress demo-localhost --class=nginx --rule="demo.localdev.me/*=${DEMO_SVC_NAME}:${DEMO_SVC_PORT}"
+kubectl create ingress demo-localhost --class=nginx --rule="demo.localdev.me/*=${DEMO_SVC_NAME}:${DEMO_SVC_PORT}" --dry-run=client -o yaml | kubectl apply -f -
 
 echo "waiting for ingress demo-localhost"
 wait_period=0

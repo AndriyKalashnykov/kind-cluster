@@ -21,6 +21,12 @@ MERMAID_CLI_VERSION := 11.12.0
 HADOLINT_VERSION := v2.14.0
 # renovate: datasource=github-releases depName=nektos/act
 ACT_VERSION := v0.2.87
+# renovate: datasource=github-releases depName=kubernetes-sigs/kind
+KIND_VERSION := v0.31.0
+# renovate: datasource=github-tags depName=kubernetes/kubernetes
+KUBECTL_VERSION := v1.35.1
+# KIND_NODE_IMAGE is bumped together with KIND_VERSION per KinD's release notes.
+KIND_NODE_IMAGE := kindest/node:v1.35.0
 
 #help: @ List available tasks
 help:
@@ -28,11 +34,39 @@ help:
 	@echo "Commands :"
 	@grep -E '[a-zA-Z\.\-]+:.*?@ .*$$' $(MAKEFILE_LIST)| tr -d '#' | awk 'BEGIN {FS = ":.*?@ "}; {printf "\033[32m%-36s\033[0m - %s\n", $$1, $$2}'
 
-#deps: @ Verify required runtime tools are installed
-deps:
-	@for tool in docker kind kubectl helm curl jq base64; do \
+#deps: @ Verify required runtime tools are installed (auto-installs kind + kubectl)
+deps: deps-kind deps-kubectl
+	@for tool in docker helm curl jq base64; do \
 		command -v $$tool >/dev/null 2>&1 || { echo "Error: $$tool required. See README Prerequisites."; exit 1; }; \
 	done
+
+#deps-kind: @ Install kind (KIND_VERSION) into ~/.local/bin
+deps-kind:
+	@if ! command -v kind >/dev/null 2>&1 || [ "$$(kind version 2>/dev/null | awk '{print $$2}')" != "$(KIND_VERSION)" ]; then \
+		echo "Installing kind $(KIND_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o $$HOME/.local/bin/kind \
+			https://github.com/kubernetes-sigs/kind/releases/download/$(KIND_VERSION)/kind-linux-amd64; \
+		chmod +x $$HOME/.local/bin/kind; \
+	fi
+
+#deps-kubectl: @ Install kubectl (KUBECTL_VERSION) into ~/.local/bin
+deps-kubectl:
+	@if ! command -v kubectl >/dev/null 2>&1 || [ "$$(kubectl version --client -o json 2>/dev/null | jq -r '.clientVersion.gitVersion')" != "$(KUBECTL_VERSION)" ]; then \
+		echo "Installing kubectl $(KUBECTL_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o $$HOME/.local/bin/kubectl \
+			https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/linux/amd64/kubectl; \
+		chmod +x $$HOME/.local/bin/kubectl; \
+	fi
+
+#deps-multipass: @ Verify Multipass is installed (required for vm-* targets)
+deps-multipass:
+	@command -v multipass >/dev/null 2>&1 || { echo "Error: multipass required. Install from https://multipass.run/install"; exit 1; }
+
+#deps-renovate: @ Verify npx is available (required for renovate-validate)
+deps-renovate:
+	@command -v npx >/dev/null 2>&1 || { echo "Error: npx required (install Node.js)."; exit 1; }
 
 #deps-shellcheck: @ Install shellcheck
 deps-shellcheck:
@@ -101,11 +135,10 @@ trivy-fs: deps-trivy
 trivy-config: deps-trivy
 	@trivy config --severity CRITICAL,HIGH --exit-code 1 --ignorefile .trivyignore.yaml k8s/
 
-#mermaid-lint: @ Validate Mermaid diagrams in README.md
-mermaid-lint:
-	@command -v docker >/dev/null 2>&1 || { echo "Error: docker required for mermaid-lint"; exit 1; }
+#mermaid-lint: @ Validate Mermaid diagrams in all *.md files
+mermaid-lint: deps
 	@set -euo pipefail; \
-	MD_FILES=$$(grep -lF '```mermaid' README.md CLAUDE.md 2>/dev/null || true); \
+	MD_FILES=$$(git ls-files '*.md' 2>/dev/null | xargs -r grep -lF '```mermaid' 2>/dev/null || true); \
 	if [ -z "$$MD_FILES" ]; then echo "No Mermaid blocks found — skipping."; exit 0; fi; \
 	FAILED=0; \
 	for md in $$MD_FILES; do \
@@ -219,8 +252,13 @@ deploy-app-foo-bar-service: deps
 	@./scripts/kind-deploy-app-foo-bar-service.sh
 
 #image-build: @ Build kubectl-test Docker image
-image-build:
+image-build: deps
 	@docker build -f ./images/Dockerfile -t kubectl-test .
+
+#image-test: @ Verify kubectl-test image runs and kubectl is available inside it
+image-test: image-build
+	@docker run --rm kubectl-test kubectl version --client >/dev/null
+	@echo "kubectl-test image runtime check passed."
 
 #registry: @ Create a KinD cluster wired to a local Docker registry (localhost:5001)
 registry: deps
@@ -231,31 +269,40 @@ registry-test: deps
 	@./scripts/test-registry.sh
 
 #vm-up: @ Launch Ubuntu VM via Multipass with the full stack pre-provisioned (NAME=kind-host)
-vm-up:
+vm-up: deps-multipass
 	@./scripts/vm-up.sh $(if $(NAME),$(NAME),) $(if $(CPUS),$(CPUS),) $(if $(MEMORY),$(MEMORY),) $(if $(DISK),$(DISK),)
 
 #vm-down: @ Stop, delete and purge the VM (NAME=kind-host)
-vm-down:
+vm-down: deps-multipass
 	@./scripts/vm-down.sh $(if $(NAME),$(NAME),)
 
 #vm-ssh: @ Open an interactive shell inside the VM (NAME=kind-host)
-vm-ssh:
+vm-ssh: deps-multipass
 	@./scripts/vm-ssh.sh $(if $(NAME),$(NAME),)
 
 #vm-install-all: @ Run 'make install-all' inside the VM (NAME=kind-host)
-vm-install-all:
+vm-install-all: deps-multipass
 	@./scripts/vm-install-all.sh $(if $(NAME),$(NAME),)
 
 #renovate-validate: @ Validate renovate.json configuration
-renovate-validate:
-	@command -v npx >/dev/null 2>&1 || { echo "Error: npx required (install Node.js)."; exit 1; }
+renovate-validate: deps-renovate
 	@npx --yes --package renovate -- renovate-config-validator
 
 #delete-cluster: @ Delete k8s cluster
 delete-cluster: deps
 	@./scripts/kind-delete.sh
 
-.PHONY: help deps deps-shellcheck deps-actionlint deps-gitleaks deps-trivy \
+#e2e: @ Smoke-test deployed services on a running cluster
+e2e: deps
+	@./scripts/e2e-smoke.sh
+
+#clean: @ Tear down cluster and remove scratch artifacts
+clean:
+	@./scripts/kind-delete.sh 2>/dev/null || true
+	@rm -rf /tmp/act-artifacts
+
+.PHONY: help deps deps-kind deps-kubectl deps-multipass deps-renovate \
+	deps-shellcheck deps-actionlint deps-gitleaks deps-trivy \
 	deps-hadolint deps-act \
 	lint secrets trivy-fs trivy-config mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
@@ -265,5 +312,6 @@ delete-cluster: deps
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
-	image-build registry registry-test renovate-validate delete-cluster \
+	image-build image-test registry registry-test renovate-validate delete-cluster \
+	e2e clean \
 	vm-up vm-down vm-ssh vm-install-all

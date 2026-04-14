@@ -1,4 +1,4 @@
-[![End to End Tests](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/end2end-tests.yml/badge.svg)](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/end2end-tests.yml)
+[![CI](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AndriyKalashnykov/kind-cluster/actions/workflows/ci.yml)
 [![Hits](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster.svg?view=today-total&style=plastic)](https://hits.sh/github.com/AndriyKalashnykov/kind-cluster/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://app.renovatebot.com/dashboard#github/AndriyKalashnykov/kind-cluster)
@@ -7,15 +7,70 @@
 
 Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, MetalLB, Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
-| Component | Technology |
-|-----------|-----------|
-| Cluster | [KinD](https://kind.sigs.k8s.io/) on Docker |
-| Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) |
-| Load Balancer | [MetalLB](https://metallb.universe.tf/) |
-| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) — same driver for both in-cluster and host-backed NFS |
-| Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) |
-| Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) |
-| CI | GitHub Actions (`helm/kind-action`) |
+```mermaid
+C4Context
+  title System Context — kind-cluster
+
+  Person(dev, "Developer", "Runs make targets to bring up a local k8s lab")
+
+  System_Boundary(host, "Workstation or Multipass VM") {
+    System(kind, "kind-cluster", "Local KinD stack: ingress, MetalLB, Dashboard, NFS, Prometheus")
+    System_Ext(docker, "Docker", "Container runtime hosting the KinD nodes")
+  }
+
+  System_Ext(registries, "Container registries", "Docker Hub, GHCR, k8s.gcr.io, quay.io")
+  System_Ext(charts, "Helm chart repos", "ingress-nginx, MetalLB, kube-prometheus, dashboard, csi-driver-nfs")
+
+  Rel(dev, kind, "make kind-up / kind-down", "shell + kubectl")
+  Rel(kind, docker, "Runs nodes as containers")
+  Rel(kind, registries, "Pulls workload images")
+  Rel(kind, charts, "helm install/upgrade")
+```
+
+| Component | Technology | Rationale |
+|-----------|-----------|-----------|
+| Cluster | [KinD](https://kind.sigs.k8s.io/) v0.31.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
+| Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | Reference controller; matches what most cloud-managed clusters expose |
+| Load Balancer | [MetalLB](https://metallb.universe.tf/) | Gives KinD `Service: LoadBalancer` real IPs on the docker bridge — no `kubectl port-forward` per service |
+| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.1 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
+| Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
+| Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
+| CI | GitHub Actions (`helm/kind-action`) | Same `helm/kind-action` users hit locally; CI verifies install scripts on every push |
+
+## Architecture
+
+```mermaid
+C4Container
+  title Container View — kind-cluster
+
+  Person(dev, "Developer")
+
+  System_Boundary(host, "Host or Multipass VM") {
+    Container(docker, "Docker Engine", "containerd", "Hosts KinD nodes")
+
+    System_Boundary(kind, "KinD cluster") {
+      Container(cp, "control-plane node", "kindest/node v1.35.0", "API server, scheduler, etcd, kubelet")
+      Container(worker, "worker node", "kindest/node v1.35.0", "Pod runtime")
+
+      Container(ingress, "ingress-nginx", "Helm chart", "L7 routing; pinned to control-plane via nodeSelector")
+      Container(lb, "MetalLB", "Helm chart, L2 mode", "Allocates LoadBalancer IPs from the docker bridge subnet")
+      Container(metrics, "metrics-server", "manifest", "Serves metrics.k8s.io for kubectl top / HPA")
+      Container(dash, "Kubernetes Dashboard", "Helm chart v7.x, Kong proxy", "https://localhost:8443 via port-forward")
+      ContainerDb(nfs, "NFS server + csi-driver-nfs", "in-cluster pod or host NFS", "ReadWriteMany PVCs")
+      Container(prom, "kube-prometheus-stack", "Helm chart", "Prometheus + Grafana + Alertmanager")
+      Container(apps, "Demo workloads", "httpd / hello-app / golang-web / http-echo", "Routed via ingress + LoadBalancer Services")
+    }
+  }
+
+  Rel(dev, docker, "docker / kind CLI")
+  Rel(dev, ingress, "HTTP via Host: demo.localdev.me", "127.0.0.1")
+  Rel(dev, lb, "HTTP to LoadBalancer IPs (host-routable via docker bridge)")
+  Rel(ingress, apps, "Routes /")
+  Rel(lb, apps, "Allocates LoadBalancer IP")
+  Rel(apps, nfs, "Mounts RWX PVCs", "(optional)")
+```
+
+The cluster runs entirely on the local Docker bridge. MetalLB hands out LoadBalancer IPs from the bridge's IPv4 subnet so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host. Ingress is bound to the control-plane node and patched to type `LoadBalancer` so `http://demo.localdev.me/` works without `kubectl port-forward`. The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
 
 ## Quick Start
 
@@ -40,95 +95,13 @@ Once the stack is up, see [**Access services**](#access-services) for discoverin
 | [Git](https://git-scm.com/) | latest | Version control |
 | [Docker](https://www.docker.com/) | latest | Container runtime for KinD nodes |
 | [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation) | v0.31.0+ | Local Kubernetes in Docker |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.35.0+ | Kubernetes CLI |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.35.1+ | Kubernetes CLI |
 | [helm](https://helm.sh/docs/intro/install/) | v3+ | Chart-based installs (dashboard, Prometheus, NFS) |
 | [curl](https://curl.se/) | latest | Download helpers used by scripts |
 | [jq](https://github.com/jqlang/jq) | latest | JSON parsing in scripts |
 | [base64](https://command-not-found.com/base64) | latest | Token decoding for dashboard access |
 
-## Available Make Targets
-
-Run `make help` to list targets.
-
-### Cluster Lifecycle
-
-| Target | Description |
-|--------|-------------|
-| `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
-| `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
-| `make install-all` | Create cluster + Nginx ingress + MetalLB + demo workloads (granular) |
-| `make install-all-no-demo-workloads` | Create cluster + Nginx ingress + MetalLB (no demo apps) |
-| `make create-cluster` | Create KinD cluster (granular) |
-| `make delete-cluster` | Delete KinD cluster (granular) |
-| `make export-cert` | Export k8s client keys and CA certificates |
-
-### Cluster Add-ons
-
-| Target | Description |
-|--------|-------------|
-| `make dashboard-install` | Install Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
-| `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
-| `make dashboard-token` | Print the admin-user token |
-| `make nginx-ingress` | Install Nginx ingress controller |
-| `make metallb` | Install MetalLB load balancer |
-| `make metrics-server` | Install metrics-server (for `kubectl top` / HPA) |
-| `make kube-prometheus-stack` | Install Prometheus + Grafana + Alertmanager |
-
-### Virtual Ubuntu Host (Multipass)
-
-| Target | Description |
-|--------|-------------|
-| `make vm-up` | Launch Ubuntu 22.04 VM via Multipass, cloud-init provisions Docker + kind + kubectl + helm + nfs-kernel-server |
-| `make vm-ssh` | Open interactive shell inside the VM |
-| `make vm-install-all` | Run `make install-all` inside the VM (remote bootstrap) |
-| `make vm-down` | Stop, delete, and purge the VM |
-
-### RWX Storage (NFS)
-
-| Target | Description |
-|--------|-------------|
-| `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
-| `make nfs-host-setup` | Option 2, step 1 — configure HOST as NFS server (sudo, Ubuntu/Debian) |
-| `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install `nfs-subdir-external-provisioner` pointing at the host |
-
-### Demo Workloads
-
-| Target | Description |
-|--------|-------------|
-| `make deploy-app-nginx-ingress-localhost` | Deploy httpd with ingress rule at `http://demo.localdev.me/` |
-| `make deploy-app-helloweb` | Deploy helloweb sample app |
-| `make deploy-app-golang-hello-world-web` | Deploy golang-hello-world-web sample app |
-| `make deploy-app-foo-bar-service` | Deploy foo-bar-service sample app |
-
-### Utilities
-
-| Target | Description |
-|--------|-------------|
-| `make deps` | Verify required runtime tools are installed |
-| `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
-| `make registry` | Create a KinD cluster wired to a local Docker registry at `localhost:5001` |
-| `make registry-test` | Push `hello-app:1.0` to the local registry and deploy it (run after `make registry`) |
-| `make renovate-validate` | Validate `renovate.json` configuration |
-
-### Quality Gates
-
-| Target | Description |
-|--------|-------------|
-| `make lint` | shellcheck on scripts + actionlint on workflows + hadolint on `images/Dockerfile` |
-| `make secrets` | gitleaks scan (suppressions in `.gitleaks.toml`) |
-| `make trivy-fs` | Trivy filesystem scan for vulns, secrets, misconfigs (CRITICAL/HIGH) |
-| `make trivy-config` | Trivy scan of `k8s/` manifests for K8s misconfigurations |
-| `make mermaid-lint` | Validate Mermaid diagrams in `README.md` / `CLAUDE.md` via `mermaid-cli` |
-| `make static-check` | Composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint |
-| `make ci` | Full local CI pipeline: `static-check` + `renovate-validate` |
-| `make ci-run` | Run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
-
-Suppressions (intentional, justified inline):
-- `.gitleaks.toml` — allowlist for the local `dashboard-admin-token.txt`.
-- `.trivyignore.yaml` — demo workloads use default securityContext, the in-cluster NFS pod needs privileged mode.
-- `.hadolint.yaml` — `kubectl-test` is a throwaway debug image; alpine-package pinning is overkill.
-
-## k8s Dashboard
+## Kubernetes Dashboard install
 
 Pinned to Helm chart [`kubernetes-dashboard`](https://github.com/kubernetes/dashboard) **v7.14.0**. Dashboard v7 splits the monolithic v2 service into microservices (`api`, `web`, `auth`, `metrics-scraper`) behind a **Kong Gateway** reverse proxy — you port-forward the `kong-proxy` Service, not a pod.
 
@@ -395,7 +368,7 @@ Or paste the URLs directly into your browser:
 
 ### Kubernetes Dashboard
 
-The dashboard listens on port 8443 inside the cluster. Same flow on both paths — just a `kubectl port-forward`; Path B adds an outer SSH tunnel to reach the VM.
+The dashboard listens on port 8443 inside the cluster. Same flow on both paths: a `kubectl port-forward`. Path B adds an outer SSH tunnel to reach the VM.
 
 ```bash
 # Path A — port-forward directly from your host (foreground; Ctrl+C to stop)
@@ -497,16 +470,110 @@ make registry-test    # pull hello-app, retag to localhost:5001, push, deploy, c
 
 This is an **alternative** to the default `make install-all` flow — the registry cluster doesn't include ingress, MetalLB, or the demo workloads. Useful for iterating on an image you're building locally. Tear down with `make delete-cluster` and remove the registry container with `docker rm -f kind-registry`.
 
+## Available Make Targets
+
+Run `make help` to list targets.
+
+### Cluster Lifecycle
+
+| Target | Description |
+|--------|-------------|
+| `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
+| `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
+| `make install-all` | Create cluster + Nginx ingress + MetalLB + demo workloads (granular) |
+| `make install-all-no-demo-workloads` | Create cluster + Nginx ingress + MetalLB (no demo apps) |
+| `make create-cluster` | Create KinD cluster (granular) |
+| `make delete-cluster` | Delete KinD cluster (granular) |
+| `make export-cert` | Export k8s client keys and CA certificates |
+| `make e2e` | Smoke-test deployed demo services on a running cluster |
+| `make clean` | Tear down cluster and remove scratch artifacts |
+
+### Cluster Add-ons
+
+| Target | Description |
+|--------|-------------|
+| `make dashboard-install` | Install Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
+| `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
+| `make dashboard-token` | Print the admin-user token |
+| `make nginx-ingress` | Install Nginx ingress controller |
+| `make metallb` | Install MetalLB load balancer |
+| `make metrics-server` | Install metrics-server (for `kubectl top` / HPA) |
+| `make kube-prometheus-stack` | Install Prometheus + Grafana + Alertmanager |
+
+### Virtual Ubuntu Host (Multipass)
+
+| Target | Description |
+|--------|-------------|
+| `make vm-up` | Launch Ubuntu 22.04 VM via Multipass, cloud-init provisions Docker + kind + kubectl + helm + nfs-kernel-server |
+| `make vm-ssh` | Open interactive shell inside the VM |
+| `make vm-install-all` | Run `make install-all` inside the VM (remote bootstrap) |
+| `make vm-down` | Stop, delete, and purge the VM |
+
+### RWX Storage (NFS)
+
+| Target | Description |
+|--------|-------------|
+| `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
+| `make nfs-host-setup` | Option 2, step 1 — configure HOST as NFS server (sudo, Ubuntu/Debian) |
+| `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install `nfs-subdir-external-provisioner` pointing at the host |
+
+### Demo Workloads
+
+| Target | Description |
+|--------|-------------|
+| `make deploy-app-nginx-ingress-localhost` | Deploy httpd with ingress rule at `http://demo.localdev.me/` |
+| `make deploy-app-helloweb` | Deploy helloweb sample app |
+| `make deploy-app-golang-hello-world-web` | Deploy golang-hello-world-web sample app |
+| `make deploy-app-foo-bar-service` | Deploy foo-bar-service sample app |
+
+### Utilities
+
+| Target | Description |
+|--------|-------------|
+| `make deps` | Verify required runtime tools are installed (auto-installs `kind` and `kubectl` to `~/.local/bin`) |
+| `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
+| `make registry` | Create a KinD cluster wired to a local Docker registry at `localhost:5001` |
+| `make registry-test` | Push `hello-app:1.0` to the local registry and deploy it (run after `make registry`) |
+| `make renovate-validate` | Validate `renovate.json` configuration |
+
+### Quality Gates
+
+| Target | Description |
+|--------|-------------|
+| `make lint` | shellcheck on scripts + actionlint on workflows + hadolint on `images/Dockerfile` |
+| `make secrets` | gitleaks scan (suppressions in `.gitleaks.toml`) |
+| `make trivy-fs` | Trivy filesystem scan for vulns, secrets, misconfigs (CRITICAL/HIGH) |
+| `make trivy-config` | Trivy scan of `k8s/` manifests for K8s misconfigurations |
+| `make mermaid-lint` | Validate Mermaid diagrams in all tracked `*.md` files via `mermaid-cli` |
+| `make static-check` | Composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint |
+| `make ci` | Full local CI pipeline: `static-check` + `renovate-validate` |
+| `make ci-run` | Run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
+
+Suppressions (intentional, justified inline):
+- `.gitleaks.toml` — allowlist for the local `dashboard-admin-token.txt`.
+- `.trivyignore.yaml` — demo workloads use default securityContext, the in-cluster NFS pod needs privileged mode.
+- `.hadolint.yaml` — `kubectl-test` is a throwaway debug image; alpine-package pinning is overkill.
+
 ## CI/CD
 
 GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
 
-| Job | Triggers | Steps |
-|-----|----------|-------|
-| **test-e2e** | push, PR, tags | Spin up KinD via `helm/kind-action`, install ingress + MetalLB + dashboard, deploy all demo workloads, curl-verify each via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
+| Job | Needs | Steps |
+|-----|-------|-------|
+| **static-check** | — | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint) |
+| **e2e** | static-check | Spin up KinD via `helm/kind-action`, install ingress + MetalLB + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
+| **ci-pass** | static-check, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
 
 A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
 
 No repo secrets or variables are required by the workflow — only the default `GITHUB_TOKEN`.
 
 [Renovate](https://docs.renovatebot.com/) keeps action digests, container images, and tool versions pinned in `Makefile` / `scripts/*.sh` (via `# renovate:` inline comments) up to date with platform automerge enabled.
+
+## Contributing
+
+Contributions welcome — open a PR. Run `make ci` locally before submitting.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
