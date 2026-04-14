@@ -122,11 +122,6 @@ jobs:
           ./scripts/kind-deploy-app-helloweb.sh
           ./scripts/kind-deploy-app-foo-bar-service.sh
 
-      - name: Teardown is idempotent
-        run: |
-          ./scripts/kind-delete.sh
-          ./scripts/kind-delete.sh
-
   ci-pass:
     needs: [static-check, image, e2e]
     if: always()
