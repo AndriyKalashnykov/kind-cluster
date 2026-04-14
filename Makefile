@@ -166,7 +166,9 @@ diagrams: $(DIAGRAM_OUT)
 
 $(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml
 	@mkdir -p $(DIAGRAM_DIR)/out
-	@docker run --rm --user $$(id -u):$$(id -g) -v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
+	@docker run --rm --user $$(id -u):$$(id -g) \
+		-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
+		-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
 		plantuml/plantuml:$(PLANTUML_VERSION) -tpng -o out $(notdir $<)
 
 #diagrams-check: @ Verify committed diagram PNGs match current .puml source
