@@ -35,10 +35,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run static checks
+      - name: Static check
         run: make static-check
 
-  image:
+  docker:
     needs: [static-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -47,7 +47,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Build and runtime-test kubectl-test image
+      - name: Build image
         run: make image-test
 
   e2e:
@@ -116,7 +116,7 @@ jobs:
           ./scripts/kind-deploy-app-foo-bar-service.sh
 
   ci-pass:
-    needs: [static-check, image, e2e]
+    needs: [static-check, docker, e2e]
     if: always()
     runs-on: ubuntu-24.04
     steps:

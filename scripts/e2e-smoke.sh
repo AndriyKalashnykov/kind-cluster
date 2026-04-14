@@ -57,6 +57,19 @@ check_status_code() {
 
 echo "=== E2E smoke tests ==="
 
+# --- Cluster infrastructure: readiness of ingress controller and MetalLB ---
+if kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=60s >/dev/null 2>&1; then
+  pass "ingress-nginx controller deployment is rolled out"
+else
+  fail "ingress-nginx controller rollout did not complete within 60s"
+fi
+
+if kubectl -n metallb-system get ipaddresspool -o name 2>/dev/null | grep -q .; then
+  pass "MetalLB IPAddressPool exists"
+else
+  fail "MetalLB IPAddressPool missing — LoadBalancer services cannot be assigned IPs"
+fi
+
 # --- Demo workload assertions (body-asserting) ---
 check_curl   "demo.localdev.me ingress" "http://${INGRESS_IP}/" "It works!" -H "Host: demo.localdev.me"
 check_curl   "helloweb"                 "http://${HELLOWEB_IP}/" "Hello, world!"

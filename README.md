@@ -500,7 +500,10 @@ Run `make help` to list targets.
 | `make trivy-fs` | Trivy filesystem scan for vulns, secrets, misconfigs (CRITICAL/HIGH) |
 | `make trivy-config` | Trivy scan of `k8s/` manifests for K8s misconfigurations |
 | `make mermaid-lint` | Validate Mermaid diagrams in all tracked `*.md` files via `mermaid-cli` |
-| `make static-check` | Composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint |
+| `make diagrams` | Render PlantUML C4 diagrams in `docs/diagrams/*.puml` to PNG via pinned `plantuml/plantuml` Docker image |
+| `make diagrams-check` | Verify committed diagram PNGs match the current `.puml` source (fails CI if stale) |
+| `make diagrams-clean` | Remove rendered diagram PNGs under `docs/diagrams/out/` |
+| `make static-check` | Composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check |
 | `make ci` | Full local CI pipeline: `static-check` + `renovate-validate` |
 | `make ci-run` | Run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
 
@@ -515,9 +518,10 @@ GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
 
 | Job | Needs | Steps |
 |-----|-------|-------|
-| **static-check** | — | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint) |
+| **static-check** | — | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
+| **docker** | static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
 | **e2e** | static-check | `make deps` + `make create-cluster` (uses pinned kind binary), install ingress + MetalLB + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
-| **ci-pass** | static-check, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
+| **ci-pass** | static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
 
 A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
 
