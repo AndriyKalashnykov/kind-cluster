@@ -8,10 +8,6 @@
 Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, MetalLB, Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
 ```mermaid
----
-config:
-  layout: elk
----
 C4Context
   title System Context — kind-cluster
 
@@ -44,10 +40,6 @@ C4Context
 ## Architecture
 
 ```mermaid
----
-config:
-  layout: elk
----
 C4Container
   title Container View — kind-cluster
 
