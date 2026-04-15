@@ -53,7 +53,7 @@ Once the stack is up, see [**Access services**](#access-services) for discoverin
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.35.1+ | Kubernetes CLI |
 | [helm](https://helm.sh/docs/intro/install/) | v3+ | Chart-based installs (dashboard, Prometheus, NFS) |
 | [curl](https://curl.se/) | latest | Download helpers used by scripts |
-| [jq](https://github.com/jqlang/jq) | latest | JSON parsing in scripts |
+| [jq](https://github.com/jqlang/jq) | jq-1.8.1 | JSON parsing in scripts (auto-installed by `make deps`) |
 | [base64](https://command-not-found.com/base64) | latest | Token decoding for dashboard access |
 
 ## Kubernetes Dashboard install

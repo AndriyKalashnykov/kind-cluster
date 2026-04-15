@@ -23,6 +23,8 @@ PLANTUML_VERSION := 1.2026.2
 HADOLINT_VERSION := v2.14.0
 # renovate: datasource=github-releases depName=nektos/act
 ACT_VERSION := v0.2.87
+# renovate: datasource=github-releases depName=jqlang/jq
+JQ_VERSION := jq-1.8.1
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION := v0.31.0
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
@@ -36,9 +38,9 @@ help:
 	@echo "Commands :"
 	@grep -E '[a-zA-Z\.\-]+:.*?@ .*$$' $(MAKEFILE_LIST)| tr -d '#' | awk 'BEGIN {FS = ":.*?@ "}; {printf "\033[32m%-36s\033[0m - %s\n", $$1, $$2}'
 
-#deps: @ Verify required runtime tools are installed (auto-installs kind + kubectl)
-deps: deps-kind deps-kubectl
-	@for tool in docker helm curl jq base64; do \
+#deps: @ Verify required runtime tools are installed (auto-installs kind + kubectl + jq)
+deps: deps-kind deps-kubectl deps-jq
+	@for tool in docker helm curl base64; do \
 		command -v $$tool >/dev/null 2>&1 || { echo "Error: $$tool required. See README Prerequisites."; exit 1; }; \
 	done
 
@@ -60,6 +62,16 @@ deps-kubectl:
 		curl -sSfL -o $$HOME/.local/bin/kubectl \
 			https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/linux/amd64/kubectl; \
 		chmod +x $$HOME/.local/bin/kubectl; \
+	fi
+
+#deps-jq: @ Install jq (JQ_VERSION) into ~/.local/bin
+deps-jq:
+	@if ! command -v jq >/dev/null 2>&1 || [ "$$(jq --version 2>/dev/null)" != "$(JQ_VERSION)" ]; then \
+		echo "Installing jq $(JQ_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o $$HOME/.local/bin/jq \
+			https://github.com/jqlang/jq/releases/download/$(JQ_VERSION)/jq-linux-amd64; \
+		chmod +x $$HOME/.local/bin/jq; \
 	fi
 
 #deps-multipass: @ Verify Multipass is installed (required for vm-* targets)
@@ -327,7 +339,7 @@ clean:
 	@./scripts/kind-delete.sh 2>/dev/null || true
 	@rm -rf /tmp/act-artifacts
 
-.PHONY: help deps deps-kind deps-kubectl deps-multipass deps-renovate \
+.PHONY: help deps deps-kind deps-kubectl deps-jq deps-multipass deps-renovate \
 	deps-shellcheck deps-actionlint deps-gitleaks deps-trivy \
 	deps-hadolint deps-act \
 	lint secrets trivy-fs trivy-config mermaid-lint static-check ci ci-run \

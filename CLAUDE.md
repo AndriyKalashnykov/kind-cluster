@@ -51,7 +51,7 @@ make ci-run                            # Run GitHub Actions workflow locally via
 
 ## Dependencies
 
-Runtime (user provides): Docker, kind, kubectl, helm, curl, jq, base64.
+Runtime (user provides): Docker, helm, curl, base64. Auto-installed by `make deps`: kind, kubectl, jq.
 
 Quality-gate tools (auto-installed on first `make lint` / `make static-check` into `$HOME/.local/bin`, pinned via `# renovate:` comments in the Makefile): shellcheck, actionlint, hadolint, gitleaks, trivy, act. Plus `minlag/mermaid-cli` via docker.
 
