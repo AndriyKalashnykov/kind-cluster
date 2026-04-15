@@ -57,14 +57,6 @@ Quality-gate tools (auto-installed on first `make lint` / `make static-check` in
 
 No Go modules; no package manager lockfiles.
 
-## Upgrade Backlog
-
-Deferred items from `/upgrade-analysis` (2026-04-14). Resolve when actionable; Renovate should handle most via the `dockerfile` and `custom.regex` managers.
-
-- [ ] **HIGH**: `images/Dockerfile` base image `alpine:3.16.2` is EOL (Alpine 3.16 EOL May 2024). Bump to a supported tag (e.g., `alpine:3.21`). Renovate `dockerfile` manager should propose this automatically — check open PRs.
-- [ ] **LOW**: `images/Dockerfile` installs kubectl via `curl … stable.txt` at build time — not reproducible. Pin to `KUBECTL_VERSION` (share the Makefile constant via build-arg) if the image becomes load-bearing.
-- [ ] **LOW**: `KUBECTL_VERSION` Renovate datasource is `github-tags`. Works for kubernetes/kubernetes but `github-releases` is the skill-canonical datasource — consider switching if PR noise increases.
-
 ## Skills
 
 Use the following skills when working on related files:

@@ -291,7 +291,7 @@ deploy-app-foo-bar-service: deps
 
 #image-build: @ Build kubectl-test Docker image
 image-build: deps
-	@docker build -f ./images/Dockerfile -t kubectl-test .
+	@docker build --build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) -f ./images/Dockerfile -t kubectl-test .
 
 #image-test: @ Verify kubectl-test image runs and kubectl is available inside it
 image-test: image-build
