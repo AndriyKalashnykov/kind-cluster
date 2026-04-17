@@ -189,14 +189,20 @@ For full reproducibility — and to keep Docker, kind, and the host NFS server o
 
 ```mermaid
 flowchart LR
-    DEV[Developer<br/>laptop]
-    subgraph VM[Multipass VM: kind-host]
-      D[Docker] --> K[KinD cluster<br/>control-plane + worker]
-      NFS[nfs-kernel-server<br/>/srv/k8s_nfs_storage]
-      K -->|Option 2| NFS
+    DEV[Developer<br/>laptop shell]
+    subgraph vm[Multipass VM: kind-host]
+        subgraph cluster[kind cluster]
+            ING[ingress-nginx]
+            DASH[Dashboard]
+            APPS[demo apps]
+        end
+        LB[cloud-provider-kind<br/>host container on kind docker net]
+        NFS[nfs-kernel-server<br/>optional — NFS Option 2]
+        LB -.allocates LB IP.-> ING
+        cluster -.NFSv4.-> NFS
     end
-    DEV -->|make vm-ssh| VM
-    DEV -.forwarded ports.-> K
+    DEV -->|multipass CLI / make vm-ssh| vm
+    DEV -.->|SSH tunnel / static route<br/>see Access services Path B| ING
 ```
 
 ### 1. Install Multipass
