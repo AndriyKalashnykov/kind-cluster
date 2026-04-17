@@ -13,9 +13,14 @@ fi
 
 
 # https://github.com/kubernetes/ingress-nginx
+# Pin to a release tag instead of `main` — branch-pinning silently pulls
+# whatever is on main at install time (untrackable by Renovate, drift risk).
+# The existing scripts/*.sh custom.regex manager in renovate.json tracks this.
+# renovate: datasource=github-releases depName=kubernetes/ingress-nginx
+INGRESS_NGINX_VERSION=controller-v1.15.1
 
-echo "deploying nginx ingress for kind"
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+echo "deploying nginx ingress for kind ${INGRESS_NGINX_VERSION}"
+kubectl apply -f "https://raw.githubusercontent.com/kubernetes/ingress-nginx/${INGRESS_NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml"
 
 # Pin the controller to the kind-control-plane node: only that node has the
 # `ingress-ready=true` label and the extraPortMappings 80/443 configured in

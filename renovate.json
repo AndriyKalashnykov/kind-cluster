@@ -71,6 +71,11 @@
       "description": "Keep kubectl in sync across .mise.toml (mise manager) and Makefile KUBECTL_VERSION (custom.regex, used as a Dockerfile --build-arg).",
       "matchPackageNames": ["kubernetes/kubernetes", "kubernetes/kubectl", "aqua:kubernetes/kubectl"],
       "groupName": "kubectl"
+    },
+    {
+      "description": "Keep kind in sync across .mise.toml (mise manager) and vm/cloud-init.yaml (custom.regex) — both pin kubernetes-sigs/kind; a split bump would produce two PRs referencing the same tool.",
+      "matchPackageNames": ["kubernetes-sigs/kind", "aqua:kubernetes-sigs/kind"],
+      "groupName": "kind"
     }
   ]
 }
