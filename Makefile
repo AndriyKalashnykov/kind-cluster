@@ -16,6 +16,8 @@ export PATH := $(HOME)/.local/share/mise/shims:$(HOME)/.local/bin:$(PATH)
 MERMAID_CLI_VERSION := 11.12.0
 # renovate: datasource=docker depName=plantuml/plantuml
 PLANTUML_VERSION := 1.2026.2
+# renovate: datasource=docker depName=ghcr.io/andriykalashnykov/puml2drawio
+PUML2DRAWIO_VERSION := 1.0.1
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
 KUBECTL_VERSION := v1.35.1
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
@@ -140,9 +142,18 @@ diagrams-check: diagrams
 		{ echo "ERROR: Diagram source changed but rendered PNG was not committed. Run 'make diagrams' and commit."; exit 1; }
 	@echo "Diagrams in sync."
 
-#diagrams-clean: @ Remove rendered diagram PNGs
+#diagrams-clean: @ Remove rendered diagram PNGs + .drawio exports
 diagrams-clean:
-	@rm -rf $(DIAGRAM_DIR)/out
+	@rm -rf $(DIAGRAM_DIR)/out $(DIAGRAM_DIR)/drawio
+
+#diagrams-drawio: @ Convert PlantUML .puml sources to editable draw.io .drawio XML (pinned ghcr.io/andriykalashnykov/puml2drawio)
+diagrams-drawio: deps-docker
+	@mkdir -p $(DIAGRAM_DIR)/drawio
+	@docker run --rm --user $$(id -u):$$(id -g) \
+		-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
+		ghcr.io/andriykalashnykov/puml2drawio:$(PUML2DRAWIO_VERSION) \
+		. -o drawio/
+	@echo "Wrote $(DIAGRAM_DIR)/drawio/*.drawio"
 
 #static-check: @ Composite quality gate (lint + secrets + trivy + mermaid-lint + diagrams-check)
 static-check: lint secrets trivy-fs trivy-config mermaid-lint diagrams-check
@@ -314,5 +325,5 @@ clean:
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
 	image-build image-test registry registry-test renovate-validate delete-cluster \
-	e2e clean diagrams diagrams-check diagrams-clean \
+	e2e clean diagrams diagrams-check diagrams-clean diagrams-drawio \
 	vm-up vm-down vm-ssh vm-install-all

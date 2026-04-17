@@ -20,3 +20,8 @@ client.key
 client.pfx
 cluster-ca.crt
 dashboard-admin-token.txt
+
+# On-demand draw.io exports from PlantUML sources (make diagrams-drawio).
+# PNGs under docs/diagrams/out/ ARE committed (README renders them); the
+# .drawio XML is for local editing in the draw.io app, not embedded anywhere.
+docs/diagrams/drawio/

@@ -532,7 +532,8 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Quality | `make mermaid-lint` | validate mermaid blocks in tracked `*.md` files |
 | Quality | `make diagrams` | render PlantUML C4 diagrams (via pinned `plantuml/plantuml` image) |
 | Quality | `make diagrams-check` | verify committed PNGs match current `.puml` source |
-| Quality | `make diagrams-clean` | remove rendered PNGs under `docs/diagrams/out/` |
+| Quality | `make diagrams-clean` | remove rendered PNGs under `docs/diagrams/out/` and `.drawio` exports under `docs/diagrams/drawio/` |
+| Quality | `make diagrams-drawio` | convert `.puml` sources to editable `.drawio` XML via pinned [`ghcr.io/andriykalashnykov/puml2drawio`](https://github.com/AndriyKalashnykov/puml2drawio); output under `docs/diagrams/drawio/` (gitignored — on-demand, for local editing) |
 | Quality | `make static-check` | composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check |
 | Quality | `make ci` | full local pipeline: `static-check` + `renovate-validate` |
 | Quality | `make ci-run` | run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
