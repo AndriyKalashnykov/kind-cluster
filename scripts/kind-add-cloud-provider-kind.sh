@@ -4,7 +4,13 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
-CLOUD_PROVIDER_KIND_VERSION=${CLOUD_PROVIDER_KIND_VERSION:-v0.10.0}
+# CLOUD_PROVIDER_KIND_VERSION is pinned + exported by the Makefile where
+# Renovate tracks it via the inline `# renovate:` comment. Require it
+# here rather than duplicate the literal in two places (Makefile + script
+# fallback would drift silently on a Renovate bump; the shell regex
+# custom.regex manager can't parse ${VAR:-default} syntax anyway). Set
+# manually if running the script outside `make lb-cpk` / `make install-all`.
+: "${CLOUD_PROVIDER_KIND_VERSION:?set via Makefile or export CLOUD_PROVIDER_KIND_VERSION=vX.Y.Z}"
 
 # https://github.com/kubernetes-sigs/cloud-provider-kind
 # CPK runs as a host docker container on the 'kind' network, reads docker.sock,
