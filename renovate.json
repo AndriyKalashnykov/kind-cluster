@@ -4,7 +4,10 @@
     "config:best-practices",
     ":semanticCommitType(chore)"
   ],
-  "enabledManagers": ["github-actions", "dockerfile", "custom.regex"],
+  "enabledManagers": ["github-actions", "dockerfile", "kubernetes", "mise", "custom.regex"],
+  "kubernetes": {
+    "managerFilePatterns": ["/^k8s/.+\\.yaml$/"]
+  },
   "commitMessagePrefix": "chore(all): ",
   "commitMessageAction": "update",
   "commitBody": "Signed-off-by: Renovate Bot <bot@renovateapp.com>",

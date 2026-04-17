@@ -2,35 +2,28 @@
 
 SHELL := /bin/bash
 
-# Tools installed by deps-* land in ~/.local/bin; export it so subsequent
-# recipes (each a fresh subshell) can find them. Also needed inside act.
-export PATH := $(HOME)/.local/bin:$(PATH)
+# mise shims (shellcheck, actionlint, gitleaks, trivy, hadolint, act, jq, kind,
+# kubectl — pinned in .mise.toml) must be on PATH for every recipe's fresh
+# subshell. ~/.local/bin stays on PATH for the mise installer itself.
+export PATH := $(HOME)/.local/share/mise/shims:$(HOME)/.local/bin:$(PATH)
 
-# === Tool versions (pinned; Renovate-tracked via inline # renovate: comments) ===
-# renovate: datasource=github-releases depName=koalaman/shellcheck
-SHELLCHECK_VERSION := v0.11.0
-# renovate: datasource=github-releases depName=rhysd/actionlint
-ACTIONLINT_VERSION := v1.7.12
-# renovate: datasource=github-releases depName=gitleaks/gitleaks
-GITLEAKS_VERSION := v8.30.1
-# renovate: datasource=github-releases depName=aquasecurity/trivy
-TRIVY_VERSION := v0.69.3
+# === Tool versions pinned in .mise.toml (Renovate-tracked via the mise manager).
+# The constants below track tools NOT managed by mise: docker-image pins
+# (MERMAID_CLI_VERSION, PLANTUML_VERSION, KIND_NODE_IMAGE) and a shared
+# dual-use pin (KUBECTL_VERSION also feeds images/Dockerfile as a --build-arg,
+# so it lives here AND in .mise.toml — keep them in sync).
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION := 11.12.0
 # renovate: datasource=docker depName=plantuml/plantuml
 PLANTUML_VERSION := 1.2026.2
-# renovate: datasource=github-releases depName=hadolint/hadolint
-HADOLINT_VERSION := v2.14.0
-# renovate: datasource=github-releases depName=nektos/act
-ACT_VERSION := v0.2.87
-# renovate: datasource=github-releases depName=jqlang/jq
-JQ_VERSION := jq-1.8.1
-# renovate: datasource=github-releases depName=kubernetes-sigs/kind
-KIND_VERSION := v0.31.0
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
 KUBECTL_VERSION := v1.35.1
-# KIND_NODE_IMAGE is bumped together with KIND_VERSION per KinD's release notes.
+# KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
 KIND_NODE_IMAGE := kindest/node:v1.35.0
+# catthehacker/ubuntu tags use loose `act-YY.MM` format (Ubuntu LTS cadence);
+# bumps require also updating runs-on in .github/workflows/*.yml.
+# renovate: datasource=docker depName=catthehacker/ubuntu versioning=loose
+ACT_UBUNTU_VERSION := act-24.04
 
 #help: @ List available tasks
 help:
@@ -38,41 +31,36 @@ help:
 	@echo "Commands :"
 	@grep -E '[a-zA-Z\.\-]+:.*?@ .*$$' $(MAKEFILE_LIST)| tr -d '#' | awk 'BEGIN {FS = ":.*?@ "}; {printf "\033[32m%-36s\033[0m - %s\n", $$1, $$2}'
 
-#deps: @ Verify required runtime tools are installed (auto-installs kind + kubectl + jq)
-deps: deps-kind deps-kubectl deps-jq
-	@for tool in docker helm curl base64; do \
+#deps-tools: @ Install pinned CLI tools via mise (auto-bootstraps mise). Used by quality gates (no docker/helm/curl/base64 required).
+deps-tools:
+	@# Local-only: bootstrap mise on first run. jdx/mise-action handles this in CI.
+	@if [ -z "$$CI" ] && ! command -v mise >/dev/null 2>&1; then \
+		echo "Installing mise (no root required, installs to ~/.local/bin)..."; \
+		curl -fsSL https://mise.run | sh; \
+		echo ""; \
+		echo "mise installed. Activate it in your shell, then re-run 'make deps':"; \
+		echo "  bash: echo 'eval \"\$$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc"; \
+		echo "  zsh:  echo 'eval \"\$$(~/.local/bin/mise activate zsh)\"'  >> ~/.zshrc"; \
+		exit 0; \
+	fi
+	@# Install every tool pinned in .mise.toml. Runs in both local and CI
+	@# (idempotent; no-op when already at the pinned version).
+	@if command -v mise >/dev/null 2>&1; then \
+		mise install; \
+	else \
+		echo "Error: mise required. Re-run 'make deps' after activating mise."; \
+		exit 1; \
+	fi
+
+#deps-docker: @ Verify docker CLI is on PATH (used by image-build, mermaid-lint, diagrams, ci-run)
+deps-docker:
+	@command -v docker >/dev/null 2>&1 || { echo "Error: docker required. See README Prerequisites."; exit 1; }
+
+#deps: @ deps-tools + deps-docker + verify cluster-runtime deps (helm, curl, base64)
+deps: deps-tools deps-docker
+	@for tool in helm curl base64; do \
 		command -v $$tool >/dev/null 2>&1 || { echo "Error: $$tool required. See README Prerequisites."; exit 1; }; \
 	done
-
-#deps-kind: @ Install kind (KIND_VERSION) into ~/.local/bin
-deps-kind:
-	@if ! command -v kind >/dev/null 2>&1 || [ "$$(kind version 2>/dev/null | awk '{print $$2}')" != "$(KIND_VERSION)" ]; then \
-		echo "Installing kind $(KIND_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o $$HOME/.local/bin/kind \
-			https://github.com/kubernetes-sigs/kind/releases/download/$(KIND_VERSION)/kind-linux-amd64; \
-		chmod +x $$HOME/.local/bin/kind; \
-	fi
-
-#deps-kubectl: @ Install kubectl (KUBECTL_VERSION) into ~/.local/bin
-deps-kubectl:
-	@if ! command -v kubectl >/dev/null 2>&1 || [ "$$(kubectl version --client -o json 2>/dev/null | jq -r '.clientVersion.gitVersion')" != "$(KUBECTL_VERSION)" ]; then \
-		echo "Installing kubectl $(KUBECTL_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o $$HOME/.local/bin/kubectl \
-			https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/linux/amd64/kubectl; \
-		chmod +x $$HOME/.local/bin/kubectl; \
-	fi
-
-#deps-jq: @ Install jq (JQ_VERSION) into ~/.local/bin
-deps-jq:
-	@if ! command -v jq >/dev/null 2>&1 || [ "$$(jq --version 2>/dev/null)" != "$(JQ_VERSION)" ]; then \
-		echo "Installing jq $(JQ_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o $$HOME/.local/bin/jq \
-			https://github.com/jqlang/jq/releases/download/$(JQ_VERSION)/jq-linux-amd64; \
-		chmod +x $$HOME/.local/bin/jq; \
-	fi
 
 #deps-multipass: @ Verify Multipass is installed (required for vm-* targets)
 deps-multipass:
@@ -82,75 +70,26 @@ deps-multipass:
 deps-renovate:
 	@command -v npx >/dev/null 2>&1 || { echo "Error: npx required (install Node.js)."; exit 1; }
 
-#deps-shellcheck: @ Install shellcheck
-deps-shellcheck:
-	@command -v shellcheck >/dev/null 2>&1 || { echo "Installing shellcheck $(SHELLCHECK_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o /tmp/shellcheck.tar.xz https://github.com/koalaman/shellcheck/releases/download/$(SHELLCHECK_VERSION)/shellcheck-$(SHELLCHECK_VERSION).linux.x86_64.tar.xz && \
-		tar -xJf /tmp/shellcheck.tar.xz -C /tmp && \
-		install -m 755 /tmp/shellcheck-$(SHELLCHECK_VERSION)/shellcheck $$HOME/.local/bin/shellcheck && \
-		rm -rf /tmp/shellcheck-$(SHELLCHECK_VERSION) /tmp/shellcheck.tar.xz; \
-	}
-
-#deps-actionlint: @ Install actionlint
-deps-actionlint:
-	@command -v actionlint >/dev/null 2>&1 || { echo "Installing actionlint $(ACTIONLINT_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o /tmp/actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/$(ACTIONLINT_VERSION)/actionlint_$(ACTIONLINT_VERSION:v%=%)_linux_amd64.tar.gz && \
-		tar -xzf /tmp/actionlint.tar.gz -C $$HOME/.local/bin actionlint && \
-		rm -f /tmp/actionlint.tar.gz; \
-	}
-
-#deps-gitleaks: @ Install gitleaks
-deps-gitleaks:
-	@command -v gitleaks >/dev/null 2>&1 || { echo "Installing gitleaks $(GITLEAKS_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o /tmp/gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/$(GITLEAKS_VERSION)/gitleaks_$(GITLEAKS_VERSION:v%=%)_linux_x64.tar.gz && \
-		tar -xzf /tmp/gitleaks.tar.gz -C $$HOME/.local/bin gitleaks && \
-		rm -f /tmp/gitleaks.tar.gz; \
-	}
-
-#deps-trivy: @ Install Trivy
-deps-trivy:
-	@command -v trivy >/dev/null 2>&1 || { echo "Installing trivy $(TRIVY_VERSION)..."; \
-		curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b $$HOME/.local/bin $(TRIVY_VERSION); \
-	}
-
-#deps-hadolint: @ Install hadolint
-deps-hadolint:
-	@command -v hadolint >/dev/null 2>&1 || { echo "Installing hadolint $(HADOLINT_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o /tmp/hadolint https://github.com/hadolint/hadolint/releases/download/$(HADOLINT_VERSION)/hadolint-Linux-x86_64 && \
-		install -m 755 /tmp/hadolint $$HOME/.local/bin/hadolint && rm -f /tmp/hadolint; \
-	}
-
-#deps-act: @ Install act (run GitHub Actions locally)
-deps-act:
-	@command -v act >/dev/null 2>&1 || { echo "Installing act $(ACT_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL https://raw.githubusercontent.com/nektos/act/master/install.sh | bash -s -- -b $$HOME/.local/bin $(ACT_VERSION); \
-	}
-
 #lint: @ Run shellcheck on scripts, actionlint on workflows, hadolint on Dockerfile
-lint: deps-shellcheck deps-actionlint deps-hadolint
+lint: deps-tools
 	@shellcheck scripts/*.sh
 	@actionlint .github/workflows/*.yml
 	@hadolint images/Dockerfile
 
 #secrets: @ Scan for leaked secrets (gitleaks)
-secrets: deps-gitleaks
+secrets: deps-tools
 	@gitleaks detect --source . --config .gitleaks.toml --verbose --redact --no-git
 
 #trivy-fs: @ Scan filesystem for vulnerabilities, secrets, misconfigurations (fails on findings)
-trivy-fs: deps-trivy
+trivy-fs: deps-tools
 	@trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignorefile .trivyignore.yaml .
 
 #trivy-config: @ Scan K8s manifests for security misconfigurations (fails on findings)
-trivy-config: deps-trivy
+trivy-config: deps-tools
 	@trivy config --severity CRITICAL,HIGH --exit-code 1 --ignorefile .trivyignore.yaml k8s/
 
 #mermaid-lint: @ Validate Mermaid diagrams in all *.md files
-mermaid-lint: deps
+mermaid-lint: deps-tools deps-docker
 	@set -euo pipefail; \
 	MD_FILES=$$(git ls-files '*.md' 2>/dev/null | xargs -r grep -lF '```mermaid' 2>/dev/null || true); \
 	if [ -z "$$MD_FILES" ]; then echo "No Mermaid blocks found — skipping."; exit 0; fi; \
@@ -174,7 +113,7 @@ DIAGRAM_SRC := $(wildcard $(DIAGRAM_DIR)/*.puml)
 DIAGRAM_OUT := $(patsubst $(DIAGRAM_DIR)/%.puml,$(DIAGRAM_DIR)/out/%.png,$(DIAGRAM_SRC))
 
 #diagrams: @ Render PlantUML architecture diagrams to PNG via pinned plantuml/plantuml docker image
-diagrams: $(DIAGRAM_OUT)
+diagrams: deps-docker $(DIAGRAM_OUT)
 
 $(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml
 	@mkdir -p $(DIAGRAM_DIR)/out
@@ -201,11 +140,21 @@ static-check: lint secrets trivy-fs trivy-config mermaid-lint diagrams-check
 ci: static-check renovate-validate
 	@echo "Local CI pipeline passed."
 
-#ci-run: @ Run GitHub Actions workflow locally via act
-ci-run: deps-act
+#ci-run: @ Run GitHub Actions workflow locally via act (static-check + docker; e2e skipped — KinD Docker-in-Docker flakes under act)
+ci-run: deps-tools deps-docker
 	@docker container prune -f 2>/dev/null || true
-	@act push --container-architecture linux/amd64 \
-		--artifact-server-path /tmp/act-artifacts
+	@# Random artifact port + dir so concurrent ci-run invocations from other
+	@# projects don't collide on act's host-global defaults (34567, /tmp/act-artifacts).
+	@ACT_PORT=$$(shuf -i 40000-59999 -n 1); \
+	ARTIFACT_PATH=$$(mktemp -d -t act-artifacts.XXXXXX); \
+	for j in static-check docker; do \
+		echo "==== act push --job $$j ===="; \
+		act push --job $$j \
+			--container-architecture linux/amd64 \
+			-P ubuntu-24.04=catthehacker/ubuntu:$(ACT_UBUNTU_VERSION) \
+			--artifact-server-port "$$ACT_PORT" \
+			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
+	done
 
 #install-all: @ Install all (kind k8s cluster, Nginx ingress, MetalLB, demo workloads)
 install-all: deps
@@ -290,7 +239,7 @@ deploy-app-foo-bar-service: deps
 	@./scripts/kind-deploy-app-foo-bar-service.sh
 
 #image-build: @ Build kubectl-test Docker image
-image-build: deps
+image-build: deps-docker
 	@docker build --build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) -f ./images/Dockerfile -t kubectl-test .
 
 #image-test: @ Verify kubectl-test image runs and kubectl is available inside it
@@ -339,9 +288,7 @@ clean:
 	@./scripts/kind-delete.sh 2>/dev/null || true
 	@rm -rf /tmp/act-artifacts
 
-.PHONY: help deps deps-kind deps-kubectl deps-jq deps-multipass deps-renovate \
-	deps-shellcheck deps-actionlint deps-gitleaks deps-trivy \
-	deps-hadolint deps-act \
+.PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
 	lint secrets trivy-fs trivy-config mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	create-cluster export-cert k8s-dashboard dashboard-install \

@@ -12,6 +12,8 @@
 
 ```
 Makefile              # Task runner with help target
+.mise.toml            # Pinned tool versions (shellcheck, actionlint, gitleaks,
+                      #   trivy, hadolint, act, jq, kind, kubectl)
 scripts/              # Bash scripts for cluster lifecycle and app deployment
 k8s/                  # Kubernetes manifests (kind config, dashboard, NFS, etc.)
 images/               # Dockerfiles (kubectl-test image)
@@ -33,7 +35,8 @@ make vm-install-all                    # Run `make install-all` inside the VM
 make vm-ssh                            # Open shell inside the VM
 make vm-down                           # Stop + delete + purge the VM
 
-# Local quality gates (all auto-install pinned tools into ~/.local/bin on first run)
+# Local quality gates (pinned tools installed on first run via `make deps`;
+# mise is auto-bootstrapped into ~/.local/bin if missing)
 make lint                              # shellcheck + actionlint + hadolint
 make secrets                           # gitleaks (suppressions: .gitleaks.toml)
 make trivy-fs                          # Trivy CVE/secret/misconfig scan (suppressions: .trivyignore.yaml)
@@ -46,14 +49,16 @@ make ci-run                            # Run GitHub Actions workflow locally via
 
 ## CI/CD
 
-- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Four jobs: `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. The `e2e` job uses `make deps` + `make create-cluster` (kind / kubectl / kindest/node versions pinned in `Makefile`, Renovate-tracked), runs all install/deploy scripts, then runs `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
+- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Four jobs: `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. Both `static-check` and `e2e` use `jdx/mise-action` to install the pinned toolchain from `.mise.toml` (kind, kubectl, jq, shellcheck, actionlint, gitleaks, trivy, hadolint, act — Renovate-tracked via the mise manager). The `e2e` job then runs `make deps` (verifies docker/helm/curl/base64 + idempotent `mise install`) + `make create-cluster`, runs all install/deploy scripts, then `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
 - **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
 ## Dependencies
 
-Runtime (user provides): Docker, helm, curl, base64. Auto-installed by `make deps`: kind, kubectl, jq.
+Runtime (user provides): Docker, helm, curl, base64.
 
-Quality-gate tools (auto-installed on first `make lint` / `make static-check` into `$HOME/.local/bin`, pinned via `# renovate:` comments in the Makefile): shellcheck, actionlint, hadolint, gitleaks, trivy, act. Plus `minlag/mermaid-cli` via docker.
+Pinned in [`.mise.toml`](./.mise.toml) and installed by `make deps` via [mise](https://mise.jdx.dev): `kind`, `kubectl`, `jq`, `shellcheck`, `actionlint`, `gitleaks`, `trivy`, `hadolint`, `act`. `make deps` auto-bootstraps mise into `~/.local/bin` if missing, then runs `mise install` (idempotent; no-op at pinned versions).
+
+Docker-image-pinned in Makefile (Renovate-tracked via inline `# renovate:` comments): `KUBECTL_VERSION` (shared with `images/Dockerfile` `--build-arg`), `MERMAID_CLI_VERSION`, `PLANTUML_VERSION`, `KIND_NODE_IMAGE`.
 
 No Go modules; no package manager lockfiles.
 

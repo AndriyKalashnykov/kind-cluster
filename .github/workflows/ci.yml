@@ -35,6 +35,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+
       - name: Static check
         run: make static-check
 
@@ -60,11 +65,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install kind and kubectl
-        # Versions pinned in Makefile (KIND_VERSION, KUBECTL_VERSION,
-        # KIND_NODE_IMAGE), Renovate-tracked. Avoids helm/kind-action's
-        # auto-teardown which can flake on Docker daemon "did not receive
-        # an exit event" errors at job-end.
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+
+      - name: Verify runtime deps (docker, helm, curl, base64)
+        # Versions for kind/kubectl/jq/etc come from .mise.toml (Renovate-tracked
+        # via the mise manager). KIND_NODE_IMAGE is still pinned in Makefile.
+        # Avoids helm/kind-action's auto-teardown which flaked on Docker daemon
+        # "did not receive an exit event" errors at job-end.
         run: make deps
 
       - name: Create cluster

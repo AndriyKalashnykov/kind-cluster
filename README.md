@@ -30,7 +30,7 @@ The cluster runs entirely on the local Docker bridge. MetalLB hands out LoadBala
 ## Quick Start
 
 ```bash
-make deps        # verify required tools are installed
+make deps        # auto-bootstraps mise + installs pinned tools from .mise.toml
 make kind-up     # create cluster + Nginx ingress + MetalLB + demo workloads
 kubectl cluster-info --context kind-kind
 echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts   # one-time
@@ -44,17 +44,32 @@ Once the stack is up, see [**Access services**](#access-services) for discoverin
 
 ## Prerequisites
 
+User provides (host-level):
+
 | Tool | Version | Purpose |
 |------|---------|---------|
 | [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Task orchestration |
 | [Git](https://git-scm.com/) | latest | Version control |
 | [Docker](https://www.docker.com/) | latest | Container runtime for KinD nodes |
-| [kind](https://kind.sigs.k8s.io/docs/user/quick-start#installation) | v0.31.0+ | Local Kubernetes in Docker |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.35.1+ | Kubernetes CLI |
 | [helm](https://helm.sh/docs/intro/install/) | v3+ | Chart-based installs (dashboard, Prometheus, NFS) |
 | [curl](https://curl.se/) | latest | Download helpers used by scripts |
-| [jq](https://github.com/jqlang/jq) | jq-1.8.1 | JSON parsing in scripts (auto-installed by `make deps`) |
 | [base64](https://command-not-found.com/base64) | latest | Token decoding for dashboard access |
+
+Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise](https://mise.jdx.dev) (mise itself is bootstrapped into `~/.local/bin` on first run):
+
+| Tool | Pinned version |
+|------|----------------|
+| [kind](https://kind.sigs.k8s.io/) | 0.31.0 |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.35.1 |
+| [jq](https://github.com/jqlang/jq) | 1.8.1 |
+| [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
+| [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
+| [gitleaks](https://github.com/gitleaks/gitleaks) | 8.30.1 |
+| [trivy](https://github.com/aquasecurity/trivy) | 0.69.3 |
+| [hadolint](https://github.com/hadolint/hadolint) | 2.14.0 |
+| [act](https://github.com/nektos/act) | 0.2.87 |
+
+Renovate's native `mise` manager keeps `.mise.toml` up to date (platform automerge enabled).
 
 ## Kubernetes Dashboard install
 
@@ -485,7 +500,7 @@ Run `make help` to list targets.
 
 | Target | Description |
 |--------|-------------|
-| `make deps` | Verify required runtime tools are installed (auto-installs `kind` and `kubectl` to `~/.local/bin`) |
+| `make deps` | Install pinned tools from `.mise.toml` via [mise](https://mise.jdx.dev) (auto-bootstraps mise into `~/.local/bin`); verify docker/helm/curl/base64 are on PATH |
 | `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
 | `make registry` | Create a KinD cluster wired to a local Docker registry at `localhost:5001` |
 | `make registry-test` | Push `hello-app:1.0` to the local registry and deploy it (run after `make registry`) |
@@ -520,14 +535,14 @@ GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
 |-----|-------|-------|
 | **static-check** | — | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
 | **docker** | static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
-| **e2e** | static-check | `make deps` + `make create-cluster` (uses pinned kind binary), install ingress + MetalLB + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
+| **e2e** | static-check | `jdx/mise-action` (pinned tools from `.mise.toml`) + `make deps` + `make create-cluster`, install ingress + MetalLB + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
 | **ci-pass** | static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
 
 A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
 
 No repo secrets or variables are required by the workflow — only the default `GITHUB_TOKEN`.
 
-[Renovate](https://docs.renovatebot.com/) keeps action digests, container images, and tool versions pinned in `Makefile` / `scripts/*.sh` (via `# renovate:` inline comments) up to date with platform automerge enabled.
+[Renovate](https://docs.renovatebot.com/) keeps action digests, container images, `.mise.toml` pins (via the native `mise` manager), and Makefile / `scripts/*.sh` constants (via `# renovate:` inline comments) up to date with platform automerge enabled.
 
 ## Contributing
 
