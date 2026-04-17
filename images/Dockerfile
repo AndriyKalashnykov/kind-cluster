@@ -7,7 +7,7 @@ LABEL maintainer="Andriy Kalashnykov" description="Kubernetes testing image"
 # invocations. Renovate tracks this ARG via a Dockerfile custom.regex manager;
 # the kubectl packageRule groups it with the Makefile + .mise.toml + cloud-init.
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
-ARG KUBECTL_VERSION=v1.35.1
+ARG KUBECTL_VERSION=v1.35.4
 ARG APK_PACKAGES="bash \
                   bind-tools \
                   curl \
