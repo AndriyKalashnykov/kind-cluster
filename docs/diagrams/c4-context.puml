@@ -6,12 +6,12 @@ title System Context — kind-cluster
 Person(dev, "Developer", "Runs make targets to bring up a local k8s lab")
 
 System_Boundary(host, "Workstation or Multipass VM") {
-  System(kind, "kind-cluster", "Local KinD stack: ingress, MetalLB, Dashboard, NFS, Prometheus")
+  System(kind, "kind-cluster", "Local KinD stack: ingress, cloud-provider-kind, Dashboard, NFS, Prometheus")
   System_Ext(docker, "Docker", "Container runtime hosting the KinD nodes")
 }
 
 System_Ext(registries, "Container registries", "Docker Hub, GHCR, k8s.gcr.io, quay.io")
-System_Ext(charts, "Helm chart repos", "ingress-nginx, MetalLB, kube-prometheus, dashboard, csi-driver-nfs")
+System_Ext(charts, "Helm chart repos", "ingress-nginx, kube-prometheus, dashboard, csi-driver-nfs")
 
 Rel(dev, kind, "make kind-up / kind-down", "shell + kubectl")
 Rel(kind, docker, "Runs nodes as containers")

@@ -5,7 +5,7 @@
 
 # kind-cluster
 
-Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, cloud-provider-kind (with MetalLB as a drop-in alternative), Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
+Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, LoadBalancer (cloud-provider-kind, or MetalLB), Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
 <img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="700">
 
@@ -13,8 +13,8 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 |-----------|-----------|-----------|
 | Cluster | [KinD](https://kind.sigs.k8s.io/) v0.31.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
 | Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | Reference controller; matches what most cloud-managed clusters expose |
-| Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.10.0 | Allocates `Service: LoadBalancer` IPs on the `kind` docker bridge. Runs as a single host container; no in-cluster footprint, no `IPAddressPool`/`L2Advertisement`. Kind-team maintained. |
-| Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.15.3 | `LB=metallb make install-all`. Needed for L2/BGP parity testing, prod-mirror setups, or multi-cluster scenarios cloud-provider-kind doesn't cover. |
+| Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.10.0 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
+| Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.15.3 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
 | Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.1 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
@@ -26,25 +26,28 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 
 Source: [`docs/diagrams/c4-container.puml`](./docs/diagrams/c4-container.puml). Render with `make diagrams` (uses pinned `plantuml/plantuml` Docker image).
 
-The cluster runs entirely on the local Docker bridge. The LoadBalancer provider (cloud-provider-kind by default) hands out `Service: LoadBalancer` IPs from the bridge's IPv4 subnet, so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host. Ingress is bound to the control-plane node via the `ingress-ready` label and `kind-config.yaml` `extraPortMappings` 80/443, so `http://demo.localdev.me/` works through the host port — independent of which LoadBalancer provider is active. The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
+The cluster runs entirely on the local Docker bridge. The LoadBalancer provider (cloud-provider-kind by default) hands out `Service: LoadBalancer` IPs from the bridge's IPv4 subnet, so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host.
+
+Ingress is pinned to the control-plane node (via the `ingress-ready` nodeSelector label). `kind-config.yaml` maps host ports 80/443 to that node, so `http://demo.localdev.me/` resolves through the host port — independent of which LoadBalancer provider is active.
+
+The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
 
 ### Which LoadBalancer?
 
-The default is **cloud-provider-kind** (CPK). It's simpler, faster to stand up, and maintained by the kind team. Stick with it unless you have a specific reason to pick MetalLB.
+The default is **cloud-provider-kind** (CPK). Simpler setup, kind-team maintained. Stick with it unless you have a specific reason to pick MetalLB.
 
 | | cloud-provider-kind (default) | MetalLB |
 |---|---|---|
 | Install form | host `docker run` on the `kind` network | in-cluster Deployment + DaemonSet + CRDs |
 | IP allocation | automatic from the `kind` Docker subnet | you declare an `IPAddressPool` range |
 | Maintenance | kind-team, single binary | independent release cadence |
-| When to pick | default — works for everything this repo deploys | you need BGP / L2Advertisement parity with prod, or want to reproduce a MetalLB-specific bug |
+| When to pick | works for everything this repo deploys | you need BGP / L2Advertisement parity with prod, or want to reproduce a MetalLB-specific bug |
 
-Switch to MetalLB for a single run:
+Two entry points to MetalLB:
 
 ```bash
-LB=metallb make install-all           # first-time install
-# or, on an already-created cluster:
-make lb-metallb                        # install MetalLB as the add-on
+LB=metallb make install-all    # fresh cluster with MetalLB as the LB provider
+make lb-metallb                # already-running cluster, no LB yet — install MetalLB only
 ```
 
 Switching providers on a live cluster requires tearing down the first one — each script hard-refuses if the other is present. Run `make kind-down && LB=<provider> make kind-up` for a clean reset.
@@ -206,7 +209,7 @@ First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docke
 
 The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
 
-1. Installs Docker CE, KinD v0.31.0, kubectl v1.35.1, helm v3.19.0
+1. Installs Docker CE, KinD v0.31.0, kubectl v1.35.1, helm v4.1.4
 2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
 3. Clones this repo to `/home/ubuntu/kind-cluster`
 4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.
@@ -381,7 +384,7 @@ Browser: `https://localhost:8443`
 
 ### kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
 
-Installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace and patches the `grafana` Service to `LoadBalancer` (served via the LoadBalancer provider). Prometheus and Alertmanager stay as ClusterIPs — reach them via `kubectl port-forward`.
+Installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace. Grafana is exposed via the LoadBalancer provider (whichever you picked); Prometheus and Alertmanager stay ClusterIP — reach them via `kubectl port-forward`.
 
 The credential-discovery snippets reuse the `kube` function from [Access services · Step 1](#step-1--point-kubectl-at-the-cluster). Paths labelled **[HOST]** run on your laptop; **[VM]** run inside the Multipass VM.
 
@@ -464,86 +467,54 @@ This is an **alternative** to the default `make install-all` flow — the regist
 
 ## Available Make Targets
 
-Run `make help` to list targets.
+`make help` is the authoritative list. The table below groups targets by purpose for scanning.
 
-### Cluster Lifecycle
-
-| Target | Description |
-|--------|-------------|
-| `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
-| `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
-| `make install-all` | Create cluster + Nginx ingress + LoadBalancer (cloud-provider-kind default, or `LB=metallb`) + demo workloads |
-| `make install-all-no-demo-workloads` | Same minus demo apps |
-| `make create-cluster` | Create KinD cluster (granular) |
-| `make delete-cluster` | Delete KinD cluster (granular) |
-| `make export-cert` | Export k8s client keys and CA certificates |
-| `make e2e` | Smoke-test deployed demo services on a running cluster |
-| `make clean` | Tear down cluster and remove scratch artifacts |
-
-### Cluster Add-ons
-
-| Target | Description |
-|--------|-------------|
-| `make dashboard-install` | Install Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
-| `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
-| `make dashboard-token` | Print the admin-user token |
-| `make nginx-ingress` | Install Nginx ingress controller |
-| `make lb-cpk` | Install cloud-provider-kind (primary LoadBalancer; default for `make install-all`) |
-| `make lb-metallb` | Install MetalLB (alternative; also: `LB=metallb make install-all`) |
-| `make metrics-server` | Install metrics-server (for `kubectl top` / HPA) |
-| `make kube-prometheus-stack` | Install Prometheus + Grafana + Alertmanager |
-
-### Virtual Ubuntu Host (Multipass)
-
-| Target | Description |
-|--------|-------------|
-| `make vm-up` | Launch Ubuntu 22.04 VM via Multipass, cloud-init provisions Docker + kind + kubectl + helm + nfs-kernel-server |
-| `make vm-ssh` | Open interactive shell inside the VM |
-| `make vm-install-all` | Run `make install-all` inside the VM (remote bootstrap) |
-| `make vm-down` | Stop, delete, and purge the VM |
-
-### RWX Storage (NFS)
-
-| Target | Description |
-|--------|-------------|
-| `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
-| `make nfs-host-setup` | Option 2, step 1 — configure HOST as NFS server (sudo, Ubuntu/Debian) |
-| `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install `nfs-subdir-external-provisioner` pointing at the host |
-
-### Demo Workloads
-
-| Target | Description |
-|--------|-------------|
-| `make deploy-app-nginx-ingress-localhost` | Deploy httpd with ingress rule at `http://demo.localdev.me/` |
-| `make deploy-app-helloweb` | Deploy helloweb sample app |
-| `make deploy-app-golang-hello-world-web` | Deploy golang-hello-world-web sample app |
-| `make deploy-app-foo-bar-service` | Deploy foo-bar-service sample app |
-
-### Utilities
-
-| Target | Description |
-|--------|-------------|
-| `make deps` | Install pinned tools from `.mise.toml` via [mise](https://mise.jdx.dev) (auto-bootstraps mise into `~/.local/bin`); verify docker/helm/curl/base64 are on PATH |
-| `make image-build` | Build `kubectl-test` Docker image (from `images/Dockerfile`) |
-| `make registry` | Create a KinD cluster wired to a local Docker registry at `localhost:5001` |
-| `make registry-test` | Push `hello-app:1.0` to the local registry and deploy it (run after `make registry`) |
-| `make renovate-validate` | Validate `renovate.json` configuration |
-
-### Quality Gates
-
-| Target | Description |
-|--------|-------------|
-| `make lint` | shellcheck on scripts + actionlint on workflows + hadolint on `images/Dockerfile` |
-| `make secrets` | gitleaks scan (suppressions in `.gitleaks.toml`) |
-| `make trivy-fs` | Trivy filesystem scan for vulns, secrets, misconfigs (CRITICAL/HIGH) |
-| `make trivy-config` | Trivy scan of `k8s/` manifests for K8s misconfigurations |
-| `make mermaid-lint` | Validate Mermaid diagrams in all tracked `*.md` files via `mermaid-cli` |
-| `make diagrams` | Render PlantUML C4 diagrams in `docs/diagrams/*.puml` to PNG via pinned `plantuml/plantuml` Docker image |
-| `make diagrams-check` | Verify committed diagram PNGs match the current `.puml` source (fails CI if stale) |
-| `make diagrams-clean` | Remove rendered diagram PNGs under `docs/diagrams/out/` |
-| `make static-check` | Composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check |
-| `make ci` | Full local CI pipeline: `static-check` + `renovate-validate` |
-| `make ci-run` | Run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
+| Category | Target | Description |
+|---|---|---|
+| Cluster | `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
+| Cluster | `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
+| Cluster | `make install-all` | cluster + Nginx ingress + LoadBalancer (CPK default, or `LB=metallb`) + demo workloads |
+| Cluster | `make install-all-no-demo-workloads` | same minus demo apps |
+| Cluster | `make create-cluster` | Create KinD cluster only |
+| Cluster | `make delete-cluster` | Delete KinD cluster only |
+| Cluster | `make export-cert` | Export k8s client keys and CA certificates |
+| Cluster | `make e2e` | Smoke-test deployed demo services on a running cluster |
+| Cluster | `make clean` | Tear down cluster + remove scratch artifacts |
+| Add-ons | `make dashboard-install` | Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
+| Add-ons | `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
+| Add-ons | `make dashboard-token` | Print the admin-user token |
+| Add-ons | `make nginx-ingress` | Install Nginx ingress controller |
+| Add-ons | `make lb-cpk` | Install cloud-provider-kind (default LoadBalancer) |
+| Add-ons | `make lb-metallb` | Install MetalLB (alternative; also: `LB=metallb make install-all`) |
+| Add-ons | `make metrics-server` | metrics-server (for `kubectl top` / HPA) |
+| Add-ons | `make kube-prometheus-stack` | Prometheus + Grafana + Alertmanager |
+| NFS | `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
+| NFS | `make nfs-host-setup` | Option 2, step 1 — configure host as NFS server (sudo; Ubuntu/Debian) |
+| NFS | `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install csi-driver-nfs pointing at the host export |
+| Demo apps | `make deploy-app-nginx-ingress-localhost` | httpd behind ingress at `http://demo.localdev.me/` |
+| Demo apps | `make deploy-app-helloweb` | helloweb sample |
+| Demo apps | `make deploy-app-golang-hello-world-web` | golang-hello-world-web sample |
+| Demo apps | `make deploy-app-foo-bar-service` | foo-bar-service (two backends behind one Service) |
+| Multipass VM | `make vm-up` | launch Ubuntu 22.04 VM + cloud-init provisioning |
+| Multipass VM | `make vm-ssh` | open a shell inside the VM |
+| Multipass VM | `make vm-install-all` | run `make install-all` inside the VM |
+| Multipass VM | `make vm-down` | stop, delete, purge the VM |
+| Registry | `make registry` | KinD cluster wired to local Docker registry at `localhost:5001` |
+| Registry | `make registry-test` | push `hello-app:1.0` to the local registry and deploy it |
+| Utilities | `make deps` | bootstrap mise + install pinned tools from `.mise.toml`; verify docker/helm/curl/base64 on PATH |
+| Utilities | `make image-build` | build `kubectl-test` Docker image |
+| Utilities | `make renovate-validate` | validate `renovate.json` |
+| Quality | `make lint` | shellcheck + actionlint + hadolint + scripts-exec-bit check |
+| Quality | `make secrets` | gitleaks (suppressions: `.gitleaks.toml`) |
+| Quality | `make trivy-fs` | Trivy fs scan (vulns, secrets, misconfigs; CRITICAL/HIGH) |
+| Quality | `make trivy-config` | Trivy scan of `k8s/` manifests |
+| Quality | `make mermaid-lint` | validate mermaid blocks in tracked `*.md` files |
+| Quality | `make diagrams` | render PlantUML C4 diagrams (via pinned `plantuml/plantuml` image) |
+| Quality | `make diagrams-check` | verify committed PNGs match current `.puml` source |
+| Quality | `make diagrams-clean` | remove rendered PNGs under `docs/diagrams/out/` |
+| Quality | `make static-check` | composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check |
+| Quality | `make ci` | full local pipeline: `static-check` + `renovate-validate` |
+| Quality | `make ci-run` | run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
 
 Suppressions (intentional, justified inline):
 - `.gitleaks.toml` — allowlist for the local `dashboard-admin-token.txt`.
@@ -552,7 +523,7 @@ Suppressions (intentional, justified inline):
 
 ## CI/CD
 
-GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
+`ci.yml` runs on every push to `main`, tags `v*`, and pull requests. A separate `e2e-metallb.yml` exercises the MetalLB path on a weekly cron (Sunday 04:00 UTC) plus pushes that touch `scripts/kind-add-metallb.sh`.
 
 | Job | Needs | Steps |
 |-----|-------|-------|
