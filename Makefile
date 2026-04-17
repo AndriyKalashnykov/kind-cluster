@@ -73,8 +73,17 @@ deps-multipass:
 deps-renovate:
 	@command -v npx >/dev/null 2>&1 || { echo "Error: npx required (install Node.js)."; exit 1; }
 
-#lint: @ Run shellcheck on scripts, actionlint on workflows, hadolint on Dockerfile
+#lint: @ Run shellcheck + executable-mode check on scripts, actionlint on workflows, hadolint on Dockerfile
 lint: deps-tools
+	@# Catch shell scripts committed without +x — they exit 126 "Permission
+	@# denied" in CI. `make ci-run` only exercises static-check + docker jobs
+	@# (not e2e), so scripts called from e2e-only paths slip through locally.
+	@NONEXEC=$$(find scripts -name '*.sh' -not -executable -print); \
+	if [ -n "$$NONEXEC" ]; then \
+		echo "Error: shell scripts missing +x (run 'chmod +x <file>'):"; \
+		echo "$$NONEXEC" | sed 's/^/  /'; \
+		exit 1; \
+	fi
 	@shellcheck scripts/*.sh
 	@actionlint .github/workflows/*.yml
 	@hadolint images/Dockerfile
