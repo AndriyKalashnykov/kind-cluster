@@ -33,7 +33,7 @@ NFS_SERVER=$1
 NFS_PATH=${2:-/srv/k8s_nfs_storage}
 
 # renovate: datasource=github-releases depName=kubernetes-csi/csi-driver-nfs
-CSI_DRIVER_NFS_VERSION=v4.13.1
+CSI_DRIVER_NFS_VERSION=v4.13.2
 
 NS_DRIVER=kube-system
 RELEASE=csi-driver-nfs
