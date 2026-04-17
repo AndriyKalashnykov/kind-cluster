@@ -15,9 +15,13 @@ Makefile              # Task runner with help target
 .mise.toml            # Pinned tool versions (shellcheck, actionlint, gitleaks,
                       #   trivy, hadolint, act, jq, kind, kubectl)
 scripts/              # Bash scripts for cluster lifecycle and app deployment
+                      #   (includes kind-add-{metallb,cloud-provider-kind}.sh
+                      #    and migrate-from-metallb.sh)
 k8s/                  # Kubernetes manifests (kind config, dashboard, NFS, etc.)
 images/               # Dockerfiles (kubectl-test image)
-.github/workflows/    # CI: ci.yml, cleanup-runs.yml
+docs/diagrams/        # PlantUML C4 sources + rendered PNGs
+vm/                   # Multipass cloud-init playbook
+.github/workflows/    # CI: ci.yml, e2e-metallb.yml, cleanup-runs.yml
 ```
 
 ## Common Commands

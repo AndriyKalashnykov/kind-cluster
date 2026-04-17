@@ -12,11 +12,17 @@ if [ -z "$TIMEOUT" ]; then
 fi
 
 
+# Image pin — kept in sync with k8s/golang-hello-world-web.yaml via Renovate's
+# docker-image grouping rule in renovate.json.
+# renovate: datasource=docker depName=ghcr.io/andriykalashnykov/golang-web
+GOLANG_WEB_VERSION=0.0.3
+IMAGE=ghcr.io/andriykalashnykov/golang-web:${GOLANG_WEB_VERSION}
+
 # Force single-platform pull — avoids kind#3795 where a multi-arch manifest list
 # in docker's content store breaks `kind load docker-image` (ctr: content digest not found).
 PLATFORM="linux/$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-docker pull --platform="$PLATFORM" ghcr.io/andriykalashnykov/golang-web:0.0.3
-kind load docker-image ghcr.io/andriykalashnykov/golang-web:0.0.3
+docker pull --platform="$PLATFORM" "$IMAGE"
+kind load docker-image "$IMAGE"
 
 echo "deploying golang-hello-world-web"
 kubectl apply -f ./k8s/golang-hello-world-web.yaml

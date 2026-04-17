@@ -13,9 +13,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
 # https://cloud.google.com/kubernetes-engine/docs/tutorials/hello-app
-docker pull gcr.io/google-samples/hello-app:1.0
-docker tag gcr.io/google-samples/hello-app:1.0 localhost:5001/hello-app:1.0
-docker push localhost:5001/hello-app:1.0
+# Renovate tracks this via the inline comment; `k8s/helloweb-deployment-local.yaml`
+# has a matching `localhost:5001/hello-app:<tag>` reference that must be kept in
+# sync by hand (Renovate can't reach `localhost:5001` to propose bumps there).
+# renovate: datasource=docker depName=gcr.io/google-samples/hello-app
+HELLO_APP_VERSION=1.0
+UPSTREAM=gcr.io/google-samples/hello-app:${HELLO_APP_VERSION}
+LOCAL=localhost:5001/hello-app:${HELLO_APP_VERSION}
+
+docker pull "$UPSTREAM"
+docker tag "$UPSTREAM" "$LOCAL"
+docker push "$LOCAL"
 kubectl apply -f ./k8s/helloweb-deployment-local.yaml
 kubectl rollout status deployment/helloweb --timeout=60s
 kubectl port-forward svc/helloweb 8080:80 >/dev/null 2>&1 &

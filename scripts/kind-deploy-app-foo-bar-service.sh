@@ -12,11 +12,17 @@ if [ -z "$TIMEOUT" ]; then
 fi
 
 
+# Image pin — kept in sync with k8s/foo-bar-deployment.yaml via Renovate's
+# docker-image grouping rule in renovate.json.
+# renovate: datasource=docker depName=hashicorp/http-echo
+HTTP_ECHO_VERSION=0.2.3
+IMAGE=hashicorp/http-echo:${HTTP_ECHO_VERSION}
+
 # Force single-platform pull — avoids kind#3795 where a multi-arch manifest list
 # in docker's content store breaks `kind load docker-image` (ctr: content digest not found).
 PLATFORM="linux/$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-docker pull --platform="$PLATFORM" hashicorp/http-echo:0.2.3
-kind load docker-image hashicorp/http-echo:0.2.3
+docker pull --platform="$PLATFORM" "$IMAGE"
+kind load docker-image "$IMAGE"
 
 echo "deploying foo-bar-service"
 kubectl apply -f ./k8s/foo-bar-deployment.yaml

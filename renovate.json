@@ -60,6 +60,17 @@
       "description": "Group Docker base images",
       "matchManagers": ["dockerfile"],
       "groupName": "Docker dependencies"
+    },
+    {
+      "description": "Keep workload image bumps in sync across k8s/*.yaml and scripts/*.sh — YAML image: field (kubernetes manager) and matching scripts' IMAGE= variable (custom.regex on shell) land in one PR so `kind load docker-image` and `kubectl apply` can't disagree on the tag.",
+      "matchDatasources": ["docker"],
+      "matchManagers": ["kubernetes", "custom.regex"],
+      "groupName": "workload image {{depName}}"
+    },
+    {
+      "description": "Keep kubectl in sync across .mise.toml (mise manager) and Makefile KUBECTL_VERSION (custom.regex, used as a Dockerfile --build-arg).",
+      "matchPackageNames": ["kubernetes/kubernetes", "kubernetes/kubectl", "aqua:kubernetes/kubectl"],
+      "groupName": "kubectl"
     }
   ]
 }
