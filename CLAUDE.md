@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**kind-cluster** is a Shell/Kubernetes project for creating and managing local Kubernetes clusters using Docker with [KinD](https://kind.sigs.k8s.io/). It provides scripts for installing cluster components (Nginx ingress, MetalLB, dashboard) and deploying demo workloads.
+**kind-cluster** is a Shell/Kubernetes project for creating and managing local Kubernetes clusters using Docker with [KinD](https://kind.sigs.k8s.io/). It provides scripts for installing cluster components (Nginx ingress, LoadBalancer provider — cloud-provider-kind by default with MetalLB as alternative, dashboard) and deploying demo workloads.
 
 - **Owner**: AndriyKalashnykov/kind-cluster
 - **License**: MIT
@@ -25,9 +25,14 @@ images/               # Dockerfiles (kubectl-test image)
 ```bash
 make help                              # List all available targets
 make create-cluster                    # Create KinD cluster
-make install-all                       # Full install: cluster + ingress + MetalLB + demo apps
-make install-all-no-demo-workloads     # Cluster + ingress + MetalLB (no demo apps)
+make install-all                       # Full install: cluster + ingress + cloud-provider-kind + demo apps
+make install-all-no-demo-workloads     # Cluster + ingress + cloud-provider-kind (no demo apps)
+LB=metallb make install-all            # Same as install-all but with MetalLB instead of cloud-provider-kind
 make delete-cluster                    # Tear down cluster
+
+# LoadBalancer add-ons
+make lb-cpk                            # Install cloud-provider-kind (primary; already part of install-all)
+make lb-metallb                        # Install MetalLB (alternative to lb-cpk)
 
 # Multipass VM (host-agnostic alternative)
 make vm-up [NAME=…]                    # Launch Ubuntu 22.04 VM (cloud-init provisions Docker + kind + kubectl + helm)
@@ -49,7 +54,8 @@ make ci-run                            # Run GitHub Actions workflow locally via
 
 ## CI/CD
 
-- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Four jobs: `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. Both `static-check` and `e2e` use `jdx/mise-action` to install the pinned toolchain from `.mise.toml` (kind, kubectl, jq, shellcheck, actionlint, gitleaks, trivy, hadolint, act — Renovate-tracked via the mise manager). The `e2e` job then runs `make deps` (verifies docker/helm/curl/base64 + idempotent `mise install`) + `make create-cluster`, runs all install/deploy scripts, then `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
+- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Four jobs: `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. Both `static-check` and `e2e` use `jdx/mise-action` to install the pinned toolchain from `.mise.toml` (kind, kubectl, jq, shellcheck, actionlint, gitleaks, trivy, hadolint, act — Renovate-tracked via the mise manager). The `e2e` job installs **cloud-provider-kind** as the LoadBalancer provider, runs all install/deploy scripts, then `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
+- **e2e-metallb.yml** — weekly cron (Sunday 04:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-metallb.sh`. Mirrors the `e2e` job but installs **MetalLB** instead of cloud-provider-kind; runs `LB=metallb make e2e` to drive the provider-specific branch of the smoke-test assertion matrix. Catches MetalLB regressions without taxing every PR.
 - **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
 ## Dependencies
@@ -58,7 +64,7 @@ Runtime (user provides): Docker, helm, curl, base64.
 
 Pinned in [`.mise.toml`](./.mise.toml) and installed by `make deps` via [mise](https://mise.jdx.dev): `kind`, `kubectl`, `jq`, `shellcheck`, `actionlint`, `gitleaks`, `trivy`, `hadolint`, `act`. `make deps` auto-bootstraps mise into `~/.local/bin` if missing, then runs `mise install` (idempotent; no-op at pinned versions).
 
-Docker-image-pinned in Makefile (Renovate-tracked via inline `# renovate:` comments): `KUBECTL_VERSION` (shared with `images/Dockerfile` `--build-arg`), `MERMAID_CLI_VERSION`, `PLANTUML_VERSION`, `KIND_NODE_IMAGE`.
+Docker-image-pinned in Makefile (Renovate-tracked via inline `# renovate:` comments): `KUBECTL_VERSION` (shared with `images/Dockerfile` `--build-arg`), `MERMAID_CLI_VERSION`, `PLANTUML_VERSION`, `KIND_NODE_IMAGE`, `CLOUD_PROVIDER_KIND_VERSION`.
 
 No Go modules; no package manager lockfiles.
 

@@ -5,7 +5,7 @@
 
 # kind-cluster
 
-Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, MetalLB, Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
+Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, cloud-provider-kind (with MetalLB as a drop-in alternative), Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
 <img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="700">
 
@@ -13,7 +13,8 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 |-----------|-----------|-----------|
 | Cluster | [KinD](https://kind.sigs.k8s.io/) v0.31.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
 | Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | Reference controller; matches what most cloud-managed clusters expose |
-| Load Balancer | [MetalLB](https://metallb.universe.tf/) | Gives KinD `Service: LoadBalancer` real IPs on the docker bridge — no `kubectl port-forward` per service |
+| Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.10.0 | Allocates `Service: LoadBalancer` IPs on the `kind` docker bridge. Runs as a single host container; no in-cluster footprint, no `IPAddressPool`/`L2Advertisement`. Kind-team maintained. |
+| Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.15.3 | `LB=metallb make install-all`. Needed for L2/BGP parity testing, prod-mirror setups, or multi-cluster scenarios cloud-provider-kind doesn't cover. |
 | Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.1 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
@@ -25,13 +26,34 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 
 Source: [`docs/diagrams/c4-container.puml`](./docs/diagrams/c4-container.puml). Render with `make diagrams` (uses pinned `plantuml/plantuml` Docker image).
 
-The cluster runs entirely on the local Docker bridge. MetalLB hands out LoadBalancer IPs from the bridge's IPv4 subnet so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host. Ingress is bound to the control-plane node and patched to type `LoadBalancer` so `http://demo.localdev.me/` works without `kubectl port-forward`. The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
+The cluster runs entirely on the local Docker bridge. The LoadBalancer provider (cloud-provider-kind by default) hands out `Service: LoadBalancer` IPs from the bridge's IPv4 subnet, so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host. Ingress is bound to the control-plane node via the `ingress-ready` label and `kind-config.yaml` `extraPortMappings` 80/443, so `http://demo.localdev.me/` works through the host port — independent of which LoadBalancer provider is active. The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
+
+### Which LoadBalancer?
+
+The default is **cloud-provider-kind** (CPK). It's simpler, faster to stand up, and maintained by the kind team. Stick with it unless you have a specific reason to pick MetalLB.
+
+| | cloud-provider-kind (default) | MetalLB |
+|---|---|---|
+| Install form | host `docker run` on the `kind` network | in-cluster Deployment + DaemonSet + CRDs |
+| IP allocation | automatic from the `kind` Docker subnet | you declare an `IPAddressPool` range |
+| Maintenance | kind-team, single binary | independent release cadence |
+| When to pick | default — works for everything this repo deploys | you need BGP / L2Advertisement parity with prod, or want to reproduce a MetalLB-specific bug |
+
+Switch to MetalLB for a single run:
+
+```bash
+LB=metallb make install-all           # first-time install
+# or, on an already-created cluster:
+make lb-metallb                        # install MetalLB as the add-on
+```
+
+Switching providers on a live cluster requires tearing down the first one — each script hard-refuses if the other is present. Run `make kind-down && LB=<provider> make kind-up` for a clean reset.
 
 ## Quick Start
 
 ```bash
 make deps        # auto-bootstraps mise + installs pinned tools from .mise.toml
-make kind-up     # create cluster + Nginx ingress + MetalLB + demo workloads
+make kind-up     # create cluster + Nginx ingress + cloud-provider-kind + demo workloads
 kubectl cluster-info --context kind-kind
 echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts   # one-time
 # Open http://demo.localdev.me/
@@ -243,7 +265,7 @@ echo "INGRESS_IP=$INGRESS_IP  HELLOWEB_IP=$HELLOWEB_IP  GOLANG_IP=$GOLANG_IP  FO
 
 ### Step 3 — make the IPs reachable from your host
 
-**Path A (bare host).** The MetalLB LoadBalancer IPs live on your laptop's `kind` docker bridge and are already reachable. Skip to Step 4.
+**Path A (bare host).** The LoadBalancer IPs live on your laptop's `kind` docker bridge and are already reachable. Skip to Step 4.
 
 **Path B (Multipass VM).** The IPs live on the VM's internal docker bridge and are **not routable from your host by default**. Pick one of the two approaches:
 
@@ -273,7 +295,7 @@ With Option 1 the URLs change: replace `$INGRESS_IP`/`$HELLOWEB_IP`/`$GOLANG_IP`
 
 #### Path B · Option 2 — Static route to the kind subnet (Linux/macOS, sudo once, natural URLs)
 
-Route the VM's kind docker subnet through the VM. After this, the MetalLB IPs are reachable directly from your host — the URLs in Step 4 work unchanged in your browser.
+Route the VM's kind docker subnet through the VM. After this, the LoadBalancer IPs are reachable directly from your host — the URLs in Step 4 work unchanged in your browser.
 
 ```bash
 # [HOST] — discover the kind IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
@@ -359,7 +381,7 @@ Browser: `https://localhost:8443`
 
 ### kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
 
-Installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace and patches the `grafana` Service to `LoadBalancer` (served via MetalLB). Prometheus and Alertmanager stay as ClusterIPs — reach them via `kubectl port-forward`.
+Installs the community [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart into the `monitoring` namespace and patches the `grafana` Service to `LoadBalancer` (served via the LoadBalancer provider). Prometheus and Alertmanager stay as ClusterIPs — reach them via `kubectl port-forward`.
 
 The credential-discovery snippets reuse the `kube` function from [Access services · Step 1](#step-1--point-kubectl-at-the-cluster). Paths labelled **[HOST]** run on your laptop; **[VM]** run inside the Multipass VM.
 
@@ -383,7 +405,7 @@ echo "Alertmanager:  http://localhost:9093/"
 
 #### Path B — Multipass VM (`make vm-install-all`)
 
-Install runs inside the VM. `kube port-forward` would bind the VM's localhost (not your host's) — so the port-forward stays in the VM and you add an outer SSH tunnel from the host. Grafana goes through MetalLB so the access mode depends on which Option from §Access services Step 3 you picked.
+Install runs inside the VM. `kube port-forward` would bind the VM's localhost (not your host's) — so the port-forward stays in the VM and you add an outer SSH tunnel from the host. Grafana goes through the LoadBalancer provider so the access mode depends on which Option from §Access services Step 3 you picked.
 
 ```bash
 # [VM] — install + start in-VM port-forwards
@@ -438,7 +460,7 @@ make registry         # create cluster + registry container
 make registry-test    # pull hello-app, retag to localhost:5001, push, deploy, curl
 ```
 
-This is an **alternative** to the default `make install-all` flow — the registry cluster doesn't include ingress, MetalLB, or the demo workloads. Useful for iterating on an image you're building locally. Tear down with `make delete-cluster` and remove the registry container with `docker rm -f kind-registry`.
+This is an **alternative** to the default `make install-all` flow — the registry cluster doesn't include ingress, a LoadBalancer provider, or the demo workloads. Useful for iterating on an image you're building locally. Tear down with `make delete-cluster` and remove the registry container with `docker rm -f kind-registry`.
 
 ## Available Make Targets
 
@@ -450,8 +472,8 @@ Run `make help` to list targets.
 |--------|-------------|
 | `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
 | `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
-| `make install-all` | Create cluster + Nginx ingress + MetalLB + demo workloads (granular) |
-| `make install-all-no-demo-workloads` | Create cluster + Nginx ingress + MetalLB (no demo apps) |
+| `make install-all` | Create cluster + Nginx ingress + LoadBalancer (cloud-provider-kind default, or `LB=metallb`) + demo workloads |
+| `make install-all-no-demo-workloads` | Same minus demo apps |
 | `make create-cluster` | Create KinD cluster (granular) |
 | `make delete-cluster` | Delete KinD cluster (granular) |
 | `make export-cert` | Export k8s client keys and CA certificates |
@@ -466,7 +488,8 @@ Run `make help` to list targets.
 | `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
 | `make dashboard-token` | Print the admin-user token |
 | `make nginx-ingress` | Install Nginx ingress controller |
-| `make metallb` | Install MetalLB load balancer |
+| `make lb-cpk` | Install cloud-provider-kind (primary LoadBalancer; default for `make install-all`) |
+| `make lb-metallb` | Install MetalLB (alternative; also: `LB=metallb make install-all`) |
 | `make metrics-server` | Install metrics-server (for `kubectl top` / HPA) |
 | `make kube-prometheus-stack` | Install Prometheus + Grafana + Alertmanager |
 
@@ -535,7 +558,8 @@ GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
 |-----|-------|-------|
 | **static-check** | — | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
 | **docker** | static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
-| **e2e** | static-check | `jdx/mise-action` (pinned tools from `.mise.toml`) + `make deps` + `make create-cluster`, install ingress + MetalLB + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` into the kind control-plane (~3.5 min end-to-end) |
+| **e2e** | static-check | `jdx/mise-action` + `make deps` + `make create-cluster`, install ingress + cloud-provider-kind + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` (~4 min end-to-end) |
+| **e2e-metallb** | — | Mirrors `e2e` but installs MetalLB instead of cloud-provider-kind. Weekly cron (Sun 04:00 UTC) + `workflow_dispatch` + push to `scripts/kind-add-metallb.sh`. Catches MetalLB regressions without taxing every PR. |
 | **ci-pass** | static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
 
 A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).

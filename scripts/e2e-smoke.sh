@@ -64,11 +64,31 @@ else
   fail "ingress-nginx controller rollout did not complete within 60s"
 fi
 
-if kubectl -n metallb-system get ipaddresspool -o name 2>/dev/null | grep -q .; then
-  pass "MetalLB IPAddressPool exists"
+if [ -n "$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)" ]; then
+  pass "ingress-nginx-controller has a LoadBalancer ingress IP"
 else
-  fail "MetalLB IPAddressPool missing — LoadBalancer services cannot be assigned IPs"
+  fail "ingress-nginx-controller has no .status.loadBalancer.ingress[0].ip — LB provider did not assign an IP"
 fi
+
+case "${LB:-cpk}" in
+  cpk)
+    if docker ps --filter name=cloud-provider-kind --format '{{.Status}}' | grep -q '^Up'; then
+      pass "cloud-provider-kind container is Up"
+    else
+      fail "cloud-provider-kind container is not Up"
+    fi
+    ;;
+  metallb)
+    if kubectl -n metallb-system get ipaddresspool -o name 2>/dev/null | grep -q .; then
+      pass "MetalLB IPAddressPool exists"
+    else
+      fail "MetalLB IPAddressPool missing — LoadBalancer services cannot be assigned IPs"
+    fi
+    ;;
+  *)
+    fail "unknown LB provider '${LB}'"
+    ;;
+esac
 
 # --- Demo workload assertions (body-asserting) ---
 check_curl   "demo.localdev.me ingress" "http://${INGRESS_IP}/" "It works!" -H "Host: demo.localdev.me"

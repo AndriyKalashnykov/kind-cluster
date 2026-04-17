@@ -13,7 +13,7 @@ System_Boundary(host, "Host or Multipass VM") {
     Container(worker, "worker node", "kindest/node v1.35.0", "Pod runtime")
 
     Container(ingress, "ingress-nginx", "Helm chart", "L7 routing; pinned to control-plane via nodeSelector")
-    Container(lb, "MetalLB", "Helm chart, L2 mode", "Allocates LoadBalancer IPs from the docker bridge subnet")
+    Container(lb, "cloud-provider-kind", "docker container on kind network", "Allocates LoadBalancer IPs (primary; MetalLB alternative via LB=metallb)")
     Container(metrics, "metrics-server", "manifest", "Serves metrics.k8s.io for kubectl top / HPA")
     Container(dash, "Kubernetes Dashboard", "Helm chart v7.x, Kong proxy", "https://localhost:8443 via port-forward")
     ContainerDb(nfs, "NFS server + csi-driver-nfs", "in-cluster pod or host NFS", "ReadWriteMany PVCs")

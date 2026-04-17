@@ -13,7 +13,7 @@ if kind get clusters | grep -q '^kind$'; then
     echo "Switching context to kind ..."
     kubectl config use-context kind-kind
 else
-    KIND_ARGS=(--config=./k8s/kind-config.yaml --name kind --wait 10s)
+    KIND_ARGS=(--config=./k8s/kind-config.yaml --name kind --wait 60s)
     if [ -n "${KIND_NODE_IMAGE:-}" ]; then
         KIND_ARGS+=(--image="$KIND_NODE_IMAGE")
     fi

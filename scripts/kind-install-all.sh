@@ -6,6 +6,17 @@ cd "$SCRIPT_DIR/.." || exit 1
 
 INSTALL_DEMO_WORKLOADS=${1:-yes}
 
+LB=${LB:-cpk}
+LB=$(echo "$LB" | tr '[:upper:]' '[:lower:]')
+case "$LB" in
+    cpk|metallb) ;;
+    *)
+        echo "ERROR: unknown LB provider '$LB' (expected 'cpk' or 'metallb')"
+        exit 1
+        ;;
+esac
+echo "Selected LoadBalancer: $LB"
+
 
 ./scripts/kind-create.sh
 
@@ -15,7 +26,11 @@ INSTALL_DEMO_WORKLOADS=${1:-yes}
 
 ./scripts/kind-add-ingress-nginx.sh
 
-./scripts/kind-add-metallb.sh
+if [ "$LB" = "cpk" ]; then
+    ./scripts/kind-add-cloud-provider-kind.sh
+else
+    ./scripts/kind-add-metallb.sh
+fi
 
 
 # case insensitive comparison

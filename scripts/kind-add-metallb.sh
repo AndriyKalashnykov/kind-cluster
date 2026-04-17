@@ -4,6 +4,13 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+if docker ps --filter name=cloud-provider-kind --format '{{.Names}}' | grep -qx cloud-provider-kind; then
+    echo "ERROR: cloud-provider-kind container is running."
+    echo "MetalLB and cloud-provider-kind cannot coexist. Remove CPK first:"
+    echo "  docker rm -f cloud-provider-kind"
+    exit 1
+fi
+
 # renovate: datasource=github-releases depName=metallb/metallb
 METALLB_VERSION=v0.15.3
 

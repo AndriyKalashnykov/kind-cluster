@@ -1,62 +1,24 @@
-name: CI
+name: E2E (MetalLB)
 
 on:
+  schedule:
+    - cron: '0 4 * * 0'  # Sunday 04:00 UTC
+  workflow_dispatch:
   push:
     branches: [main]
-    tags: ['v*']
-    paths-ignore:
-      - '**.md'
-      - '!CLAUDE.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.gitignore'
-  pull_request:
-    paths-ignore:
-      - '**.md'
-      - '!CLAUDE.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.gitignore'
-  workflow_call:
+    paths:
+      - 'scripts/kind-add-metallb.sh'
+      - '.github/workflows/e2e-metallb.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: e2e-metallb-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  static-check:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-        with:
-          install: true
-          cache: true
-
-      - name: Static check
-        run: make static-check
-
-  docker:
-    needs: [static-check]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Build image
-        run: make image-test
-
-  e2e:
-    needs: [static-check]
+  e2e-metallb:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -95,11 +57,8 @@ jobs:
       - name: Install Nginx ingress
         run: ./scripts/kind-add-ingress-nginx.sh
 
-      - name: Install cloud-provider-kind
-        # CPK runs as a host docker container bound to the `kind` network and
-        # `docker.sock`. Image version pinned in Makefile (CLOUD_PROVIDER_KIND_VERSION,
-        # Renovate-tracked). MetalLB path covered by weekly e2e-metallb.yml.
-        run: ./scripts/kind-add-cloud-provider-kind.sh
+      - name: Install MetalLB
+        run: ./scripts/kind-add-metallb.sh
 
       - name: Install metrics-server
         run: ./scripts/kind-add-metrics-server.sh
@@ -120,6 +79,8 @@ jobs:
         run: ./scripts/kind-deploy-app-foo-bar-service.sh
 
       - name: Smoke test
+        env:
+          LB: metallb
         run: make e2e
 
       - name: Idempotency check (re-run deploy scripts)
@@ -127,16 +88,3 @@ jobs:
           ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
           ./scripts/kind-deploy-app-helloweb.sh
           ./scripts/kind-deploy-app-foo-bar-service.sh
-
-  ci-pass:
-    needs: [static-check, docker, e2e]
-    if: always()
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Verify all jobs passed
-        run: |
-          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
-            echo "One or more upstream jobs failed."
-            exit 1
-          fi
-          echo "All CI jobs passed."

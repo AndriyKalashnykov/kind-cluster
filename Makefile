@@ -20,6 +20,9 @@ PLANTUML_VERSION := 1.2026.2
 KUBECTL_VERSION := v1.35.1
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
 KIND_NODE_IMAGE := kindest/node:v1.35.0
+# renovate: datasource=docker depName=registry.k8s.io/cloud-provider-kind/cloud-controller-manager
+CLOUD_PROVIDER_KIND_VERSION := v0.10.0
+export CLOUD_PROVIDER_KIND_VERSION
 # catthehacker/ubuntu tags use loose `act-YY.MM` format (Ubuntu LTS cadence);
 # bumps require also updating runs-on in .github/workflows/*.yml.
 # renovate: datasource=docker depName=catthehacker/ubuntu versioning=loose
@@ -156,11 +159,11 @@ ci-run: deps-tools deps-docker
 			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
 	done
 
-#install-all: @ Install all (kind k8s cluster, Nginx ingress, MetalLB, demo workloads)
+#install-all: @ Install all (kind cluster, Nginx ingress, cloud-provider-kind LoadBalancer, demo workloads; override with LB=metallb)
 install-all: deps
 	@./scripts/kind-install-all.sh yes
 
-#install-all-no-demo-workloads: @ Install all (kind k8s cluster, Nginx ingress, MetalLB)
+#install-all-no-demo-workloads: @ Install all (kind cluster, Nginx ingress, cloud-provider-kind LoadBalancer; override with LB=metallb)
 install-all-no-demo-workloads: deps
 	@./scripts/kind-install-all.sh no
 
@@ -169,6 +172,10 @@ kind-up: install-all
 
 #kind-down: @ docker-compose-style alias for delete-cluster (tear the whole stack down)
 kind-down: delete-cluster
+
+#lb-cpk: @ Install cloud-provider-kind (primary LoadBalancer — alternative: 'make lb-metallb')
+lb-cpk: deps-docker
+	@./scripts/kind-add-cloud-provider-kind.sh
 
 #create-cluster: @ Create k8s cluster (pinned to KIND_NODE_IMAGE)
 create-cluster: deps
@@ -197,8 +204,8 @@ k8s-dashboard: dashboard-install
 nginx-ingress: deps
 	@./scripts/kind-add-ingress-nginx.sh
 
-#metallb: @ Install MetalLB load balancer
-metallb: deps
+#lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
+lb-metallb: deps
 	@./scripts/kind-add-metallb.sh
 
 #metrics-server: @ Install metrics-server for kubectl top / HPA
@@ -291,8 +298,8 @@ clean:
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
 	lint secrets trivy-fs trivy-config mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
-	create-cluster export-cert k8s-dashboard dashboard-install \
-	dashboard-forward dashboard-token nginx-ingress metallb \
+	lb-cpk lb-metallb create-cluster export-cert k8s-dashboard dashboard-install \
+	dashboard-forward dashboard-token nginx-ingress \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
