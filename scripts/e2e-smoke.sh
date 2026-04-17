@@ -93,10 +93,15 @@ case "${LB:-cpk}" in
 esac
 
 # --- Demo workload assertions (body-asserting, all through ingress) ---
-check_curl   "demo.localdev.me"    "http://${INGRESS_IP}/"             "It works!"      -H "Host: demo.localdev.me"
-check_curl   "helloweb.localdev.me" "http://${INGRESS_IP}/"            "Hello, world!"  -H "Host: helloweb.localdev.me"
-check_status "golang /healthz"     "http://${INGRESS_IP}/healthz"                       -H "Host: golang.localdev.me"
-check_status "golang /myhello/"    "http://${INGRESS_IP}/myhello/"                      -H "Host: golang.localdev.me"
+# K2 guard: every assertion checks body content distinctive to the real backend,
+# NOT just status. Nginx-ingress's default backend answers `/healthz` with 200
+# regardless of Host — a plain status check would pass even when the Host-to-
+# service route is broken. Body strings used below only appear when the request
+# actually reached the intended backend pod.
+check_curl   "demo.localdev.me"       "http://${INGRESS_IP}/"           "It works!"      -H "Host: demo.localdev.me"
+check_curl   "helloweb.localdev.me"   "http://${INGRESS_IP}/"           "Hello, world!"  -H "Host: helloweb.localdev.me"
+check_curl   "golang.localdev.me /healthz"  "http://${INGRESS_IP}/healthz"  '"health":"ok"'  -H "Host: golang.localdev.me"
+check_curl   "golang.localdev.me /myhello/" "http://${INGRESS_IP}/myhello/" "Hello, World"   -H "Host: golang.localdev.me"
 # foo-service load-balances across foo-app and bar-app deployments (shared selector
 # `app: http-echo`); accept either body.
 if body=$(docker exec "$KIND_NODE" curl -sf --max-time 10 -H "Host: foo.localdev.me" "http://${INGRESS_IP}/" 2>/dev/null) \

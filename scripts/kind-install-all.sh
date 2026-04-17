@@ -48,7 +48,14 @@ if [[ $INSTALL_DEMO_WORKLOADS == yes ]]; then
     # `make e2e` immediately after install-all doesn't race the controller.
     echo "applying demo-apps ingress rules"
     kubectl apply -f ./k8s/demo-apps-ingress.yaml
-    kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
-        --timeout=60s ingress/demo-apps
+    # Kind's ingress-nginx uses --publish-status-address=localhost, so the
+    # controller fills .status.loadBalancer.ingress[0].hostname, not .ip.
+    # Poll for any field being non-empty on the first array element.
+    for _ in $(seq 1 60); do
+        [ -n "$(kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' 2>/dev/null)" ] && break
+        sleep 1
+    done
+    kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' | grep -q . \
+        || { echo "ERROR: demo-apps ingress did not propagate after 60s"; kubectl get ingress/demo-apps -o yaml; exit 1; }
 fi
 
