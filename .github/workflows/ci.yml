@@ -98,8 +98,10 @@ jobs:
       - name: Install cloud-provider-kind
         # CPK runs as a host docker container bound to the `kind` network and
         # `docker.sock`. Image version pinned in Makefile (CLOUD_PROVIDER_KIND_VERSION,
-        # Renovate-tracked). MetalLB path covered by weekly e2e-metallb.yml.
-        run: ./scripts/kind-add-cloud-provider-kind.sh
+        # Renovate-tracked), exported via Makefile. Invoke via `make lb-cpk` so the
+        # env var is set — the script itself hard-requires the var, no fallback.
+        # MetalLB path covered by weekly e2e-metallb.yml.
+        run: make lb-cpk
 
       - name: Install metrics-server
         run: ./scripts/kind-add-metrics-server.sh

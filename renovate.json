@@ -38,6 +38,14 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( extractVersion=(?<extractVersion>\\S+))?( registryUrl=(?<registryUrl>\\S+))?( versioning=(?<versioning>\\S+))?\\s*\\n[ \\t]*[A-Z_]+=(?<currentValue>\\S+)"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update Dockerfile ARG default values via inline renovate comments",
+      "managerFilePatterns": ["/Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( versioning=(?<versioning>\\S+))?\\s*\\nARG\\s+[A-Z_]+=(?<currentValue>\\S+)"
+      ]
     }
   ],
   "vulnerabilityAlerts": {
