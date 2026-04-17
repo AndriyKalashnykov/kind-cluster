@@ -131,10 +131,12 @@ An NFS server runs as a pod inside the cluster. [csi-driver-nfs](https://github.
 
 ```mermaid
 flowchart LR
-    A[app pod] -->|RWX PVC<br/>storageClassName: nfs-csi| SC[StorageClass<br/>nfs-csi]
-    SC --> CSI[csi-driver-nfs<br/>kube-system]
-    CSI -->|NFSv4.1| NS[nfs-server pod<br/>namespace: nfs-server]
-    NS --> ED[(emptyDir<br/>ephemeral)]
+    subgraph cluster[kind cluster]
+        A[app pod] -->|RWX PVC<br/>storageClassName: nfs-csi| SC[StorageClass<br/>nfs-csi]
+        SC --> CSI[csi-driver-nfs<br/>kube-system]
+        CSI -->|NFSv4.1| NS[nfs-server pod<br/>namespace: nfs-server]
+        NS --> ED[(emptyDir<br/>ephemeral)]
+    end
 ```
 
 ```bash
@@ -146,23 +148,35 @@ Pinned versions: `csi-driver-nfs` v4.13.1. Source: `scripts/kind-add-nfs-inclust
 
 ### Option 2 — host-side NFS (persistent across cluster recreates)
 
-The **host machine** runs `nfs-kernel-server` and exports a directory; the same `csi-driver-nfs` used by Option 1 provisions PVs backed by that host export. Data survives cluster teardown — useful when you want state to outlive `kind-down`. Requires sudo on the host and only works on Linux.
+The **host machine** (your laptop) runs `nfs-kernel-server` as a system service; the same `csi-driver-nfs` used by Option 1 is installed into the cluster but configured to mount exports **from the host** instead of from an in-cluster pod. Data lives on your host disk — it survives `make kind-down`. Requires sudo and works only on Linux.
+
+Both commands run from your laptop shell (no SSH, no VM login). The split is **what each command modifies**:
+
+- `make nfs-host-setup` modifies your **laptop OS** — `apt install nfs-kernel-server`, edits `/etc/exports`, opens the firewall, starts the systemd service. Interactive sudo.
+- `make nfs-host-provisioner` reaches the **cluster** via kubectl — `helm install csi-driver-nfs` + a `StorageClass` pointing at your laptop's IP.
 
 ```mermaid
 flowchart LR
-    A[app pod] -->|RWX PVC<br/>storageClassName: nfs-host| SC[StorageClass<br/>nfs-host]
-    SC --> CSI[csi-driver-nfs<br/>kube-system]
-    CSI -.NFSv4.-> HOST[host NFS server<br/>/srv/k8s_nfs_storage]
-    HOST --> DISK[(host disk<br/>persistent)]
+    subgraph cluster[kind cluster]
+        A[app pod] -->|RWX PVC<br/>storageClassName: nfs-host| SC[StorageClass<br/>nfs-host]
+        SC --> CSI[csi-driver-nfs<br/>kube-system]
+    end
+    subgraph host[Your laptop — host OS, sudo-managed]
+        NFS[nfs-kernel-server<br/>systemd]
+        DISK[("/srv/k8s_nfs_storage")]
+    end
+    CSI -.NFSv4 over TCP.-> NFS
+    NFS --> DISK
 ```
 
 ```bash
-# 1. Host-side: install nfs-kernel-server, create export, open firewall (interactive sudo)
+# Step 1 — laptop: install nfs-kernel-server, create export, open firewall (interactive sudo)
 make nfs-host-setup
 
-# 2. In-cluster: install csi-driver-nfs + StorageClass pointing at the host (replace NFS_SERVER with your host IP)
+# Step 2 — cluster (via kubectl from the same laptop shell):
+#          install csi-driver-nfs + StorageClass, point it at your laptop's IP
 make nfs-host-provisioner NFS_SERVER=192.168.1.27
-kubectl apply -f ./k8s/nfs/pvc.yaml             # sample RWX PVC
+kubectl apply -f ./k8s/nfs/pvc.yaml             # sample RWX PVC; binds via the nfs-host StorageClass
 ```
 
 Option 1 and Option 2 differ only in backend: `csi-driver-nfs` is installed once, and you pick a StorageClass (`nfs-csi` for in-cluster, `nfs-host` for host-backed). Sources: `scripts/kind-add-nfs-host-setup.sh`, `scripts/kind-add-nfs-host-provisioner.sh`.
