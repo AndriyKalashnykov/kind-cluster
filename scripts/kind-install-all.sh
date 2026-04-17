@@ -43,7 +43,12 @@ if [[ $INSTALL_DEMO_WORKLOADS == yes ]]; then
     # Bundled ingress rules for helloweb / golang / foo (the demo-localhost
     # ingress for httpd is created by kind-deploy-app-nginx-ingress-localhost.sh).
     # Applied after the services exist so ingress-nginx can resolve its backends.
+    # The wait blocks until ingress-nginx populates .status.loadBalancer —
+    # i.e. until nginx.conf reload picks up the new rules — so anyone running
+    # `make e2e` immediately after install-all doesn't race the controller.
     echo "applying demo-apps ingress rules"
     kubectl apply -f ./k8s/demo-apps-ingress.yaml
+    kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+        --timeout=60s ingress/demo-apps
 fi
 

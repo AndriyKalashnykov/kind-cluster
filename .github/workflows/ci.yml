@@ -125,7 +125,17 @@ jobs:
         # *.localdev.me virtual hosts. `kind-install-all.sh` applies this
         # too, but CI invokes the deploy scripts directly, so the ingress
         # file needs its own explicit step here (and in e2e-metallb.yml).
-        run: kubectl apply -f k8s/demo-apps-ingress.yaml
+        #
+        # `kubectl apply` returns after etcd commit; ingress-nginx needs
+        # additional time to watch the resource, reload nginx.conf, and
+        # populate .status.loadBalancer. Block until that happens so smoke
+        # tests don't race the controller — previously passed locally then
+        # failed in CI because the human delay between install and test
+        # closed the race on laptops but not on runners.
+        run: |
+          kubectl apply -f k8s/demo-apps-ingress.yaml
+          kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+            --timeout=60s ingress/demo-apps
 
       - name: Smoke test
         run: make e2e

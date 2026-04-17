@@ -81,8 +81,13 @@ jobs:
       - name: Apply demo-apps ingress rules
         # Subdomain-based routing for helloweb / golang / foo. See ci.yml
         # for the same step — bundled ingress file must be applied after
-        # Services exist but before smoke test runs.
-        run: kubectl apply -f k8s/demo-apps-ingress.yaml
+        # Services exist but before smoke test runs, plus a wait for
+        # ingress-nginx to propagate the rules (avoids a race that passed
+        # on laptops but failed on runners).
+        run: |
+          kubectl apply -f k8s/demo-apps-ingress.yaml
+          kubectl wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+            --timeout=60s ingress/demo-apps
 
       - name: Smoke test
         env:
