@@ -119,6 +119,14 @@ jobs:
       - name: Deploy foo-bar-service
         run: ./scripts/kind-deploy-app-foo-bar-service.sh
 
+      - name: Apply demo-apps ingress rules
+        # Subdomain-based routing for helloweb / golang / foo. Services
+        # above are ClusterIP; ingress-nginx fronts them via
+        # *.localdev.me virtual hosts. `kind-install-all.sh` applies this
+        # too, but CI invokes the deploy scripts directly, so the ingress
+        # file needs its own explicit step here (and in e2e-metallb.yml).
+        run: kubectl apply -f k8s/demo-apps-ingress.yaml
+
       - name: Smoke test
         run: make e2e
 

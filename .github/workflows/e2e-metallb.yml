@@ -78,6 +78,12 @@ jobs:
       - name: Deploy foo-bar-service
         run: ./scripts/kind-deploy-app-foo-bar-service.sh
 
+      - name: Apply demo-apps ingress rules
+        # Subdomain-based routing for helloweb / golang / foo. See ci.yml
+        # for the same step — bundled ingress file must be applied after
+        # Services exist but before smoke test runs.
+        run: kubectl apply -f k8s/demo-apps-ingress.yaml
+
       - name: Smoke test
         env:
           LB: metallb
