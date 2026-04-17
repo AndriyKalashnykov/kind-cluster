@@ -15,7 +15,7 @@ fi
 # Image pin — kept in sync with k8s/foo-bar-deployment.yaml via Renovate's
 # docker-image grouping rule in renovate.json.
 # renovate: datasource=docker depName=hashicorp/http-echo
-HTTP_ECHO_VERSION=0.2.3
+HTTP_ECHO_VERSION=1.0.0
 IMAGE=hashicorp/http-echo:${HTTP_ECHO_VERSION}
 
 # Force single-platform pull — avoids kind#3795 where a multi-arch manifest list
