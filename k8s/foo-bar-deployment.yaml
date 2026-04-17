@@ -65,7 +65,7 @@ apiVersion: v1
 metadata:
   name: foo-service
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: http-echo
   ports:

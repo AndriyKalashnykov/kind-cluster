@@ -95,7 +95,7 @@ metadata:
   labels:
     app: golang-hello-world-web
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
     # port=available to other containers
     - port: 8080

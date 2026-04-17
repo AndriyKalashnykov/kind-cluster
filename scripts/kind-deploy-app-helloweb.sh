@@ -29,18 +29,7 @@ kubectl apply -f ./k8s/helloweb-deployment.yaml
 
 echo "waiting for helloweb pods"
 kubectl wait deployment -n default helloweb --for condition=Available=True --timeout="${TIMEOUT}"
-
-# https://stackoverflow.com/questions/70108499/kubectl-wait-for-service-on-aws-eks-to-expose-elastic-load-balancer-elb-addres/70108500#70108500
-echo "waiting for helloweb service to get External-IP"
-for _ in $(seq 1 90); do
-    kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
-    sleep 2
-done
-kubectl get service/helloweb -n default --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: helloweb did not get an External-IP after 180s"; kubectl get svc helloweb; exit 1; }
-
-service_ip=$(kubectl get services helloweb -n default -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
-# MetalLB IPs are only reachable from inside the kind Docker bridge network.
-KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
-docker exec "${KIND_NODE}" curl -s --max-time 10 "http://${service_ip}:80" \
-  || echo "(curl http://${service_ip}:80 via ${KIND_NODE} failed)"
+# Service is ClusterIP — exposed to the host through ingress-nginx via the
+# demo-apps Ingress (k8s/demo-apps-ingress.yaml, applied by kind-install-all.sh).
+# Reach it at http://helloweb.localdev.me/ after adding the host to /etc/hosts.
 

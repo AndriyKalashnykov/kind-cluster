@@ -239,6 +239,18 @@ Override `NAME` to target a specific VM: `make vm-down NAME=my-kind`.
 
 This section applies to **both** install paths — `make kind-up` (cluster runs in host Docker) and `make vm-install-all` (cluster runs inside a Multipass VM). Pick your path below; the rest of the section uses shell variables that are populated by commands you can copy-paste, so no `<LB_IP>`-style hand-editing.
 
+### Access patterns
+
+Three patterns map to three needs — the stack uses each where it fits:
+
+| Pattern | What | Used by |
+|---|---|---|
+| **Ingress** | one L7 gateway (ingress-nginx) fronts every HTTP demo, routed by Host header | `demo.localdev.me`, `helloweb.localdev.me`, `golang.localdev.me`, `foo.localdev.me` |
+| **LoadBalancer** | the LB provider (cloud-provider-kind or MetalLB) allocates ONE external IP — for the ingress controller — plus a distinct IP for Grafana (persistent admin UI) | ingress-nginx-controller, Grafana |
+| **Port-forward** | `kubectl port-forward` from your terminal to an in-cluster Service; ephemeral, admin-only | Kubernetes Dashboard, Prometheus, Alertmanager |
+
+All HTTP demo apps use **ingress**. Step 2–4 below set up one LB IP plus one `/etc/hosts` entry that covers every demo app.
+
 ### Step 1 — point `kubectl` at the cluster
 
 Define a `kube` shell function that both paths use identically. A function (rather than a variable holding a multi-word command) works in both **bash** and **zsh** — zsh doesn't word-split unquoted `$VAR` references, so `KUBECTL="multipass exec … -- kubectl"; $KUBECTL get svc` fails there.
@@ -256,110 +268,99 @@ echo "NAME=$NAME  VM_IP=$VM_IP"
 
 From here on, every `kubectl` command is written as `kube …` so both paths run the same snippets.
 
-### Step 2 — discover the LoadBalancer IPs
+### Step 2 — discover the ingress IP
+
+Only ingress-nginx gets a LoadBalancer IP now (demo apps are ClusterIP services behind ingress). Grab it once:
 
 ```bash
 INGRESS_IP=$(kube get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-HELLOWEB_IP=$(kube get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-GOLANG_IP=$(kube get svc golang-hello-world-web-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-FOO_IP=$(kube get svc foo-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "INGRESS_IP=$INGRESS_IP  HELLOWEB_IP=$HELLOWEB_IP  GOLANG_IP=$GOLANG_IP  FOO_IP=$FOO_IP"
+echo "INGRESS_IP=$INGRESS_IP"
 ```
 
-### Step 3 — make the IPs reachable from your host
+### Step 3 — add the demo hostnames to `/etc/hosts`
 
-**Path A (bare host).** The LoadBalancer IPs live on your laptop's `kind` docker bridge and are already reachable. Skip to Step 4.
+All four demo apps are reached by hostname under `demo.localdev.me`, `helloweb.localdev.me`, `golang.localdev.me`, `foo.localdev.me`. Pick the target based on install path:
 
-**Path B (Multipass VM).** The IPs live on the VM's internal docker bridge and are **not routable from your host by default**. Pick one of the two approaches:
-
-#### Path B · Option 1 — SSH tunnel per service (no sudo, works everywhere)
-
-`multipass launch` does not inject your host SSH key, so do this once per VM:
+**Path A (bare host) and Path B · Option 1 — point them at `127.0.0.1`.** `kind-config.yaml`'s `extraPortMappings` already wires `127.0.0.1:80` to the kind control-plane node (where ingress-nginx is pinned via `ingress-ready`), so host-side ingress traffic works without touching any LB IP:
 
 ```bash
-# [HOST] — authorize your key in the VM (idempotent; adjust the key path if needed)
+# Idempotent — replace any existing *.localdev.me entries
+sudo sed -i.bak '/\.localdev\.me/d' /etc/hosts
+echo "127.0.0.1 demo.localdev.me helloweb.localdev.me golang.localdev.me foo.localdev.me" | sudo tee -a /etc/hosts
+```
+
+**Path A**: skip to Step 4.
+
+**Path B · Option 1 — SSH tunnel to the VM's ingress port.** One tunnel for all four hostnames (they all resolve to the ingress):
+
+```bash
+# One-time: authorize your host key in the VM (multipass launch does not inject it)
 PUBKEY=$(cat ~/.ssh/id_ed25519.pub)
 multipass exec "$NAME" -- bash -c "mkdir -p /home/ubuntu/.ssh && grep -qxF '$PUBKEY' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || echo '$PUBKEY' >> /home/ubuntu/.ssh/authorized_keys && chown -R ubuntu:ubuntu /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chmod 600 /home/ubuntu/.ssh/authorized_keys"
+
+# Forward host port 80 → VM's kind hostPort 80 (needs sudo for <1024).
+sudo ssh -fN -L 80:127.0.0.1:80 ubuntu@"$VM_IP"
 ```
 
-Open one tunnel per service. The host URL becomes `http://localhost:<local-port>`:
+If you don't want sudo, tunnel to a non-privileged port and append `:8080` to every URL:
 
 ```bash
-ssh -fN -L 8080:"$INGRESS_IP":80  ubuntu@"$VM_IP"   # ingress (use with demo.localdev.me below)
-ssh -fN -L 8081:"$HELLOWEB_IP":80 ubuntu@"$VM_IP"   # helloweb
-ssh -fN -L 8082:"$GOLANG_IP":8080 ubuntu@"$VM_IP"   # golang-hello-world-web
-ssh -fN -L 8083:"$FOO_IP":5678    ubuntu@"$VM_IP"   # foo-bar-service
-
-# one-time: resolve the demo hostname to the tunnel endpoint
-echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts
+ssh -fN -L 8080:127.0.0.1:80 ubuntu@"$VM_IP"
+# Then http://helloweb.localdev.me:8080/ , http://foo.localdev.me:8080/ , etc.
 ```
 
-With Option 1 the URLs change: replace `$INGRESS_IP`/`$HELLOWEB_IP`/`$GOLANG_IP`/`$FOO_IP` with `localhost:8080`/`localhost:8081`/`localhost:8082`/`localhost:8083` when hitting them from the browser. Kill tunnels with `pkill -f "ssh.*-L.*$VM_IP"`.
+Kill tunnels with `pkill -f "ssh.*-L.*$VM_IP"`.
 
-#### Path B · Option 2 — Static route to the kind subnet (Linux/macOS, sudo once, natural URLs)
+**Path B · Option 2 — Static route to the kind subnet (Linux/macOS, sudo once, no port suffix).**
 
-Route the VM's kind docker subnet through the VM. After this, the LoadBalancer IPs are reachable directly from your host — the URLs in Step 4 work unchanged in your browser.
+Route to the VM's kind docker subnet + allow DOCKER-USER forwards, then point `/etc/hosts` at `$INGRESS_IP` instead of `127.0.0.1`:
 
 ```bash
 # [HOST] — discover the kind IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
 KIND_NET=$(multipass exec "$NAME" -- bash -lc "docker network inspect kind | jq -r '.[0].IPAM.Config[] | select(.Subnet | test(\"^[0-9]+\\\\.\")) | .Subnet' | head -1")
 
-# [VM] — Docker installs a default `FORWARD DROP` policy that blocks packets
-# routed from your host through the VM into the kind bridge. Allow the kind
-# subnet explicitly in DOCKER-USER (Docker runs this chain before its own
-# isolation rules).
+# [VM] — Docker installs a default `FORWARD DROP` policy; allow the kind subnet.
 multipass exec "$NAME" -- sudo iptables -I DOCKER-USER -s "$KIND_NET" -j ACCEPT
 multipass exec "$NAME" -- sudo iptables -I DOCKER-USER -d "$KIND_NET" -j ACCEPT
 
-# [HOST] — add the static route
+# [HOST] — static route
 sudo ip route add "$KIND_NET" via "$VM_IP"                             # Linux
 # sudo route -n add -net "$KIND_NET" "$VM_IP"                          # macOS
 
-# [HOST] — point demo.localdev.me at the ingress LB IP. If you also ran
-# Quick Start (which mapped it to 127.0.0.1), remove that entry first
-# so resolution doesn't pick the wrong IP.
-sudo sed -i.bak '/demo\.localdev\.me/d' /etc/hosts
-echo "$INGRESS_IP demo.localdev.me" | sudo tee -a /etc/hosts
+# [HOST] — repoint /etc/hosts from 127.0.0.1 to $INGRESS_IP
+sudo sed -i.bak '/\.localdev\.me/d' /etc/hosts
+echo "$INGRESS_IP demo.localdev.me helloweb.localdev.me golang.localdev.me foo.localdev.me" | sudo tee -a /etc/hosts
 ```
 
-Clean up when you're done:
+Cleanup when you're done:
 
 ```bash
 sudo ip route del "$KIND_NET"                                          # Linux
 # sudo route -n delete -net "$KIND_NET"                                # macOS
-sudo sed -i.bak '/demo\.localdev\.me/d' /etc/hosts
-# DOCKER-USER rules go away with the VM; no cleanup needed if you'll `make vm-down`.
+sudo sed -i.bak '/\.localdev\.me/d' /etc/hosts
+# DOCKER-USER rules go away with the VM.
 ```
 
 Caveat: routes are kernel-wide and collide if another tool on your host already uses `172.18.0.0/16` (e.g., local Docker Desktop). If so, recreate the VM with a different docker bridge subnet or stick with Option 1.
 
 ### Step 4 — hit the URLs
 
-With `$INGRESS_IP`/`$HELLOWEB_IP`/`$GOLANG_IP`/`$FOO_IP` in scope and `/etc/hosts` updated, these commands work verbatim from your host shell:
+All four demo apps go through ingress. Same URLs on all paths (Path B · Option 1 adds `:8080` if you chose the no-sudo tunnel):
 
 ```bash
-# Path A (bare host) and Path B · Option 2 — direct LB IPs
-curl "http://$HELLOWEB_IP/"
-curl "http://$GOLANG_IP:8080/myhello/"
-curl "http://$GOLANG_IP:8080/healthz"
-curl "http://$FOO_IP:5678/"
-curl "http://demo.localdev.me/"
-
-# Path B · Option 1 — SSH tunnels: swap LB IPs for localhost:<local-port>
-curl "http://localhost:8081/"
-curl "http://localhost:8082/myhello/"
-curl "http://localhost:8083/"
-curl -H 'Host: demo.localdev.me' "http://localhost:8080/"
+curl http://demo.localdev.me/              # "It works!"  (httpd)
+curl http://helloweb.localdev.me/          # "Hello, world!"  (Google hello-app)
+curl http://golang.localdev.me/myhello/    # golang-web
+curl http://golang.localdev.me/healthz     # golang-web health
+curl http://foo.localdev.me/               # "foo" or "bar"  (http-echo; Service load-balances)
 ```
 
-Or paste the URLs directly into your browser:
-
-| Service | Path A (bare host) / Path B · Option 2 | Path B · Option 1 (SSH tunnel) |
-|---------|----------------------------------------|--------------------------------|
-| ingress (httpd via `demo.localdev.me`) | `http://demo.localdev.me/` | `http://demo.localdev.me:8080/` |
-| helloweb | `http://$HELLOWEB_IP/` | `http://localhost:8081/` |
-| golang-hello-world-web | `http://$GOLANG_IP:8080/myhello/` · `/healthz` | `http://localhost:8082/myhello/` · `/healthz` |
-| foo-bar-service | `http://$FOO_IP:5678/` | `http://localhost:8083/` |
+| Service | URL |
+|---|---|
+| ingress demo (httpd) | `http://demo.localdev.me/` |
+| helloweb | `http://helloweb.localdev.me/` |
+| golang-hello-world-web | `http://golang.localdev.me/myhello/` · `/healthz` |
+| foo-bar-service | `http://foo.localdev.me/` |
 
 ### Kubernetes Dashboard
 

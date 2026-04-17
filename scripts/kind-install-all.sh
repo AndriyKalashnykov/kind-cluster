@@ -40,5 +40,10 @@ if [[ $INSTALL_DEMO_WORKLOADS == yes ]]; then
     ./scripts/kind-deploy-app-helloweb.sh
     ./scripts/kind-deploy-app-golang-hello-world-web.sh
     ./scripts/kind-deploy-app-foo-bar-service.sh
+    # Bundled ingress rules for helloweb / golang / foo (the demo-localhost
+    # ingress for httpd is created by kind-deploy-app-nginx-ingress-localhost.sh).
+    # Applied after the services exist so ingress-nginx can resolve its backends.
+    echo "applying demo-apps ingress rules"
+    kubectl apply -f ./k8s/demo-apps-ingress.yaml
 fi
 

@@ -1,0 +1,44 @@
+# Bundled ingress for all demo apps. One ingress-nginx-controller LoadBalancer
+# IP fronts every HTTP demo — mirrors how prod clusters route user traffic
+# through one L7 gateway instead of allocating a distinct LB per service.
+#
+# Subdomain-based routing (vs path-based) — each app sees its own root path,
+# no rewrite annotations needed. Resolves via /etc/hosts pointing every
+# *.localdev.me host at 127.0.0.1 (or the ingress LB IP in VM Path B).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-apps
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: helloweb.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: helloweb
+                port:
+                  number: 80
+    - host: golang.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: golang-hello-world-web-service
+                port:
+                  number: 8080
+    - host: foo.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: foo-service
+                port:
+                  number: 5678

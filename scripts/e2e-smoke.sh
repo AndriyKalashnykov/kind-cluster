@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Smoke-test deployed demo services. Assumes install-all has already been run
-# (KinD cluster, ingress-nginx, MetalLB, demo apps).
+# (KinD cluster, ingress-nginx, LoadBalancer provider, demo apps).
+#
+# All HTTP demo apps (httpd, helloweb, golang, foo) are reached through
+# ingress-nginx's LoadBalancer IP with a Host header — the LB provider
+# (cloud-provider-kind or MetalLB) allocates exactly ONE IP for the ingress
+# controller, which fronts every demo app by virtual-host routing.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,9 +13,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 KIND_NODE="${KIND_NODE:-kind-control-plane}"
 
 INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-HELLOWEB_IP=$(kubectl get svc helloweb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-GOLANG_IP=$(kubectl get svc golang-hello-world-web-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-FOO_IP=$(kubectl get svc foo-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 PASS=0
 FAIL=0
@@ -90,18 +92,18 @@ case "${LB:-cpk}" in
     ;;
 esac
 
-# --- Demo workload assertions (body-asserting) ---
-check_curl   "demo.localdev.me ingress" "http://${INGRESS_IP}/" "It works!" -H "Host: demo.localdev.me"
-check_curl   "helloweb"                 "http://${HELLOWEB_IP}/" "Hello, world!"
-check_status "golang /healthz"          "http://${GOLANG_IP}:8080/healthz"
-check_status "golang /myhello/"         "http://${GOLANG_IP}:8080/myhello/"
+# --- Demo workload assertions (body-asserting, all through ingress) ---
+check_curl   "demo.localdev.me"    "http://${INGRESS_IP}/"             "It works!"      -H "Host: demo.localdev.me"
+check_curl   "helloweb.localdev.me" "http://${INGRESS_IP}/"            "Hello, world!"  -H "Host: helloweb.localdev.me"
+check_status "golang /healthz"     "http://${INGRESS_IP}/healthz"                       -H "Host: golang.localdev.me"
+check_status "golang /myhello/"    "http://${INGRESS_IP}/myhello/"                      -H "Host: golang.localdev.me"
 # foo-service load-balances across foo-app and bar-app deployments (shared selector
 # `app: http-echo`); accept either body.
-if body=$(docker exec "$KIND_NODE" curl -sf --max-time 10 "http://${FOO_IP}:5678/" 2>/dev/null) \
+if body=$(docker exec "$KIND_NODE" curl -sf --max-time 10 -H "Host: foo.localdev.me" "http://${INGRESS_IP}/" 2>/dev/null) \
     && [[ "$body" =~ ^(foo|bar)$ ]]; then
-  pass "foo-service — body matches foo|bar (got '$body')"
+  pass "foo.localdev.me — body matches foo|bar (got '$body')"
 else
-  fail "foo-service — unexpected body: $(echo "${body:-<none>}" | head -c 120)"
+  fail "foo.localdev.me — unexpected body: $(echo "${body:-<none>}" | head -c 120)"
 fi
 
 # --- Negative case: unknown Host on ingress should NOT match the demo route ---
