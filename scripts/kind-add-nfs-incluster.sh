@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
 # renovate: datasource=github-releases depName=kubernetes-csi/csi-driver-nfs
-CSI_DRIVER_NFS_VERSION=v4.13.1
+CSI_DRIVER_NFS_VERSION=v4.13.2
 
 NS_DRIVER=kube-system
 NS_SERVER=nfs-server
