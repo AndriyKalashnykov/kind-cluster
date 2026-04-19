@@ -6,7 +6,7 @@
 "aqua:koalaman/shellcheck"  = "0.11.0"
 "aqua:rhysd/actionlint"     = "1.7.12"
 "aqua:gitleaks/gitleaks"    = "8.30.1"
-"aqua:aquasecurity/trivy"   = "0.69.3"
+"aqua:aquasecurity/trivy"   = "0.70.0"
 "aqua:hadolint/hadolint"    = "2.14.0"
 "aqua:nektos/act"           = "0.2.87"
 "aqua:jqlang/jq"            = "1.8.1"
