@@ -13,7 +13,7 @@ export PATH := $(HOME)/.local/share/mise/shims:$(HOME)/.local/bin:$(PATH)
 # dual-use pin (KUBECTL_VERSION also feeds images/Dockerfile as a --build-arg,
 # so it lives here AND in .mise.toml — keep them in sync).
 # renovate: datasource=docker depName=minlag/mermaid-cli
-MERMAID_CLI_VERSION := 11.12.0
+MERMAID_CLI_VERSION := 11.14.0
 # renovate: datasource=docker depName=plantuml/plantuml
 PLANTUML_VERSION := 1.2026.2
 # renovate: datasource=docker depName=ghcr.io/andriykalashnykov/puml2drawio
