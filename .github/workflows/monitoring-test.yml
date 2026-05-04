@@ -35,16 +35,55 @@ jobs:
       - name: Install dependencies
         run: make deps
 
-      - name: Bring up full stack (cluster + ingress + cloud-provider-kind + demo apps)
-        # `make install-all` runs scripts/kind-install-all.sh which also applies
-        # k8s/demo-apps-ingress.yaml, so demo.localdev.me is wired by the time
-        # the next step polls for route readiness.
-        run: make install-all
+      # Granular install — `make install-all` only covers cluster + dashboard +
+      # ingress + LB + demo apps; metrics-server and in-cluster NFS are NOT
+      # included there. Mirror ci.yml's e2e step sequence so `make e2e` (which
+      # asserts metrics-server APIService Available and NFS PVC bind) passes.
+      - name: Create cluster
+        run: make create-cluster
+
+      - name: Export certs
+        run: ./scripts/kind-export-cert.sh
+
+      - name: Install Kubernetes Dashboard
+        run: ./scripts/kind-add-dashboard.sh
+
+      - name: Install Nginx ingress
+        run: ./scripts/kind-add-ingress-nginx.sh
+
+      - name: Install cloud-provider-kind
+        run: make lb-cpk
+
+      - name: Install metrics-server
+        run: ./scripts/kind-add-metrics-server.sh
+
+      - name: Install in-cluster NFS
+        run: ./scripts/kind-add-nfs-incluster.sh
+
+      - name: Deploy ingress demo
+        run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+
+      - name: Deploy helloweb
+        run: ./scripts/kind-deploy-app-helloweb.sh
+
+      - name: Deploy golang-hello-world-web
+        run: ./scripts/kind-deploy-app-golang-hello-world-web.sh
+
+      - name: Deploy foo-bar-service
+        run: ./scripts/kind-deploy-app-foo-bar-service.sh
+
+      - name: Apply demo-apps ingress rules
+        run: |
+          kubectl apply -f k8s/demo-apps-ingress.yaml
+          for _ in $(seq 1 60); do
+            [ -n "$(kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' 2>/dev/null)" ] && break
+            sleep 1
+          done
+          kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' | grep -q . \
+            || { echo "ERROR: demo-apps ingress did not propagate after 60s"; kubectl get ingress/demo-apps -o yaml; exit 1; }
 
       - name: Wait for ingress route readiness
-        # K1.5 — same poll as ci.yml. cloud-provider-kind's per-Service
-        # kindccm-<hash> Envoy sidecar can take 5–60s after IP assignment to
-        # wire the data path.
+        # K1.5 — same poll as ci.yml.
         run: |
           INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           for i in $(seq 1 60); do

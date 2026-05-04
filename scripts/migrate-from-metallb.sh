@@ -17,6 +17,19 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# kind-add-cloud-provider-kind.sh requires CLOUD_PROVIDER_KIND_VERSION to be
+# exported (it's set + exported by `make lb-cpk` / `make install-all`). When
+# this script is invoked directly — by a user, or by scripts/e2e-migrate-smoke.sh
+# in CI — derive it from the Makefile so the downstream call doesn't fail.
+if [ -z "${CLOUD_PROVIDER_KIND_VERSION:-}" ]; then
+    CLOUD_PROVIDER_KIND_VERSION=$(awk '/^CLOUD_PROVIDER_KIND_VERSION[[:space:]]*[:?]?=/ { print $NF; exit }' Makefile)
+    if [ -z "$CLOUD_PROVIDER_KIND_VERSION" ]; then
+        echo "ERROR: could not derive CLOUD_PROVIDER_KIND_VERSION from Makefile"
+        exit 1
+    fi
+    export CLOUD_PROVIDER_KIND_VERSION
+fi
+
 if ! kubectl get ns metallb-system >/dev/null 2>&1; then
     echo "No metallb-system namespace found — nothing to migrate."
     echo "If you meant to install CPK on a fresh cluster, run: make lb-cpk"
