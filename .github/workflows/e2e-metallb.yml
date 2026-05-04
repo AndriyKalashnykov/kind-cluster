@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/kind-add-metallb.sh'
+      - 'scripts/migrate-from-metallb.sh'
+      - 'scripts/e2e-migrate-smoke.sh'
       - '.github/workflows/e2e-metallb.yml'
 
 permissions:
