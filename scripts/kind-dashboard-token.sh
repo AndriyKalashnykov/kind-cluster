@@ -5,6 +5,12 @@
 
 set -euo pipefail
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 NS=kubernetes-dashboard
 SA=admin-user
 SECRET=admin-user-token

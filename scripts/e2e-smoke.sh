@@ -12,6 +12,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 KIND_NODE="${KIND_NODE:-kind-control-plane}"
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 INGRESS_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 PASS=0
