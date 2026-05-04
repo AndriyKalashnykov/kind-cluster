@@ -4,6 +4,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 INSTALL_DEMO_WORKLOADS=${1:-yes}
 
 LB=${LB:-cpk}
@@ -47,15 +55,15 @@ if [[ $INSTALL_DEMO_WORKLOADS == yes ]]; then
     # i.e. until nginx.conf reload picks up the new rules — so anyone running
     # `make e2e` immediately after install-all doesn't race the controller.
     echo "applying demo-apps ingress rules"
-    kubectl apply -f ./k8s/demo-apps-ingress.yaml
+    "${KUBECTL[@]}" apply -f ./k8s/demo-apps-ingress.yaml
     # Kind's ingress-nginx uses --publish-status-address=localhost, so the
     # controller fills .status.loadBalancer.ingress[0].hostname, not .ip.
     # Poll for any field being non-empty on the first array element.
     for _ in $(seq 1 60); do
-        [ -n "$(kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' 2>/dev/null)" ] && break
+        [ -n "$("${KUBECTL[@]}" get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' 2>/dev/null)" ] && break
         sleep 1
     done
-    kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' | grep -q . \
-        || { echo "ERROR: demo-apps ingress did not propagate after 60s"; kubectl get ingress/demo-apps -o yaml; exit 1; }
+    "${KUBECTL[@]}" get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' | grep -q . \
+        || { echo "ERROR: demo-apps ingress did not propagate after 60s"; "${KUBECTL[@]}" get ingress/demo-apps -o yaml; exit 1; }
 fi
 

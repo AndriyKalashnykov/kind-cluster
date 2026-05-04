@@ -20,6 +20,12 @@ set -euo pipefail
 
 CLUSTER_NAME=${CLUSTER_NAME:-kind-registry}
 
+# Explicit context for the registry-wired cluster (separate from the default
+# `kind` cluster created by `make install-all`). This script and test-registry.sh
+# both pin to this context so a parallel KinD project can't silently switch
+# us to a different cluster mid-script.
+KUBECTL=(kubectl --context="kind-${CLUSTER_NAME}")
+
 # 1. Start the registry container if not already running.
 reg_name='kind-registry'
 reg_port='5001'
@@ -58,7 +64,7 @@ fi
 
 # 5. Document the local registry (enhancement kep-1755).
 # https://github.com/kubernetes/enhancements/tree/master/keps/sig-cluster-lifecycle/generic/1755-communicating-a-local-registry
-cat <<EOF | kubectl apply -f -
+cat <<EOF | "${KUBECTL[@]}" apply -f -
 apiVersion: v1
 kind: ConfigMap
 metadata:

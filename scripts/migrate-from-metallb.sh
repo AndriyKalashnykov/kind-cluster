@@ -17,6 +17,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 # kind-add-cloud-provider-kind.sh requires CLOUD_PROVIDER_KIND_VERSION to be
 # exported (it's set + exported by `make lb-cpk` / `make install-all`). When
 # this script is invoked directly — by a user, or by scripts/e2e-migrate-smoke.sh
@@ -30,7 +38,7 @@ if [ -z "${CLOUD_PROVIDER_KIND_VERSION:-}" ]; then
     export CLOUD_PROVIDER_KIND_VERSION
 fi
 
-if ! kubectl get ns metallb-system >/dev/null 2>&1; then
+if ! "${KUBECTL[@]}" get ns metallb-system >/dev/null 2>&1; then
     echo "No metallb-system namespace found — nothing to migrate."
     echo "If you meant to install CPK on a fresh cluster, run: make lb-cpk"
     exit 0
@@ -47,11 +55,11 @@ if docker ps --filter name=cloud-provider-kind --format '{{.Names}}' | grep -qx 
 fi
 
 echo "Step 1/4: Removing MetalLB IPAddressPool / L2Advertisement CRs..."
-kubectl delete -A ipaddresspools.metallb.io --all --ignore-not-found
-kubectl delete -A l2advertisements.metallb.io --all --ignore-not-found
+"${KUBECTL[@]}" delete -A ipaddresspools.metallb.io --all --ignore-not-found
+"${KUBECTL[@]}" delete -A l2advertisements.metallb.io --all --ignore-not-found
 
 echo "Step 2/4: Deleting the metallb-system namespace (takes the controller + speaker + CRDs with it)..."
-kubectl delete namespace metallb-system --ignore-not-found --timeout=120s
+"${KUBECTL[@]}" delete namespace metallb-system --ignore-not-found --timeout=120s
 
 echo "Step 3/4: Starting cloud-provider-kind..."
 ./scripts/kind-add-cloud-provider-kind.sh
@@ -65,8 +73,8 @@ while IFS= read -r svc; do
     ns=$(echo "$svc" | cut -d/ -f1)
     name=$(echo "$svc" | cut -d/ -f2)
     echo "  kicking $svc"
-    kubectl patch -n "$ns" svc "$name" --type=merge -p '{"spec":{"type":"ClusterIP"}}' >/dev/null
-    kubectl patch -n "$ns" svc "$name" --type=merge -p '{"spec":{"type":"LoadBalancer"}}' >/dev/null
-done < <(kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}')
+    "${KUBECTL[@]}" patch -n "$ns" svc "$name" --type=merge -p '{"spec":{"type":"ClusterIP"}}' >/dev/null
+    "${KUBECTL[@]}" patch -n "$ns" svc "$name" --type=merge -p '{"spec":{"type":"LoadBalancer"}}' >/dev/null
+done < <("${KUBECTL[@]}" get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}')
 
 echo "Migration complete. Verify with: kubectl get svc -A | grep LoadBalancer"

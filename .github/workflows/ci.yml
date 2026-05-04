@@ -94,7 +94,7 @@ jobs:
         run: make deps
 
       - name: Create cluster
-        run: make create-cluster
+        run: make kind-create
 
       - name: Show cluster info
         run: |
@@ -187,7 +187,7 @@ jobs:
           exit 1
 
       - name: Smoke test
-        run: make e2e
+        run: make e2e-smoke
 
       - name: Verify deploy idempotency
         run: |

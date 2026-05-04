@@ -18,7 +18,7 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 | Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.1 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
-| CI | GitHub Actions | `make deps` + `make create-cluster` — same Makefile path users hit locally; CI verifies install scripts on every push |
+| CI | GitHub Actions | `make deps` + `make kind-create` — same Makefile path users hit locally; CI verifies install scripts on every push |
 
 ## Quick Start
 
@@ -66,6 +66,8 @@ Renovate's native `mise` manager keeps `.mise.toml` up to date (platform automer
 
 ## Architecture
 
+### Container View
+
 <img src="docs/diagrams/out/c4-container.png" alt="Container View — kind-cluster" width="900">
 
 Source: [`docs/diagrams/c4-container.puml`](./docs/diagrams/c4-container.puml). Render with `make diagrams` (uses pinned `plantuml/plantuml` Docker image).
@@ -75,6 +77,18 @@ The cluster runs entirely on the local Docker bridge. The LoadBalancer provider 
 Ingress is pinned to the control-plane node (via the `ingress-ready` nodeSelector label). `kind-config.yaml` maps host ports 80/443 to that node, so `http://demo.localdev.me/` resolves through the host port — independent of which LoadBalancer provider is active.
 
 The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
+
+### Deployment View
+
+<img src="docs/diagrams/out/c4-deployment.png" alt="Deployment View — kind-cluster" width="900">
+
+Source: [`docs/diagrams/c4-deployment.puml`](./docs/diagrams/c4-deployment.puml).
+
+- **`kind-control-plane` node** — kindest/node container running kube-apiserver/etcd/scheduler plus ingress-nginx, kubernetes-dashboard, and metrics-server (the latter pinned to control-plane via nodeSelector for kind compat).
+- **`kind-worker` node** — runs application workloads (demo apps, in-cluster NFS server pod, kube-prometheus-stack).
+- **`cloud-provider-kind`** — host docker container watching `Service: LoadBalancer` on the kind docker network; allocates LB IPs from the kind subnet (172.18.0.0/16 by default).
+- **`kindccm-<hash>`** — per-Service Envoy sidecars spawned by cloud-provider-kind that route LB-IP traffic to backend pods. Cleaned up by `make kind-destroy` (failing to clean these up was the cause of the K1.5 "connection reset on first curl" flake — see `scripts/kind-delete.sh`).
+- **Developer access** — host port 80/443 forwards to ingress-nginx via `kind-config.yaml` extraPortMappings, so `http://*.localdev.me/` resolves through the kind host port without needing the LB IP. The LB IP route is also host-routable for direct-IP access.
 
 ### Which LoadBalancer?
 
@@ -484,7 +498,7 @@ make registry         # create cluster + registry container
 make registry-test    # pull hello-app, retag to localhost:5001, push, deploy, curl
 ```
 
-This is an **alternative** to the default `make install-all` flow — the registry cluster doesn't include ingress, a LoadBalancer provider, or the demo workloads. Useful for iterating on an image you're building locally. Tear down with `make delete-cluster` and remove the registry container with `docker rm -f kind-registry`.
+This is an **alternative** to the default `make install-all` flow — the registry cluster doesn't include ingress, a LoadBalancer provider, or the demo workloads. Useful for iterating on an image you're building locally. Tear down with `KIND_CLUSTER_NAME=kind-registry make kind-destroy` and remove the registry container with `docker rm -f kind-registry`.
 
 ## Available Make Targets
 
@@ -496,10 +510,11 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Cluster | `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
 | Cluster | `make install-all` | cluster + Nginx ingress + LoadBalancer (CPK default, or `LB=metallb`) + demo workloads |
 | Cluster | `make install-all-no-demo-workloads` | same minus demo apps |
-| Cluster | `make create-cluster` | Create KinD cluster only |
-| Cluster | `make delete-cluster` | Delete KinD cluster only |
+| Cluster | `make kind-create` | Create KinD cluster only (alias: `make create-cluster`) |
+| Cluster | `make kind-destroy` | Delete KinD cluster + clean up cloud-provider-kind sidecars (alias: `make delete-cluster`) |
 | Cluster | `make export-cert` | Export k8s client keys and CA certificates |
-| Cluster | `make e2e` | Smoke-test deployed demo services on a running cluster |
+| Cluster | `make e2e` | Bring up the full stack and run smoke tests (chains `install-all` + `e2e-smoke`) |
+| Cluster | `make e2e-smoke` | Smoke-test an already-running cluster (no install) |
 | Cluster | `make clean` | Tear down cluster + remove scratch artifacts |
 | Add-ons | `make dashboard-install` | Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
 | Add-ons | `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
@@ -528,6 +543,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Quality | `make lint` | shellcheck + actionlint + hadolint + scripts-exec-bit check |
 | Quality | `make secrets` | gitleaks (suppressions: `.gitleaks.toml`) |
 | Quality | `make trivy-fs` | Trivy fs scan (vulns, secrets, misconfigs; CRITICAL/HIGH) |
+| Quality | `make vulncheck` | Alias for `trivy-fs` (portfolio-standard target name) |
 | Quality | `make trivy-config` | Trivy scan of `k8s/` manifests |
 | Quality | `make mermaid-lint` | validate mermaid blocks in tracked `*.md` files |
 | Quality | `make diagrams` | render PlantUML C4 diagrams (via pinned `plantuml/plantuml` image) |
@@ -545,19 +561,28 @@ Suppressions (intentional, justified inline):
 
 ## CI/CD
 
-`ci.yml` runs on every push to `main`, tags `v*`, and pull requests. A separate `e2e-metallb.yml` exercises the MetalLB path on a weekly cron (Sunday 04:00 UTC) plus pushes that touch `scripts/kind-add-metallb.sh`.
+`ci.yml` runs on every push to `main`, tags `v*`, and pull requests. Three sibling workflows run on weekly crons (plus `workflow_dispatch` and targeted `paths:` triggers): `e2e-metallb.yml`, `monitoring-test.yml`, `registry-test.yml`. The CI workflow short-circuits on doc-only changes via the `changes` paths-filter detector job — heavy jobs only run when source code or workflow YAML changed.
+
+### `ci.yml`
 
 | Job | Needs | Steps |
 |-----|-------|-------|
-| **static-check** | — | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
-| **docker** | static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
-| **e2e** | static-check | `jdx/mise-action` + `make deps` + `make create-cluster`, install ingress + cloud-provider-kind + dashboard, deploy all demo workloads, run `make e2e` for body-asserting smoke tests via `docker exec` (~4 min end-to-end) |
-| **e2e-metallb** | — | Mirrors `e2e` but installs MetalLB instead of cloud-provider-kind. Weekly cron (Sun 04:00 UTC) + `workflow_dispatch` + push to `scripts/kind-add-metallb.sh`. Catches MetalLB regressions without taxing every PR. |
-| **ci-pass** | static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
+| **changes** | — | `dorny/paths-filter` outputs `code=true` if anything outside docs/markdown/images changed; downstream jobs gate on it |
+| **static-check** | changes | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
+| **docker** | changes, static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
+| **e2e** | changes, static-check | `jdx/mise-action` + `make deps` + `make kind-create`, install ingress + cloud-provider-kind + dashboard, deploy all demo workloads, K1.5 route-readiness poll, run `make e2e-smoke` for body-asserting smoke tests via `docker exec` (~4 min end-to-end) |
+| **ci-pass** | changes, static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
 
-A separate `cleanup-runs.yml` workflow prunes old workflow runs on a weekly schedule (Sunday midnight).
+### Sibling workflows
 
-No repo secrets or variables are required by the workflow — only the default `GITHUB_TOKEN`.
+| Workflow | Schedule | Triggers also on push to | What it covers |
+|----------|----------|--------------------------|----------------|
+| `e2e-metallb.yml` | Sun 04:00 UTC | `scripts/kind-add-metallb.sh`, `scripts/migrate-from-metallb.sh`, `scripts/e2e-migrate-smoke.sh`, the workflow itself | Mirrors `ci.yml`'s e2e job but installs MetalLB instead of cloud-provider-kind. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the MetalLB → cloud-provider-kind migration path. |
+| `monitoring-test.yml` | Sun 05:00 UTC | `scripts/kind-add-kube-prometheus-stack.sh`, the workflow itself | Brings up the full stack via the granular install scripts, installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. |
+| `registry-test.yml` | Sun 06:00 UTC | `scripts/kind-with-registry.sh`, `scripts/test-registry.sh`, `k8s/helloweb-deployment-local.yaml`, the workflow itself | Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` — pull → retag → push → deploy → curl. |
+| `cleanup-runs.yml` | Sun 00:00 UTC | n/a | Prunes old workflow runs (keeps latest 5) and caches from closed PR branches. |
+
+No repo secrets or variables are required by any workflow — only the default `GITHUB_TOKEN`.
 
 [Renovate](https://docs.renovatebot.com/) keeps action digests, container images, `.mise.toml` pins (via the native `mise` manager), and Makefile / `scripts/*.sh` constants (via `# renovate:` inline comments) up to date with platform automerge enabled.
 

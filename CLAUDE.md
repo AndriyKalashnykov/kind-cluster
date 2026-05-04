@@ -28,11 +28,13 @@ vm/                   # Multipass cloud-init playbook
 
 ```bash
 make help                              # List all available targets
-make create-cluster                    # Create KinD cluster
+make kind-up                           # Alias for install-all (bring the whole stack up)
+make kind-create                       # Create KinD cluster only
 make install-all                       # Full install: cluster + ingress + cloud-provider-kind + demo apps
 make install-all-no-demo-workloads     # Cluster + ingress + cloud-provider-kind (no demo apps)
 LB=metallb make install-all            # Same as install-all but with MetalLB instead of cloud-provider-kind
-make delete-cluster                    # Tear down cluster
+make kind-down                         # Alias for kind-destroy (tear the whole stack down)
+make kind-destroy                      # Delete cluster + clean up cloud-provider-kind sidecars
 
 # LoadBalancer add-ons
 make lb-cpk                            # Install cloud-provider-kind (primary; already part of install-all)
@@ -55,7 +57,9 @@ make diagrams-check                    # Verify committed PNGs match docs/diagra
 make static-check                      # Composite: all of the above
 make ci                                # static-check + renovate-validate
 make ci-run                            # Run GitHub Actions workflow locally via act (skips e2e — see below)
-make e2e                               # Body-asserting smoke test on a running cluster
+make e2e                               # install-all + e2e-smoke (full pipeline; fresh-checkout convenience)
+make e2e-smoke                         # Body-asserting smoke test on a running cluster (no install)
+make vulncheck                         # Alias for trivy-fs (portfolio-standard target name)
 ```
 
 `make ci-run` only iterates `static-check` + `docker` jobs under `act`. The `e2e` and `e2e-metallb` jobs are skipped because KinD's Docker-in-Docker requirement is unstable under `act push`. Push to a feature branch and watch the real workflow when changing anything in the e2e path (deploy scripts, ingress wiring, K8s manifests).
@@ -88,7 +92,7 @@ No Go modules; no package manager lockfiles.
 ## Conventions and exceptions
 
 - **MetalLB is intentionally retained** as an alternative LoadBalancer alongside cloud-provider-kind (the portfolio default). cloud-provider-kind is wired as primary in `make install-all`; MetalLB is opt-in via `LB=metallb make install-all` or `make lb-metallb`. The weekly `e2e-metallb.yml` cron exercises the MetalLB code path. Migration helper: `scripts/migrate-from-metallb.sh`.
-- **Cluster name is hardcoded as `kind`** across all scripts (`kind create cluster --name kind`, `kubectl config use-context kind-kind`). Adding a `KIND_CLUSTER_NAME` Make variable + `kubectl --context=kind-$(KIND_CLUSTER_NAME)` plumbing into all scripts is a portfolio-wide convention worth adopting eventually; deferred because the change touches every script in `scripts/`. Until then, two `make` invocations from this repo and a sibling KinD project sharing `~/.kube/config` can race on `kubectl config use-context`. Workaround: run cluster lifecycle commands sequentially across projects.
+- **Cluster name is parameterized via `KIND_CLUSTER_NAME`** (defaults to `kind` for backward compat with existing tooling and docs that reference the `kind-kind` context). Every script defines `KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")` and uses `"${KUBECTL[@]}"` for all kubectl invocations — a parallel `make` invocation in another KinD project that runs `kubectl config use-context` cannot silently switch this project's scripts to the wrong cluster. Override per-project to coexist on a single host: `KIND_CLUSTER_NAME=foo make install-all`. The `kubectl config use-context` call in `kind-create.sh` is the only place the kubeconfig's current-context is mutated. Registry cluster (`scripts/kind-with-registry.sh`) uses its own `CLUSTER_NAME` (default `kind-registry`) for the same reason.
 - **`runs-on: ubuntu-24.04`** is the explicit pin (not `ubuntu-latest`) — avoids surprise migrations when GitHub flips the alias to a new LTS.
 - **Suppression files**: `.gitleaks.toml`, `.trivyignore.yaml`, `.hadolint.yaml` — each annotates the specific rule waivers inline.
 

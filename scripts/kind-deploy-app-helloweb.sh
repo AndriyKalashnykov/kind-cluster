@@ -4,6 +4,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 TIMEOUT=${1:-180s}
 
 if [ -z "$TIMEOUT" ]; then
@@ -25,10 +33,10 @@ docker pull --platform="$PLATFORM" "$IMAGE"
 kind load docker-image "$IMAGE"
 
 echo "deploying helloweb"
-kubectl apply -f ./k8s/helloweb-deployment.yaml
+"${KUBECTL[@]}" apply -f ./k8s/helloweb-deployment.yaml
 
 echo "waiting for helloweb pods"
-kubectl wait deployment -n default helloweb --for condition=Available=True --timeout="${TIMEOUT}"
+"${KUBECTL[@]}" wait deployment -n default helloweb --for condition=Available=True --timeout="${TIMEOUT}"
 # Service is ClusterIP — exposed to the host through ingress-nginx via the
 # demo-apps Ingress (k8s/demo-apps-ingress.yaml, applied by kind-install-all.sh).
 # Reach it at http://helloweb.localdev.me/ after adding the host to /etc/hosts.

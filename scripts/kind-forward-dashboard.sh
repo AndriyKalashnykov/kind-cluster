@@ -11,7 +11,7 @@ LOCAL_PORT=${1:-8443}
 NS=kubernetes-dashboard
 SVC=kubernetes-dashboard-kong-proxy
 
-if ! kubectl get svc "$SVC" -n "$NS" >/dev/null 2>&1; then
+if ! "${KUBECTL[@]}" get svc "$SVC" -n "$NS" >/dev/null 2>&1; then
     echo "Error: service $SVC not found in namespace $NS."
     echo "Run: make k8s-dashboard"
     exit 1
@@ -33,4 +33,4 @@ elif command -v open >/dev/null 2>&1; then
     (sleep 2 && open "https://localhost:${LOCAL_PORT}") &
 fi
 
-kubectl -n "$NS" port-forward "svc/${SVC}" "${LOCAL_PORT}:443"
+"${KUBECTL[@]}" -n "$NS" port-forward "svc/${SVC}" "${LOCAL_PORT}:443"

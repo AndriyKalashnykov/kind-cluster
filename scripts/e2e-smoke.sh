@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 KIND_NODE="${KIND_NODE:-kind-control-plane}"
 
-INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+INGRESS_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 PASS=0
 FAIL=0
@@ -60,13 +60,13 @@ check_status_code() {
 echo "=== E2E smoke tests ==="
 
 # --- Cluster infrastructure: readiness of ingress controller and MetalLB ---
-if kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=60s >/dev/null 2>&1; then
+if "${KUBECTL[@]}" -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=60s >/dev/null 2>&1; then
   pass "ingress-nginx controller deployment is rolled out"
 else
   fail "ingress-nginx controller rollout did not complete within 60s"
 fi
 
-if [ -n "$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)" ]; then
+if [ -n "$("${KUBECTL[@]}" -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)" ]; then
   pass "ingress-nginx-controller has a LoadBalancer ingress IP"
 else
   fail "ingress-nginx-controller has no .status.loadBalancer.ingress[0].ip — LB provider did not assign an IP"
@@ -81,7 +81,7 @@ case "${LB:-cpk}" in
     fi
     ;;
   metallb)
-    if kubectl -n metallb-system get ipaddresspool -o name 2>/dev/null | grep -q .; then
+    if "${KUBECTL[@]}" -n metallb-system get ipaddresspool -o name 2>/dev/null | grep -q .; then
       pass "MetalLB IPAddressPool exists"
     else
       fail "MetalLB IPAddressPool missing — LoadBalancer services cannot be assigned IPs"
@@ -144,14 +144,14 @@ else
 fi
 
 # --- Metrics-server API: APIService should be Available and serve nodes ---
-if kubectl get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null | grep -q '^True$'; then
+if "${KUBECTL[@]}" get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null | grep -q '^True$'; then
   pass "metrics.k8s.io APIService is Available"
 else
   fail "metrics.k8s.io APIService is not Available"
 fi
 # kubectl top nodes can take ~30s after install before metrics are populated
 if for _ in $(seq 1 12); do
-     out=$(kubectl top nodes 2>/dev/null) && [ "$(echo "$out" | wc -l)" -ge 2 ] && break
+     out=$("${KUBECTL[@]}" top nodes 2>/dev/null) && [ "$(echo "$out" | wc -l)" -ge 2 ] && break
      sleep 5
    done && [ "$(echo "$out" | wc -l)" -ge 2 ]; then
   pass "kubectl top nodes returns >=1 row"
@@ -160,13 +160,13 @@ else
 fi
 
 # --- NFS CSI provisioner: PVC should bind ---
-kubectl apply -f "$REPO_ROOT/k8s/nfs/pvc-incluster.yaml" >/dev/null
-if kubectl wait pvc/demo-claim-incluster --for=jsonpath='{.status.phase}'=Bound --timeout=120s >/dev/null 2>&1; then
+"${KUBECTL[@]}" apply -f "$REPO_ROOT/k8s/nfs/pvc-incluster.yaml" >/dev/null
+if "${KUBECTL[@]}" wait pvc/demo-claim-incluster --for=jsonpath='{.status.phase}'=Bound --timeout=120s >/dev/null 2>&1; then
   pass "NFS PVC demo-claim-incluster bound"
 else
   fail "NFS PVC demo-claim-incluster did not bind within 120s"
 fi
-kubectl delete pvc demo-claim-incluster --ignore-not-found --wait=false >/dev/null 2>&1 || true
+"${KUBECTL[@]}" delete pvc demo-claim-incluster --ignore-not-found --wait=false >/dev/null 2>&1 || true
 
 # --- kube-prometheus-stack (opt-in via TEST_MONITORING=yes) ---
 # Off by default because install-all does NOT include kube-prometheus-stack;
@@ -174,13 +174,13 @@ kubectl delete pvc demo-claim-incluster --ignore-not-found --wait=false >/dev/nu
 # TEST_MONITORING=yes here. Skipping silently when off keeps `make e2e` cheap
 # on the default install-all path.
 if [ "${TEST_MONITORING:-no}" = "yes" ]; then
-  if kubectl get ns monitoring >/dev/null 2>&1; then
+  if "${KUBECTL[@]}" get ns monitoring >/dev/null 2>&1; then
     pass "monitoring namespace exists"
   else
     fail "monitoring namespace missing — run 'make kube-prometheus-stack' before TEST_MONITORING=yes make e2e"
   fi
 
-  if kubectl get svc -n monitoring kube-prometheus-stack-grafana >/dev/null 2>&1; then
+  if "${KUBECTL[@]}" get svc -n monitoring kube-prometheus-stack-grafana >/dev/null 2>&1; then
     pass "kube-prometheus-stack-grafana Service exists"
   else
     fail "kube-prometheus-stack-grafana Service missing"
@@ -188,7 +188,7 @@ if [ "${TEST_MONITORING:-no}" = "yes" ]; then
 
   GRAFANA_IP=""
   for _ in $(seq 1 30); do
-    GRAFANA_IP=$(kubectl get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    GRAFANA_IP=$("${KUBECTL[@]}" get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
     [ -n "$GRAFANA_IP" ] && break
     sleep 2
   done
@@ -198,7 +198,7 @@ if [ "${TEST_MONITORING:-no}" = "yes" ]; then
     fail "Grafana Service did not get a LoadBalancer IP within 60s"
   fi
 
-  if [ -n "$(kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null)" ]; then
+  if [ -n "$("${KUBECTL[@]}" get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null)" ]; then
     pass "Grafana admin-password secret is present"
   else
     fail "Grafana admin-password secret missing"
@@ -206,7 +206,7 @@ if [ "${TEST_MONITORING:-no}" = "yes" ]; then
 
   # Prometheus is ClusterIP, accessed via port-forward — assert the API
   # surface works through `docker exec` (avoids racing with port-forward).
-  if kubectl -n monitoring rollout status statefulset/prometheus-kube-prometheus-stack-prometheus --timeout=60s >/dev/null 2>&1; then
+  if "${KUBECTL[@]}" -n monitoring rollout status statefulset/prometheus-kube-prometheus-stack-prometheus --timeout=60s >/dev/null 2>&1; then
     pass "Prometheus StatefulSet rolled out"
   else
     fail "Prometheus StatefulSet did not roll out within 60s"

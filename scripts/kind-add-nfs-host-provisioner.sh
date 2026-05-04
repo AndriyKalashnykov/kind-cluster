@@ -29,6 +29,14 @@ LAUNCH_DIR=$(pwd)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 NFS_SERVER=$1
 NFS_PATH=${2:-/srv/k8s_nfs_storage}
 
@@ -52,7 +60,7 @@ helm upgrade --install "$RELEASE" csi-driver-nfs/csi-driver-nfs \
 
 echo
 echo "=== Creating StorageClass '${SC_NAME}' pointing at ${NFS_SERVER}:${NFS_PATH} ==="
-cat <<EOF | kubectl apply -f -
+cat <<EOF | "${KUBECTL[@]}" apply -f -
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -70,7 +78,7 @@ mountOptions:
 EOF
 
 echo
-kubectl get sc "${SC_NAME}"
+"${KUBECTL[@]}" get sc "${SC_NAME}"
 echo
 echo "Ready. Create a RWX PVC with:  storageClassName: ${SC_NAME}"
 echo "Test with:  kubectl apply -f ./k8s/nfs/pvc.yaml"

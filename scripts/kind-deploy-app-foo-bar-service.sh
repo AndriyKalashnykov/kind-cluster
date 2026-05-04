@@ -4,6 +4,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 TIMEOUT=${1:-180s}
 
 if [ -z "$TIMEOUT" ]; then
@@ -25,10 +33,10 @@ docker pull --platform="$PLATFORM" "$IMAGE"
 kind load docker-image "$IMAGE"
 
 echo "deploying foo-bar-service"
-kubectl apply -f ./k8s/foo-bar-deployment.yaml
+"${KUBECTL[@]}" apply -f ./k8s/foo-bar-deployment.yaml
 
 echo "waiting for foo-bar-service pods"
-kubectl wait pods -n default -l app=http-echo --for condition=Ready --timeout="${TIMEOUT}"
+"${KUBECTL[@]}" wait pods -n default -l app=http-echo --for condition=Ready --timeout="${TIMEOUT}"
 # Service is ClusterIP — exposed via ingress at http://foo.localdev.me/
 # (load-balances across foo-app and bar-app Deployments via the shared
 # `app: http-echo` selector). Ingress resource: k8s/demo-apps-ingress.yaml.

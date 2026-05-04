@@ -20,6 +20,14 @@ LAUNCH_DIR=$(pwd)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 # renovate: datasource=github-releases depName=kubernetes-csi/csi-driver-nfs
 CSI_DRIVER_NFS_VERSION=v4.13.2
 
@@ -38,15 +46,15 @@ helm upgrade --install "$RELEASE" csi-driver-nfs/csi-driver-nfs \
 
 echo
 echo "=== Deploying in-cluster NFS server (namespace: ${NS_SERVER}) ==="
-kubectl apply -f ./k8s/nfs/nfs-server.yaml
-kubectl -n "$NS_SERVER" rollout status deployment/nfs-server --timeout=3m
+"${KUBECTL[@]}" apply -f ./k8s/nfs/nfs-server.yaml
+"${KUBECTL[@]}" -n "$NS_SERVER" rollout status deployment/nfs-server --timeout=3m
 
 echo
 echo "=== Creating StorageClass 'nfs-csi' pointing at in-cluster NFS server ==="
-kubectl apply -f ./k8s/nfs/nfs-storageclass-incluster.yaml
+"${KUBECTL[@]}" apply -f ./k8s/nfs/nfs-storageclass-incluster.yaml
 
 echo
-kubectl get sc nfs-csi
+"${KUBECTL[@]}" get sc nfs-csi
 echo
 echo "Ready. Create a RWX PVC with:  storageClassName: nfs-csi"
 echo "Test with:  kubectl apply -f ./k8s/nfs/pvc-incluster.yaml"

@@ -4,6 +4,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 
 # CPK (if present) must be removed BEFORE kind tears down the docker network —
 # otherwise CPK is left as a zombie container bound to a phantom network.
@@ -19,5 +20,4 @@ if [ -n "$KINDCCM" ]; then
     docker rm -f $KINDCCM >/dev/null 2>&1 || true
 fi
 
-kind delete cluster --name kind
-
+kind delete cluster --name "${KIND_CLUSTER_NAME}"

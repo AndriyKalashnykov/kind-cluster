@@ -1,0 +1,61 @@
+@startuml c4-deployment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/v2.11.0/C4_Deployment.puml
+
+' Modern flat styling: no shadows, sharper corners, clean sans-serif, modern palette.
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundCorner 4
+skinparam defaultFontName "Inter, Helvetica, Arial, sans-serif"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.2
+skinparam rectangleBorderThickness 1.3
+
+UpdateElementStyle("person",        $fontColor="#FFFFFF", $bgColor="#0F766E", $borderColor="#134E4A")
+UpdateElementStyle("container",     $fontColor="#FFFFFF", $bgColor="#2563EB", $borderColor="#1E3A8A")
+UpdateElementStyle("container_db",  $fontColor="#FFFFFF", $bgColor="#7C3AED", $borderColor="#4C1D95")
+UpdateElementStyle("node",          $fontColor="#1E293B", $bgColor="#F1F5F9", $borderColor="#94A3B8")
+UpdateBoundaryStyle($bgColor="#F1F5F9", $borderColor="#94A3B8", $fontColor="#1E293B")
+
+title Deployment View — kind-cluster
+
+Person(dev, "Developer", "Workstation shell")
+
+Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker") {
+  Deployment_Node(net, "Docker network: kind", "172.18.0.0/16 IPv4 bridge") {
+    Deployment_Node(cp, "kind-control-plane", "kindest/node container") {
+      Deployment_Node(kube, "kube-system + ingress-nginx + dashboard + metallb-system", "namespaces") {
+        Container(api, "kube-apiserver, etcd, scheduler, controller-manager", "control-plane components")
+        Container(ingress, "ingress-nginx-controller", "Helm release; pinned to control-plane via nodeSelector ingress-ready=true")
+        Container(metrics, "metrics-server", "manifest")
+        Container(dash, "kubernetes-dashboard + Kong proxy", "Helm release v7.x")
+      }
+    }
+    Deployment_Node(worker, "kind-worker", "kindest/node container") {
+      Deployment_Node(workload_ns, "default + nfs-server + monitoring", "namespaces") {
+        Container(apps, "Demo workloads", "httpd, hello-app, golang-web, http-echo")
+        ContainerDb(nfs, "nfs-server pod", "Pod with emptyDir backing /exports")
+        Container(prom, "kube-prometheus-stack", "Prometheus + Grafana + Alertmanager")
+      }
+    }
+    Container(cpk, "cloud-provider-kind", "Host docker container; watches Service: LoadBalancer; allocates IPs from kind subnet")
+    Container(cpk_sidecars, "kindccm-<hash>", "Per-Service Envoy sidecar; routes LB IP -> backend pods")
+  }
+}
+
+System_Ext(charts, "Helm chart repos", "ingress-nginx, kube-prometheus, dashboard, csi-driver-nfs")
+System_Ext(registries, "Container registries", "Docker Hub, GHCR, k8s.gcr.io")
+
+Rel(dev, ingress, "HTTP via Host: *.localdev.me", "127.0.0.1:80 hostPort")
+Rel(dev, cpk, "HTTP to LoadBalancer IP", "kind subnet, host-routable")
+Rel(api, ingress, "Schedules + tracks rollout")
+Rel(cpk, cpk_sidecars, "Spawns one per LoadBalancer Service")
+Rel(cpk_sidecars, apps, "Routes LB IP -> backend pods")
+Rel(ingress, apps, "Routes by Host header")
+Rel(prom, apps, "Scrapes /metrics", "HTTP")
+Rel(apps, nfs, "Mounts RWX PVCs (optional)", "NFSv4")
+Rel(api, charts, "helm install/upgrade pulls charts")
+Rel(api, registries, "Pulls workload images")
+
+SHOW_LEGEND()
+@enduml

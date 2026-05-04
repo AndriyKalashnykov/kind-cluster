@@ -40,7 +40,7 @@ jobs:
       # included there. Mirror ci.yml's e2e step sequence so `make e2e` (which
       # asserts metrics-server APIService Available and NFS PVC bind) passes.
       - name: Create cluster
-        run: make create-cluster
+        run: make kind-create
 
       - name: Export certs
         run: ./scripts/kind-export-cert.sh
@@ -104,4 +104,4 @@ jobs:
       - name: Smoke test (with monitoring assertions)
         env:
           TEST_MONITORING: yes
-        run: make e2e
+        run: make e2e-smoke

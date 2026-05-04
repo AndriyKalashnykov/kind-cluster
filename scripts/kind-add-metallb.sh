@@ -4,6 +4,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 if docker ps --filter name=cloud-provider-kind --format '{{.Names}}' | grep -qx cloud-provider-kind; then
     echo "ERROR: cloud-provider-kind container is running."
     echo "MetalLB and cloud-provider-kind cannot coexist. Remove CPK first:"
@@ -33,11 +41,11 @@ fi
 
 # On v0.13.4 and older
 echo "deploying metallb LoadBalancer"
-kubectl apply -f  https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml
+"${KUBECTL[@]}" apply -f  https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml
 
 # https://fabianlee.org/2022/01/27/kubernetes-using-kubectl-to-wait-for-condition-of-pods-deployments-services/
 echo "waiting for metallb"
-kubectl wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout="${TIMEOUT}"
+"${KUBECTL[@]}" wait pods -n metallb-system -l app=metallb --for condition=Ready --timeout="${TIMEOUT}"
 
 # get kind IP — pick the IPv4 subnet (modern Docker lists IPv6 first when dual-stack)
 echo "getting kind network IP"
@@ -54,7 +62,7 @@ echo "kind network /16 prefix: ${ip_subclass}"
 # https://github.com/metallb/metallb/issues/1473
 # On v0.13.4 and older
 echo "creating kind IPAddressPool and L2Advertisement"
-cat <<EOF | kubectl apply -f=-
+cat <<EOF | "${KUBECTL[@]}" apply -f=-
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:

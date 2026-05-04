@@ -18,6 +18,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 PASS=0
 FAIL=0
 pass() { echo "  ✓ PASS: $1"; PASS=$((PASS + 1)); }
@@ -26,7 +34,7 @@ fail() { echo "  ✗ FAIL: $1"; FAIL=$((FAIL + 1)); }
 echo "=== Migration smoke test (MetalLB → cloud-provider-kind) ==="
 
 # --- Pre-conditions ---
-if kubectl get ns metallb-system >/dev/null 2>&1; then
+if "${KUBECTL[@]}" get ns metallb-system >/dev/null 2>&1; then
   pass "metallb-system namespace present pre-migration"
 else
   fail "metallb-system namespace missing — caller must run 'LB=metallb make install-all' first"
@@ -34,7 +42,7 @@ else
   exit 1
 fi
 
-INITIAL_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+INITIAL_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
 if [ -n "$INITIAL_IP" ]; then
   pass "ingress-nginx had MetalLB-assigned IP pre-migration ($INITIAL_IP)"
 else
@@ -56,10 +64,10 @@ fi
 
 # Allow the ns up to 60s to finish Terminating (CRD finalizers can be slow)
 for _ in $(seq 1 30); do
-  kubectl get ns metallb-system >/dev/null 2>&1 || break
+  "${KUBECTL[@]}" get ns metallb-system >/dev/null 2>&1 || break
   sleep 2
 done
-if kubectl get ns metallb-system >/dev/null 2>&1; then
+if "${KUBECTL[@]}" get ns metallb-system >/dev/null 2>&1; then
   fail "metallb-system namespace still exists 60s after migration"
 else
   pass "metallb-system namespace removed"
@@ -68,7 +76,7 @@ fi
 # CPK re-allocates LB IPs after the kick. Wait for ingress to get a fresh one.
 NEW_IP=""
 for _ in $(seq 1 60); do
-  NEW_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+  NEW_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
   [ -n "$NEW_IP" ] && break
   sleep 2
 done
@@ -76,7 +84,7 @@ if [ -n "$NEW_IP" ]; then
   pass "ingress-nginx reassigned a LoadBalancer IP under CPK ($NEW_IP)"
 else
   fail "ingress-nginx did not get a LoadBalancer IP from CPK within 120s"
-  kubectl get svc -n ingress-nginx ingress-nginx-controller -o yaml || true
+  "${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o yaml || true
   echo "=== Results: $PASS passed, $FAIL failed ==="
   exit 1
 fi
@@ -93,7 +101,7 @@ for i in $(seq 1 60); do
 done
 if [ "$ROUTED" -ne 1 ]; then
   fail "demo.localdev.me did not respond through CPK within 120s"
-  kubectl -n ingress-nginx get pods -o wide || true
+  "${KUBECTL[@]}" -n ingress-nginx get pods -o wide || true
   docker ps --filter name=cloud-provider-kind --filter name=kindccm- --format 'table {{.Names}}\t{{.Status}}' || true
 fi
 

@@ -31,6 +31,22 @@ export CLOUD_PROVIDER_KIND_VERSION
 # renovate: datasource=docker depName=catthehacker/ubuntu versioning=loose
 ACT_UBUNTU_VERSION := act-24.04
 
+# Cluster identity. Defaults to `kind` for backward compat with existing
+# tooling and docs that reference the `kind-kind` context. Override per-project
+# with `KIND_CLUSTER_NAME=foo make ...` to coexist with another KinD project
+# on the same workstation. Exported so every downstream script sees it.
+KIND_CLUSTER_NAME ?= kind
+export KIND_CLUSTER_NAME
+
+# Every recipe and script call uses an explicit `--context=kind-$(KIND_CLUSTER_NAME)`
+# rather than bare `kubectl`. Bare `kubectl` follows the kubeconfig's
+# current-context, which a parallel `make` invocation in another KinD project
+# can flip out from under us via `kubectl config use-context` — the silent
+# multi-session race the skill warns about. Explicit context closes that gap:
+# kubectl errors out clearly if the context doesn't exist (no silent
+# wrong-cluster hits).
+KUBECTL := kubectl --context=kind-$(KIND_CLUSTER_NAME)
+
 #help: @ List available tasks
 help:
 	@echo "Usage: make COMMAND"
@@ -191,16 +207,19 @@ install-all-no-demo-workloads: deps
 #kind-up: @ docker-compose-style alias for install-all (bring the whole stack up)
 kind-up: install-all
 
-#kind-down: @ docker-compose-style alias for delete-cluster (tear the whole stack down)
-kind-down: delete-cluster
+#kind-down: @ docker-compose-style alias for kind-destroy (tear the whole stack down)
+kind-down: kind-destroy
 
 #lb-cpk: @ Install cloud-provider-kind (primary LoadBalancer — alternative: 'make lb-metallb')
 lb-cpk: deps-docker
 	@./scripts/kind-add-cloud-provider-kind.sh
 
-#create-cluster: @ Create k8s cluster (pinned to KIND_NODE_IMAGE)
-create-cluster: deps
+#kind-create: @ Create k8s cluster (pinned to KIND_NODE_IMAGE; cluster name = KIND_CLUSTER_NAME)
+kind-create: deps
 	@KIND_NODE_IMAGE=$(KIND_NODE_IMAGE) ./scripts/kind-create.sh
+
+#create-cluster: @ Alias for kind-create (backwards compatible)
+create-cluster: kind-create
 
 #export-cert: @ Export k8s keys (client) and certificates (client, cluster CA)
 export-cert: deps
@@ -303,27 +322,37 @@ vm-install-all: deps-multipass
 renovate-validate: deps-renovate
 	@npx --yes --package renovate -- renovate-config-validator
 
-#delete-cluster: @ Delete k8s cluster
-delete-cluster: deps
+#kind-destroy: @ Delete k8s cluster + clean up cloud-provider-kind sidecars
+kind-destroy: deps
 	@./scripts/kind-delete.sh
 
-#e2e: @ Smoke-test deployed services on a running cluster
-e2e: deps
+#delete-cluster: @ Alias for kind-destroy (backwards compatible)
+delete-cluster: kind-destroy
+
+#e2e: @ Bring up the full stack and run the body-asserting smoke test (fresh-checkout convenience)
+e2e: install-all e2e-smoke
+
+#e2e-smoke: @ Smoke-test deployed services on an already-running cluster (no install)
+e2e-smoke: deps
 	@./scripts/e2e-smoke.sh
+
+#vulncheck: @ Alias for trivy-fs (portfolio-standard target name)
+vulncheck: trivy-fs
 
 #clean: @ Tear down cluster and remove scratch artifacts
 clean:
 	@./scripts/kind-delete.sh 2>/dev/null || true
 
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
-	lint secrets trivy-fs trivy-config mermaid-lint static-check ci ci-run \
+	lint secrets trivy-fs trivy-config vulncheck mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
-	lb-cpk lb-metallb create-cluster export-cert k8s-dashboard dashboard-install \
-	dashboard-forward dashboard-token nginx-ingress \
+	lb-cpk lb-metallb kind-create create-cluster export-cert \
+	k8s-dashboard dashboard-install dashboard-forward dashboard-token nginx-ingress \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
-	image-build image-test registry registry-test renovate-validate delete-cluster \
-	e2e clean diagrams diagrams-check diagrams-clean diagrams-drawio \
+	image-build image-test registry registry-test renovate-validate \
+	kind-destroy delete-cluster \
+	e2e e2e-smoke clean diagrams diagrams-check diagrams-clean diagrams-drawio \
 	vm-up vm-down vm-ssh vm-install-all

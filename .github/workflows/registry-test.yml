@@ -52,5 +52,11 @@ jobs:
         run: make registry-test
 
       - name: Tear down
+        # `make registry` creates a separately-named cluster (`kind-registry`)
+        # via scripts/kind-with-registry.sh. The Makefile default
+        # KIND_CLUSTER_NAME=kind doesn't match — override here so kind-destroy
+        # tears down the right cluster.
         if: always()
-        run: make delete-cluster
+        env:
+          KIND_CLUSTER_NAME: kind-registry
+        run: make kind-destroy

@@ -4,6 +4,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 
 # https://medium.com/@charled.breteche/kind-fix-missing-prometheus-operator-targets-1a1ff5d8c8ad
 
@@ -16,24 +24,24 @@ kubeEtcd:
     targetPort: 2381
 EOF
 
-kubectl --namespace monitoring get pods -l "release=kube-prometheus-stack"
+"${KUBECTL[@]}" --namespace monitoring get pods -l "release=kube-prometheus-stack"
 
 echo "changing kube-prometheus-stack-grafana service type to LoadBlancer"
-kubectl patch svc kube-prometheus-stack-grafana -n monitoring --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
+"${KUBECTL[@]}" patch svc kube-prometheus-stack-grafana -n monitoring --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
 
 echo "waiting for kube-prometheus-stack-grafana service to get External-IP"
 for _ in $(seq 1 90); do
-    kubectl get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
+    "${KUBECTL[@]}" get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
     sleep 2
 done
-kubectl get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: grafana did not get an External-IP after 180s"; kubectl get svc -n monitoring kube-prometheus-stack-grafana; exit 1; }
+"${KUBECTL[@]}" get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: grafana did not get an External-IP after 180s"; "${KUBECTL[@]}" get svc -n monitoring kube-prometheus-stack-grafana; exit 1; }
 
 # User: admin
 # Pwd:  prom-operator
-echo -n "Grafana User: " && kubectl get secret kube-prometheus-stack-grafana -n monitoring -o jsonpath="{.data.admin-user}" | base64 --decode ; echo 
-echo -n "Grafana Pwd:  " && kubectl get secret kube-prometheus-stack-grafana -n monitoring -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+echo -n "Grafana User: " && "${KUBECTL[@]}" get secret kube-prometheus-stack-grafana -n monitoring -o jsonpath="{.data.admin-user}" | base64 --decode ; echo 
+echo -n "Grafana Pwd:  " && "${KUBECTL[@]}" get secret kube-prometheus-stack-grafana -n monitoring -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 
-service_ip=$(kubectl get services kube-prometheus-stack-grafana -n monitoring -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
+service_ip=$("${KUBECTL[@]}" get services kube-prometheus-stack-grafana -n monitoring -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
 echo "Grafana URL: ${service_ip}:80/"
 # xdg-open  ${service_ip}:80/
 

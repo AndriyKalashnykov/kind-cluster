@@ -4,6 +4,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# Use an explicit kubectl context so a parallel `make` invocation in
+# another KinD project (which may run `kubectl config use-context`)
+# cannot silently switch us to the wrong cluster mid-script. Default
+# is `kind` for backward compat with existing tooling that references
+# the `kind-kind` context.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 # CLOUD_PROVIDER_KIND_VERSION is pinned + exported by the Makefile where
 # Renovate tracks it via the inline `# renovate:` comment. Require it
 # here rather than duplicate the literal in two places (Makefile + script
@@ -18,7 +26,7 @@ cd "$SCRIPT_DIR/.." || exit 1
 # CPK runs as a host docker container on the 'kind' network, reads docker.sock,
 # and assigns LoadBalancer IPs to Services without needing MetalLB.
 
-if kubectl get ns metallb-system >/dev/null 2>&1; then
+if "${KUBECTL[@]}" get ns metallb-system >/dev/null 2>&1; then
     echo "ERROR: MetalLB is already installed (namespace 'metallb-system' exists)."
     echo "cloud-provider-kind and MetalLB cannot coexist. Remove MetalLB first:"
     echo "  kubectl delete ns metallb-system"
