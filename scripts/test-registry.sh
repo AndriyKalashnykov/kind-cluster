@@ -25,7 +25,7 @@ KUBECTL=(kubectl --context="kind-${CLUSTER_NAME}")
 # has a matching `localhost:5001/hello-app:<tag>` reference that must be kept in
 # sync by hand (Renovate can't reach `localhost:5001` to propose bumps there).
 # renovate: datasource=docker depName=gcr.io/google-samples/hello-app
-HELLO_APP_VERSION=1.0
+HELLO_APP_VERSION=2.0
 UPSTREAM=gcr.io/google-samples/hello-app:${HELLO_APP_VERSION}
 LOCAL=localhost:5001/hello-app:${HELLO_APP_VERSION}
 
