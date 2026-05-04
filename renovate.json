@@ -1,5 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "kind-cluster Renovate config. Two-part commit message convention:",
+    "`:semanticCommitType(chore)` (extends preset) sets the bare 'chore:' type.",
+    "`commitMessagePrefix: chore(all):` (below) overrides with a scope so commits read",
+    "'chore(all): update ...' for portfolio consistency. Both are required — the preset",
+    "alone produces 'chore: ...' (no scope), and `commitMessagePrefix` alone is treated",
+    "as a literal string prefix without semantic-commit grouping."
+  ],
   "extends": [
     "config:best-practices",
     ":semanticCommitType(chore)"
