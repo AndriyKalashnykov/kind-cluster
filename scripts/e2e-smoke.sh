@@ -168,6 +168,51 @@ else
 fi
 kubectl delete pvc demo-claim-incluster --ignore-not-found --wait=false >/dev/null 2>&1 || true
 
+# --- kube-prometheus-stack (opt-in via TEST_MONITORING=yes) ---
+# Off by default because install-all does NOT include kube-prometheus-stack;
+# weekly monitoring-test.yml runs `make kube-prometheus-stack` first then sets
+# TEST_MONITORING=yes here. Skipping silently when off keeps `make e2e` cheap
+# on the default install-all path.
+if [ "${TEST_MONITORING:-no}" = "yes" ]; then
+  if kubectl get ns monitoring >/dev/null 2>&1; then
+    pass "monitoring namespace exists"
+  else
+    fail "monitoring namespace missing — run 'make kube-prometheus-stack' before TEST_MONITORING=yes make e2e"
+  fi
+
+  if kubectl get svc -n monitoring kube-prometheus-stack-grafana >/dev/null 2>&1; then
+    pass "kube-prometheus-stack-grafana Service exists"
+  else
+    fail "kube-prometheus-stack-grafana Service missing"
+  fi
+
+  GRAFANA_IP=""
+  for _ in $(seq 1 30); do
+    GRAFANA_IP=$(kubectl get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [ -n "$GRAFANA_IP" ] && break
+    sleep 2
+  done
+  if [ -n "$GRAFANA_IP" ]; then
+    pass "Grafana Service has LoadBalancer ingress IP ($GRAFANA_IP)"
+  else
+    fail "Grafana Service did not get a LoadBalancer IP within 60s"
+  fi
+
+  if [ -n "$(kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null)" ]; then
+    pass "Grafana admin-password secret is present"
+  else
+    fail "Grafana admin-password secret missing"
+  fi
+
+  # Prometheus is ClusterIP, accessed via port-forward — assert the API
+  # surface works through `docker exec` (avoids racing with port-forward).
+  if kubectl -n monitoring rollout status statefulset/prometheus-kube-prometheus-stack-prometheus --timeout=60s >/dev/null 2>&1; then
+    pass "Prometheus StatefulSet rolled out"
+  else
+    fail "Prometheus StatefulSet did not roll out within 60s"
+  fi
+fi
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]

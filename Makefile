@@ -21,9 +21,10 @@ PUML2DRAWIO_VERSION := 1.0.1
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
 KUBECTL_VERSION := v1.36.0
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
+# renovate: datasource=docker depName=kindest/node
 KIND_NODE_IMAGE := kindest/node:v1.35.0
-# renovate: datasource=docker depName=registry.k8s.io/cloud-provider-kind/cloud-controller-manager
-CLOUD_PROVIDER_KIND_VERSION := v0.10.0
+# renovate: datasource=github-releases depName=kubernetes-sigs/cloud-provider-kind extractVersion=^v(?<version>.*)$
+CLOUD_PROVIDER_KIND_VERSION := 0.10.0
 export CLOUD_PROVIDER_KIND_VERSION
 # catthehacker/ubuntu tags use loose `act-YY.MM` format (Ubuntu LTS cadence);
 # bumps require also updating runs-on in .github/workflows/*.yml.
@@ -111,7 +112,7 @@ mermaid-lint: deps-tools deps-docker
 	for md in $$MD_FILES; do \
 		echo "Validating Mermaid blocks in $$md..."; \
 		LOG=$$(mktemp); \
-		if docker run --rm -v "$$PWD:/data" \
+		if docker run --rm -v "$$PWD:/data:ro" \
 			minlag/mermaid-cli:$(MERMAID_CLI_VERSION) \
 			-i "/data/$$md" -o "/tmp/$$(basename $$md .md).svg" >"$$LOG" 2>&1; then \
 			echo "  ✓ All blocks rendered cleanly."; \
@@ -313,7 +314,6 @@ e2e: deps
 #clean: @ Tear down cluster and remove scratch artifacts
 clean:
 	@./scripts/kind-delete.sh 2>/dev/null || true
-	@rm -rf /tmp/act-artifacts
 
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
 	lint secrets trivy-fs trivy-config mermaid-lint static-check ci ci-run \

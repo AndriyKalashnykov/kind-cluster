@@ -20,38 +20,6 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
 | CI | GitHub Actions | `make deps` + `make create-cluster` — same Makefile path users hit locally; CI verifies install scripts on every push |
 
-## Architecture
-
-<img src="docs/diagrams/out/c4-container.png" alt="Container View — kind-cluster" width="900">
-
-Source: [`docs/diagrams/c4-container.puml`](./docs/diagrams/c4-container.puml). Render with `make diagrams` (uses pinned `plantuml/plantuml` Docker image).
-
-The cluster runs entirely on the local Docker bridge. The LoadBalancer provider (cloud-provider-kind by default) hands out `Service: LoadBalancer` IPs from the bridge's IPv4 subnet, so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host.
-
-Ingress is pinned to the control-plane node (via the `ingress-ready` nodeSelector label). `kind-config.yaml` maps host ports 80/443 to that node, so `http://demo.localdev.me/` resolves through the host port — independent of which LoadBalancer provider is active.
-
-The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
-
-### Which LoadBalancer?
-
-The default is **cloud-provider-kind** (CPK). Simpler setup, kind-team maintained. Stick with it unless you have a specific reason to pick MetalLB.
-
-| | cloud-provider-kind (default) | MetalLB |
-|---|---|---|
-| Install form | host `docker run` on the `kind` network | in-cluster Deployment + DaemonSet + CRDs |
-| IP allocation | automatic from the `kind` Docker subnet | you declare an `IPAddressPool` range |
-| Maintenance | kind-team, single binary | independent release cadence |
-| When to pick | works for everything this repo deploys | you need BGP / L2Advertisement parity with prod, or want to reproduce a MetalLB-specific bug |
-
-Two entry points to MetalLB:
-
-```bash
-LB=metallb make install-all    # fresh cluster with MetalLB as the LB provider
-make lb-metallb                # already-running cluster, no LB yet — install MetalLB only
-```
-
-Switching providers on a live cluster requires tearing down the first one — each script hard-refuses if the other is present. Run `make kind-down && LB=<provider> make kind-up` for a clean reset.
-
 ## Quick Start
 
 ```bash
@@ -85,16 +53,48 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | Tool | Pinned version |
 |------|----------------|
 | [kind](https://kind.sigs.k8s.io/) | 0.31.0 |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.35.1 |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.0 |
 | [jq](https://github.com/jqlang/jq) | 1.8.1 |
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | 8.30.1 |
-| [trivy](https://github.com/aquasecurity/trivy) | 0.69.3 |
+| [trivy](https://github.com/aquasecurity/trivy) | 0.70.0 |
 | [hadolint](https://github.com/hadolint/hadolint) | 2.14.0 |
-| [act](https://github.com/nektos/act) | 0.2.87 |
+| [act](https://github.com/nektos/act) | 0.2.88 |
 
 Renovate's native `mise` manager keeps `.mise.toml` up to date (platform automerge enabled).
+
+## Architecture
+
+<img src="docs/diagrams/out/c4-container.png" alt="Container View — kind-cluster" width="900">
+
+Source: [`docs/diagrams/c4-container.puml`](./docs/diagrams/c4-container.puml). Render with `make diagrams` (uses pinned `plantuml/plantuml` Docker image).
+
+The cluster runs entirely on the local Docker bridge. The LoadBalancer provider (cloud-provider-kind by default) hands out `Service: LoadBalancer` IPs from the bridge's IPv4 subnet, so demo apps are reachable directly via `curl <LB_IP>:<port>` from the host.
+
+Ingress is pinned to the control-plane node (via the `ingress-ready` nodeSelector label). `kind-config.yaml` maps host ports 80/443 to that node, so `http://demo.localdev.me/` resolves through the host port — independent of which LoadBalancer provider is active.
+
+The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
+
+### Which LoadBalancer?
+
+The default is **cloud-provider-kind** (CPK). Simpler setup, kind-team maintained. Stick with it unless you have a specific reason to pick MetalLB.
+
+| | cloud-provider-kind (default) | MetalLB |
+|---|---|---|
+| Install form | host `docker run` on the `kind` network | in-cluster Deployment + DaemonSet + CRDs |
+| IP allocation | automatic from the `kind` Docker subnet | you declare an `IPAddressPool` range |
+| Maintenance | kind-team, single binary | independent release cadence |
+| When to pick | works for everything this repo deploys | you need BGP / L2Advertisement parity with prod, or want to reproduce a MetalLB-specific bug |
+
+Two entry points to MetalLB:
+
+```bash
+LB=metallb make install-all    # fresh cluster with MetalLB as the LB provider
+make lb-metallb                # already-running cluster, no LB yet — install MetalLB only
+```
+
+Switching providers on a live cluster requires tearing down the first one — each script hard-refuses if the other is present. Run `make kind-down && LB=<provider> make kind-up` for a clean reset.
 
 ## Kubernetes Dashboard install
 
@@ -215,7 +215,7 @@ flowchart LR
 
 Verify: `multipass version` should print a version string and the daemon should be reachable (`multipass list` returns a table, even if empty).
 
-Other install methods and troubleshooting: <https://multipass.run/install>.
+Other install methods and troubleshooting: [multipass.run/install](https://multipass.run/install).
 
 ### 2. Launch the VM
 
@@ -229,7 +229,7 @@ First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docke
 
 The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
 
-1. Installs Docker CE, KinD v0.31.0, kubectl v1.35.1, helm v4.1.4
+1. Installs Docker CE, KinD v0.31.0, kubectl v1.36.0, helm v4.1.4
 2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
 3. Clones this repo to `/home/ubuntu/kind-cluster`
 4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.

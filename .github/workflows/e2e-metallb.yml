@@ -1,4 +1,4 @@
-name: E2E (MetalLB)
+name: MetalLB E2E
 
 on:
   schedule:
@@ -32,11 +32,12 @@ jobs:
           install: true
           cache: true
 
-      - name: Verify runtime deps (docker, helm, curl, base64)
-        # Versions for kind/kubectl/jq/etc come from .mise.toml (Renovate-tracked
-        # via the mise manager). KIND_NODE_IMAGE is still pinned in Makefile.
-        # Avoids helm/kind-action's auto-teardown which flaked on Docker daemon
-        # "did not receive an exit event" errors at job-end.
+      - name: Install dependencies
+        # docker, helm, curl, base64 — versions for kind/kubectl/jq/etc come from
+        # .mise.toml (Renovate-tracked via the mise manager); KIND_NODE_IMAGE is
+        # still pinned in Makefile. Avoids helm/kind-action's auto-teardown
+        # which flaked on Docker daemon "did not receive an exit event" errors
+        # at job-end.
         run: make deps
 
       - name: Create cluster
@@ -95,13 +96,42 @@ jobs:
           kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' | grep -q . \
             || { echo "ERROR: demo-apps ingress did not propagate after 60s"; kubectl get ingress/demo-apps -o yaml; exit 1; }
 
+      - name: Wait for ingress route readiness
+        # K1.5 — `kubectl wait` returns once `.status.loadBalancer.ingress[0]`
+        # is populated, but MetalLB's L2 announcement / iptables rules take
+        # additional time to wire the data path. Poll demo.localdev.me through
+        # the ingress IP until the body assertion would succeed; bail with a
+        # diagnostic dump after 60×2s.
+        run: |
+          INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          for i in $(seq 1 60); do
+            if docker exec kind-control-plane curl -sf --max-time 3 -H 'Host: demo.localdev.me' "http://${INGRESS_IP}/" 2>/dev/null | grep -q 'It works!'; then
+              echo "ingress route ready after $((i*2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "ERROR: ingress route did not become reachable within 120s"
+          kubectl -n ingress-nginx get pods -o wide
+          kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --tail=80 || true
+          kubectl -n metallb-system get pods,ipaddresspool,l2advertisement -o wide || true
+          exit 1
+
       - name: Smoke test
         env:
           LB: metallb
         run: make e2e
 
-      - name: Idempotency check (re-run deploy scripts)
+      - name: Verify deploy idempotency
         run: |
           ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
           ./scripts/kind-deploy-app-helloweb.sh
           ./scripts/kind-deploy-app-foo-bar-service.sh
+
+      - name: Migration smoke test (MetalLB → cloud-provider-kind)
+        # After the MetalLB e2e passes, exercise the migrate-from-metallb.sh
+        # path — switches the running cluster off MetalLB onto cloud-provider-kind
+        # and re-asserts demo.localdev.me through the freshly-reallocated LB IP.
+        # Catches regressions in the migration path that wouldn't surface from
+        # green-field MetalLB or CPK runs alone.
+        run: ./scripts/e2e-migrate-smoke.sh

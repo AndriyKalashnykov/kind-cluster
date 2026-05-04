@@ -1,0 +1,56 @@
+name: Registry E2E
+
+on:
+  schedule:
+    - cron: '0 6 * * 0'  # Sunday 06:00 UTC (after e2e-metallb + monitoring)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/kind-with-registry.sh'
+      - 'scripts/test-registry.sh'
+      - 'k8s/helloweb-deployment-local.yaml'
+      - '.github/workflows/registry-test.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  registry-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+
+      - name: Install dependencies
+        run: make deps
+
+      - name: Create registry-wired cluster
+        # `make registry` runs scripts/kind-with-registry.sh which creates a
+        # KinD cluster wired to a Docker registry at localhost:5001 (containerd
+        # mirrors that registry from inside kind nodes). Distinct from
+        # `install-all`'s cluster — separate path, separate test.
+        run: make registry
+
+      - name: Push image and verify in-cluster pull
+        # scripts/test-registry.sh: pulls hello-app:1.0, retags to
+        # localhost:5001/hello-app:1.0, pushes, applies the matching
+        # Deployment/Service, port-forwards, and curls. End-to-end proof
+        # that containerd is actually mirroring the local registry.
+        run: make registry-test
+
+      - name: Tear down
+        if: always()
+        run: make delete-cluster
