@@ -45,8 +45,8 @@ jobs:
         run: make registry
 
       - name: Push image and verify in-cluster pull
-        # scripts/test-registry.sh: pulls hello-app:1.0, retags to
-        # localhost:5001/hello-app:1.0, pushes, applies the matching
+        # scripts/test-registry.sh: pulls hello-app:2.0, retags to
+        # localhost:5001/hello-app:2.0, pushes, applies the matching
         # Deployment/Service, port-forwards, and curls. End-to-end proof
         # that containerd is actually mirroring the local registry.
         run: make registry-test

@@ -298,7 +298,7 @@ image-test: image-build
 registry: deps
 	@./scripts/kind-with-registry.sh
 
-#registry-test: @ Push hello-app:1.0 to the local registry and deploy it (run after 'make registry')
+#registry-test: @ Push hello-app:2.0 to the local registry and deploy it (run after 'make registry')
 registry-test: deps
 	@./scripts/test-registry.sh
 

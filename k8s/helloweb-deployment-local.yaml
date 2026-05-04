@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: hello-app
-          image: localhost:5001/hello-app:1.0
+          image: localhost:5001/hello-app:2.0
           ports:
             - containerPort: 8080
           resources:

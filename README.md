@@ -536,7 +536,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Multipass VM | `make vm-install-all` | run `make install-all` inside the VM |
 | Multipass VM | `make vm-down` | stop, delete, purge the VM |
 | Registry | `make registry` | KinD cluster wired to local Docker registry at `localhost:5001` |
-| Registry | `make registry-test` | push `hello-app:1.0` to the local registry and deploy it |
+| Registry | `make registry-test` | push `hello-app:2.0` to the local registry and deploy it |
 | Utilities | `make deps` | bootstrap mise + install pinned tools from `.mise.toml`; verify docker/helm/curl/base64 on PATH |
 | Utilities | `make image-build` | build `kubectl-test` Docker image |
 | Utilities | `make renovate-validate` | validate `renovate.json` |
