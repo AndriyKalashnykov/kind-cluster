@@ -94,7 +94,7 @@
       "groupName": "kind"
     },
     {
-      "description": "Suppress lookups for the local registry image. `make registry` wires containerd to localhost:5001 for in-cluster development; the tag is human-managed in lockstep with the upstream gcr.io/google-samples/hello-app pin tracked elsewhere — Renovate cannot reach localhost.",
+      "description": "Suppress lookups for the local registry image. `make registry` wires containerd to localhost:5001 for in-cluster development; Renovate cannot reach localhost. The tag is templated into the manifest at apply time by `scripts/test-registry.sh` (single source of truth = HELLO_APP_VERSION there, Renovate-tracked via the upstream gcr.io/google-samples/hello-app pin), so the hardcoded tag in `k8s/helloweb-deployment-local.yaml` is just a fallback for direct kubectl apply.",
       "matchPackageNames": ["localhost:5001/hello-app"],
       "enabled": false
     }

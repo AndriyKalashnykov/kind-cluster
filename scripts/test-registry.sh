@@ -21,9 +21,11 @@ CLUSTER_NAME="${CLUSTER_NAME:-kind-registry}"
 KUBECTL=(kubectl --context="kind-${CLUSTER_NAME}")
 
 # https://cloud.google.com/kubernetes-engine/docs/tutorials/hello-app
-# Renovate tracks this via the inline comment; `k8s/helloweb-deployment-local.yaml`
-# has a matching `localhost:5001/hello-app:<tag>` reference that must be kept in
-# sync by hand (Renovate can't reach `localhost:5001` to propose bumps there).
+# This script is the single source of truth for the tag — Renovate updates
+# HELLO_APP_VERSION via the inline comment below, and the tag is substituted
+# into k8s/helloweb-deployment-local.yaml at apply time. The manifest's
+# hardcoded tag is a fallback for direct `kubectl apply -f` use; the sed
+# pipeline overrides it here so the two cannot drift.
 # renovate: datasource=docker depName=gcr.io/google-samples/hello-app
 HELLO_APP_VERSION=2.0
 UPSTREAM=gcr.io/google-samples/hello-app:${HELLO_APP_VERSION}
@@ -32,7 +34,8 @@ LOCAL=localhost:5001/hello-app:${HELLO_APP_VERSION}
 docker pull "$UPSTREAM"
 docker tag "$UPSTREAM" "$LOCAL"
 docker push "$LOCAL"
-"${KUBECTL[@]}" apply -f ./k8s/helloweb-deployment-local.yaml
+sed "s|localhost:5001/hello-app:[^[:space:]]*|${LOCAL}|" ./k8s/helloweb-deployment-local.yaml \
+    | "${KUBECTL[@]}" apply -f -
 "${KUBECTL[@]}" rollout status deployment/helloweb --timeout=60s
 "${KUBECTL[@]}" port-forward svc/helloweb 8080:80 >/dev/null 2>&1 &
 PF_PID=$!
