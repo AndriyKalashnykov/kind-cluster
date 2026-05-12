@@ -19,7 +19,7 @@ PLANTUML_VERSION := 1.2026.3
 # renovate: datasource=docker depName=ghcr.io/andriykalashnykov/puml2drawio
 PUML2DRAWIO_VERSION := 1.0.1
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
-KUBECTL_VERSION := v1.36.0
+KUBECTL_VERSION := v1.36.1
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
 # renovate: datasource=docker depName=kindest/node
 KIND_NODE_IMAGE := kindest/node:v1.35.0
