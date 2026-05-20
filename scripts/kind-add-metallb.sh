@@ -20,7 +20,7 @@ if docker ps --filter name=cloud-provider-kind --format '{{.Names}}' | grep -qx 
 fi
 
 # renovate: datasource=github-releases depName=metallb/metallb
-METALLB_VERSION=v0.15.3
+METALLB_VERSION=v0.16.0
 
 VERSION=${1:-$METALLB_VERSION}
 TIMEOUT=${2:-180s}
