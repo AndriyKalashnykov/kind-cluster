@@ -25,3 +25,7 @@ dashboard-admin-token.txt
 # PNGs under docs/diagrams/out/ ARE committed (README renders them); the
 # .drawio XML is for local editing in the draw.io app, not embedded anywhere.
 docs/diagrams/drawio/
+
+# PlantUML re-render trigger stamp (make diagrams) — its filename encodes
+# PLANTUML_VERSION to force a re-render on a pinned-image bump. Not an artifact.
+docs/diagrams/out/.plantuml-*.stamp

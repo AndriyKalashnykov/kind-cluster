@@ -24,8 +24,8 @@ System_Boundary(host, "Host or Multipass VM") {
   Container(docker, "Docker Engine", "containerd", "Hosts KinD nodes")
 
   System_Boundary(kind, "KinD cluster") {
-    Container(cp, "control-plane node", "kindest/node v1.35.0", "API server, scheduler, etcd, kubelet")
-    Container(worker, "worker node", "kindest/node v1.35.0", "Pod runtime")
+    Container(cp, "control-plane node", "kindest/node", "API server, scheduler, etcd, kubelet")
+    Container(worker, "worker node", "kindest/node", "Pod runtime")
 
     Container(ingress, "ingress-nginx", "Helm chart", "L7 routing; pinned to control-plane via nodeSelector")
     Container(lb, "cloud-provider-kind", "docker container on kind network", "Allocates LoadBalancer IPs (primary; MetalLB alternative via LB=metallb)")

@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://app.renovatebot.com/dashboard#github/AndriyKalashnykov/kind-cluster)
 
-# kind-cluster
+# kind-cluster — Local Kubernetes Lab on KinD
 
 Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, LoadBalancer (cloud-provider-kind, or MetalLB), Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
@@ -14,8 +14,8 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 | Cluster | [KinD](https://kind.sigs.k8s.io/) v0.31.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
 | Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | Reference controller; matches what most cloud-managed clusters expose |
 | Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.10.0 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
-| Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.15.3 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
-| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.1 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
+| Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.16.0 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
+| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.2 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
 | CI | GitHub Actions | `make deps` + `make kind-create` — same Makefile path users hit locally; CI verifies install scripts on every push |
@@ -53,7 +53,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | Tool | Pinned version |
 |------|----------------|
 | [kind](https://kind.sigs.k8s.io/) | 0.31.0 |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.0 |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.1 |
 | [jq](https://github.com/jqlang/jq) | 1.8.1 |
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
@@ -61,6 +61,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | [trivy](https://github.com/aquasecurity/trivy) | 0.70.0 |
 | [hadolint](https://github.com/hadolint/hadolint) | 2.14.0 |
 | [act](https://github.com/nektos/act) | 0.2.88 |
+| [bats](https://github.com/bats-core/bats-core) | 1.13.0 |
 
 Renovate's native `mise` manager keeps `.mise.toml` up to date (platform automerge enabled).
 
@@ -158,7 +159,7 @@ make nfs-incluster
 kubectl apply -f ./k8s/nfs/pvc-incluster.yaml   # sample RWX PVC
 ```
 
-Pinned versions: `csi-driver-nfs` v4.13.1. Source: `scripts/kind-add-nfs-incluster.sh`.
+Pinned versions: `csi-driver-nfs` v4.13.2. Source: `scripts/kind-add-nfs-incluster.sh`.
 
 ### Option 2 — host-side NFS (persistent across cluster recreates)
 
@@ -243,7 +244,7 @@ First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docke
 
 The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
 
-1. Installs Docker CE, KinD v0.31.0, kubectl v1.36.0, helm v4.1.4
+1. Installs Docker CE, KinD v0.31.0, kubectl v1.36.1, helm v4.2.0
 2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
 3. Clones this repo to `/home/ubuntu/kind-cluster`
 4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.
@@ -507,7 +508,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Category | Target | Description |
 |---|---|---|
 | Cluster | `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
-| Cluster | `make kind-down` | docker-compose-style alias for `delete-cluster` (tear the whole stack down) |
+| Cluster | `make kind-down` | docker-compose-style alias for `kind-destroy` (tear the whole stack down) |
 | Cluster | `make install-all` | cluster + Nginx ingress + LoadBalancer (CPK default, or `LB=metallb`) + demo workloads |
 | Cluster | `make install-all-no-demo-workloads` | same minus demo apps |
 | Cluster | `make kind-create` | Create KinD cluster only (alias: `make create-cluster`) |
@@ -515,7 +516,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Cluster | `make export-cert` | Export k8s client keys and CA certificates |
 | Cluster | `make e2e` | Bring up the full stack and run smoke tests (chains `install-all` + `e2e-smoke`) |
 | Cluster | `make e2e-smoke` | Smoke-test an already-running cluster (no install) |
-| Cluster | `make clean` | Tear down cluster + remove scratch artifacts |
+| Cluster | `make clean` | Tear down cluster + remove generated scratch artifacts (certs, tokens) |
 | Add-ons | `make dashboard-install` | Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
 | Add-ons | `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
 | Add-ons | `make dashboard-token` | Print the admin-user token |
@@ -539,8 +540,10 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Registry | `make registry-test` | push `hello-app:2.0` to the local registry and deploy it |
 | Utilities | `make deps` | bootstrap mise + install pinned tools from `.mise.toml`; verify docker/helm/curl/base64 on PATH |
 | Utilities | `make image-build` | build `kubectl-test` Docker image |
+| Utilities | `make image-test` | build + runtime-verify the `kubectl-test` image (the `docker` CI job) |
 | Utilities | `make renovate-validate` | validate `renovate.json` |
 | Quality | `make lint` | shellcheck + actionlint + hadolint + scripts-exec-bit check |
+| Quality | `make test` | bats unit tests for the `scripts/lib.sh` helpers |
 | Quality | `make secrets` | gitleaks (suppressions: `.gitleaks.toml`) |
 | Quality | `make trivy-fs` | Trivy fs scan (vulns, secrets, misconfigs; CRITICAL/HIGH) |
 | Quality | `make vulncheck` | Alias for `trivy-fs` (portfolio-standard target name) |
@@ -550,7 +553,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Quality | `make diagrams-check` | verify committed PNGs match current `.puml` source |
 | Quality | `make diagrams-clean` | remove rendered PNGs under `docs/diagrams/out/` and `.drawio` exports under `docs/diagrams/drawio/` |
 | Quality | `make diagrams-drawio` | convert `.puml` sources to editable `.drawio` XML via pinned [`ghcr.io/andriykalashnykov/puml2drawio`](https://github.com/AndriyKalashnykov/puml2drawio); output under `docs/diagrams/drawio/` (gitignored — on-demand, for local editing) |
-| Quality | `make static-check` | composite: lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check |
+| Quality | `make static-check` | composite: lint + test + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check |
 | Quality | `make ci` | full local pipeline: `static-check` + `renovate-validate` |
 | Quality | `make ci-run` | run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
 
@@ -568,7 +571,7 @@ Suppressions (intentional, justified inline):
 | Job | Needs | Steps |
 |-----|-------|-------|
 | **changes** | — | `dorny/paths-filter` outputs `code=true` if anything outside docs/markdown/images changed; downstream jobs gate on it |
-| **static-check** | changes | `make static-check` (lint + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
+| **static-check** | changes | `make static-check` (lint + test + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
 | **docker** | changes, static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
 | **e2e** | changes, static-check | `jdx/mise-action` + `make deps` + `make kind-create`, install ingress + cloud-provider-kind + dashboard, deploy all demo workloads, K1.5 route-readiness poll, run `make e2e-smoke` for body-asserting smoke tests via `docker exec` (~4 min end-to-end) |
 | **ci-pass** | changes, static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |

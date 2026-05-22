@@ -101,7 +101,13 @@ jobs:
       - name: Install kube-prometheus-stack
         run: make kube-prometheus-stack
 
-      - name: Smoke test (with monitoring assertions)
+      # Asserts kube-prometheus-stack (Grafana LB IP, admin secret) on top of
+      # the standard smoke checks; metrics-server + in-cluster NFS are also
+      # installed above, so opt their assertions in too. Values are quoted so
+      # YAML keeps them the literal string "yes" the smoke script compares to.
+      - name: Smoke test
         env:
-          TEST_MONITORING: yes
+          TEST_MONITORING: "yes"
+          TEST_METRICS_SERVER: "yes"
+          TEST_NFS: "yes"
         run: make e2e-smoke

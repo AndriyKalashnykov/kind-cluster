@@ -6,8 +6,9 @@ on:
   workflow_dispatch:
   workflow_call:
 
-permissions:
-  actions: write
+# Least privilege: no workflow-wide grant — each job below requests only
+# the `actions: write` it needs (run/cache deletion).
+permissions: {}
 
 concurrency:
   group: cleanup-${{ github.workflow }}
@@ -17,6 +18,8 @@ jobs:
   cleanup-runs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      actions: write   # gh run delete
     env:
       GH_TOKEN: ${{ github.token }}
       RETAIN_DAYS: 7
@@ -33,6 +36,8 @@ jobs:
   cleanup-caches:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      actions: write   # gh api DELETE .../actions/caches/{id}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
