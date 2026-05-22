@@ -15,9 +15,15 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
 # https://medium.com/@charled.breteche/kind-fix-missing-prometheus-operator-targets-1a1ff5d8c8ad
 
+# Chart version pinned (was floating on `latest`). Renovate's scripts
+# custom.regex manager bumps it via the inline comment below.
+# renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
+KUBE_PROMETHEUS_STACK_VERSION=85.2.2
+
 helm upgrade --install --wait --timeout 15m \
   --namespace monitoring --create-namespace \
   --repo https://prometheus-community.github.io/helm-charts \
+  --version "${KUBE_PROMETHEUS_STACK_VERSION}" \
   kube-prometheus-stack kube-prometheus-stack --values - <<EOF
 kubeEtcd:
   service:

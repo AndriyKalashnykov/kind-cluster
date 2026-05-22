@@ -10,7 +10,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-KIND_NODE="${KIND_NODE:-kind-control-plane}"
+# shellcheck source=scripts/lib.sh
+. "$SCRIPT_DIR/lib.sh"
 
 # Use an explicit kubectl context so a parallel `make` invocation in
 # another KinD project (which may run `kubectl config use-context`)
@@ -19,6 +20,11 @@ KIND_NODE="${KIND_NODE:-kind-control-plane}"
 # the `kind-kind` context.
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
+# KinD names the control-plane node "<cluster>-control-plane"; derive it from
+# KIND_CLUSTER_NAME so an overridden cluster name still resolves the right
+# container for `docker exec`.
+KIND_NODE="${KIND_NODE:-$(kube_node_name "$KIND_CLUSTER_NAME")}"
 
 INGRESS_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
@@ -151,37 +157,50 @@ else
   fail "dashboard-admin-token.txt missing or empty"
 fi
 
-# --- Metrics-server API: APIService should be Available and serve nodes ---
-if "${KUBECTL[@]}" get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null | grep -q '^True$'; then
-  pass "metrics.k8s.io APIService is Available"
-else
-  fail "metrics.k8s.io APIService is not Available"
-fi
-# kubectl top nodes can take ~30s after install before metrics are populated
-if for _ in $(seq 1 12); do
-     out=$("${KUBECTL[@]}" top nodes 2>/dev/null) && [ "$(echo "$out" | wc -l)" -ge 2 ] && break
-     sleep 5
-   done && [ "$(echo "$out" | wc -l)" -ge 2 ]; then
-  pass "kubectl top nodes returns >=1 row"
-else
-  fail "kubectl top nodes returned no rows after 60s"
+# --- Metrics-server API (opt-in via TEST_METRICS_SERVER=yes) ---
+# Off by default because install-all does NOT install metrics-server; the e2e
+# CI workflows run `./scripts/kind-add-metrics-server.sh` first, then set
+# TEST_METRICS_SERVER=yes here. Skipping silently when off keeps `make e2e`
+# (= install-all + e2e-smoke) green on the default install-all path — same
+# rationale as the TEST_MONITORING block below.
+if flag_enabled "${TEST_METRICS_SERVER:-}"; then
+  # APIService should be Available and serve nodes.
+  if "${KUBECTL[@]}" get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "metrics.k8s.io APIService is Available"
+  else
+    fail "metrics.k8s.io APIService is not Available"
+  fi
+  # kubectl top nodes can take ~30s after install before metrics are populated
+  if for _ in $(seq 1 12); do
+       out=$("${KUBECTL[@]}" top nodes 2>/dev/null) && [ "$(echo "$out" | wc -l)" -ge 2 ] && break
+       sleep 5
+     done && [ "$(echo "$out" | wc -l)" -ge 2 ]; then
+    pass "kubectl top nodes returns >=1 row"
+  else
+    fail "kubectl top nodes returned no rows after 60s"
+  fi
 fi
 
-# --- NFS CSI provisioner: PVC should bind ---
-"${KUBECTL[@]}" apply -f "$REPO_ROOT/k8s/nfs/pvc-incluster.yaml" >/dev/null
-if "${KUBECTL[@]}" wait pvc/demo-claim-incluster --for=jsonpath='{.status.phase}'=Bound --timeout=120s >/dev/null 2>&1; then
-  pass "NFS PVC demo-claim-incluster bound"
-else
-  fail "NFS PVC demo-claim-incluster did not bind within 120s"
+# --- NFS CSI provisioner (opt-in via TEST_NFS=yes) ---
+# Off by default because install-all does NOT install in-cluster NFS; the e2e
+# CI workflows run `./scripts/kind-add-nfs-incluster.sh` first, then set
+# TEST_NFS=yes here. Same opt-in rationale as TEST_METRICS_SERVER above.
+if flag_enabled "${TEST_NFS:-}"; then
+  "${KUBECTL[@]}" apply -f "$REPO_ROOT/k8s/nfs/pvc-incluster.yaml" >/dev/null
+  if "${KUBECTL[@]}" wait pvc/demo-claim-incluster --for=jsonpath='{.status.phase}'=Bound --timeout=120s >/dev/null 2>&1; then
+    pass "NFS PVC demo-claim-incluster bound"
+  else
+    fail "NFS PVC demo-claim-incluster did not bind within 120s"
+  fi
+  "${KUBECTL[@]}" delete pvc demo-claim-incluster --ignore-not-found --wait=false >/dev/null 2>&1 || true
 fi
-"${KUBECTL[@]}" delete pvc demo-claim-incluster --ignore-not-found --wait=false >/dev/null 2>&1 || true
 
 # --- kube-prometheus-stack (opt-in via TEST_MONITORING=yes) ---
 # Off by default because install-all does NOT include kube-prometheus-stack;
 # weekly monitoring-test.yml runs `make kube-prometheus-stack` first then sets
 # TEST_MONITORING=yes here. Skipping silently when off keeps `make e2e` cheap
 # on the default install-all path.
-if [ "${TEST_MONITORING:-no}" = "yes" ]; then
+if flag_enabled "${TEST_MONITORING:-}"; then
   if "${KUBECTL[@]}" get ns monitoring >/dev/null 2>&1; then
     pass "monitoring namespace exists"
   else

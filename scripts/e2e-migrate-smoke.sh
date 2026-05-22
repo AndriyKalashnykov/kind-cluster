@@ -17,6 +17,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
+# shellcheck source=scripts/lib.sh
+. "$SCRIPT_DIR/lib.sh"
 
 # Use an explicit kubectl context so a parallel `make` invocation in
 # another KinD project (which may run `kubectl config use-context`)
@@ -25,6 +27,11 @@ cd "$SCRIPT_DIR/.." || exit 1
 # the `kind-kind` context.
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
+# KinD names the control-plane node "<cluster>-control-plane"; derive it from
+# KIND_CLUSTER_NAME so an overridden cluster name still resolves the right
+# container for `docker exec` (mirrors e2e-smoke.sh).
+KIND_NODE="${KIND_NODE:-$(kube_node_name "$KIND_CLUSTER_NAME")}"
 
 PASS=0
 FAIL=0
@@ -92,7 +99,7 @@ fi
 # K1.5 — IP assigned ≠ IP routable. Poll the body until ready.
 ROUTED=0
 for i in $(seq 1 60); do
-  if docker exec kind-control-plane curl -sf --max-time 3 -H 'Host: demo.localdev.me' "http://${NEW_IP}/" 2>/dev/null | grep -q 'It works!'; then
+  if docker exec "$KIND_NODE" curl -sf --max-time 3 -H 'Host: demo.localdev.me' "http://${NEW_IP}/" 2>/dev/null | grep -q 'It works!'; then
     pass "demo.localdev.me reachable through CPK after $((i * 2))s"
     ROUTED=1
     break

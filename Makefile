@@ -103,7 +103,8 @@ lint: deps-tools
 		echo "$$NONEXEC" | sed 's/^/  /'; \
 		exit 1; \
 	fi
-	@shellcheck scripts/*.sh
+	@# -x: follow `# shellcheck source=` directives into scripts/lib.sh.
+	@shellcheck -x scripts/*.sh
 	@actionlint .github/workflows/*.yml
 	@hadolint images/Dockerfile
 
@@ -142,16 +143,30 @@ mermaid-lint: deps-tools deps-docker
 DIAGRAM_DIR := docs/diagrams
 DIAGRAM_SRC := $(wildcard $(DIAGRAM_DIR)/*.puml)
 DIAGRAM_OUT := $(patsubst $(DIAGRAM_DIR)/%.puml,$(DIAGRAM_DIR)/out/%.png,$(DIAGRAM_SRC))
+# Stamp whose filename encodes PLANTUML_VERSION. It is a prerequisite of every
+# rendered PNG, so bumping the pinned image with no .puml edit changes the
+# stamp's name — the old stamp no longer satisfies the prereq, the stamp rule
+# re-fires, and (being newer than every PNG) forces a full re-render. Without
+# it `make diagrams` no-ops on a version-only bump and `diagrams-check`'s
+# git-diff misleadingly reports the stale PNGs as in sync. Gitignored.
+DIAGRAM_STAMP := $(DIAGRAM_DIR)/out/.plantuml-$(PLANTUML_VERSION).stamp
 
 #diagrams: @ Render PlantUML architecture diagrams to PNG via pinned plantuml/plantuml docker image
 diagrams: deps-docker $(DIAGRAM_OUT)
 
-$(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml
+$(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml $(DIAGRAM_STAMP)
 	@mkdir -p $(DIAGRAM_DIR)/out
 	@docker run --rm --user $$(id -u):$$(id -g) \
 		-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
 		-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
 		plantuml/plantuml:$(PLANTUML_VERSION) -tpng -o out $(notdir $<)
+
+# Re-render trigger — see DIAGRAM_STAMP above. Clears stale stamps so only the
+# stamp for the current PLANTUML_VERSION exists.
+$(DIAGRAM_STAMP):
+	@mkdir -p $(DIAGRAM_DIR)/out
+	@rm -f $(DIAGRAM_DIR)/out/.plantuml-*.stamp
+	@touch $@
 
 #diagrams-check: @ Verify committed diagram PNGs match current .puml source
 diagrams-check: diagrams
@@ -172,8 +187,12 @@ diagrams-drawio: deps-docker
 		. -o drawio/
 	@echo "Wrote $(DIAGRAM_DIR)/drawio/*.drawio"
 
-#static-check: @ Composite quality gate (lint + secrets + trivy + mermaid-lint + diagrams-check)
-static-check: lint secrets trivy-fs trivy-config mermaid-lint diagrams-check
+#test: @ Run bats unit tests for the scripts/lib.sh helpers
+test: deps-tools
+	@bats tests/
+
+#static-check: @ Composite quality gate (lint + test + secrets + trivy + mermaid-lint + diagrams-check)
+static-check: lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
 	@echo "Static check passed."
 
 #ci: @ Full local CI pipeline (static-check + renovate-validate)
@@ -339,12 +358,13 @@ e2e-smoke: deps
 #vulncheck: @ Alias for trivy-fs (portfolio-standard target name)
 vulncheck: trivy-fs
 
-#clean: @ Tear down cluster and remove scratch artifacts
+#clean: @ Tear down cluster and remove generated scratch artifacts (certs, tokens)
 clean:
 	@./scripts/kind-delete.sh 2>/dev/null || true
+	@rm -f client.crt client.key client.pfx cluster-ca.crt dashboard-admin-token.txt
 
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
-	lint secrets trivy-fs trivy-config vulncheck mermaid-lint static-check ci ci-run \
+	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	k8s-dashboard dashboard-install dashboard-forward dashboard-token nginx-ingress \

@@ -15,9 +15,16 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
 # https://computingforgeeks.com/how-to-deploy-metrics-server-to-kubernetes-cluster/
 
+# Chart version pinned (was floating on `latest`). Renovate's scripts
+# custom.regex manager bumps it via the inline comment below.
+# renovate: datasource=helm depName=metrics-server registryUrl=https://kubernetes-sigs.github.io/metrics-server/
+METRICS_SERVER_CHART_VERSION=3.13.0
+
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
 helm repo update
-helm upgrade --install --set 'args={--kubelet-insecure-tls}' metrics-server metrics-server/metrics-server --namespace kube-system
+helm upgrade --install --set 'args={--kubelet-insecure-tls}' \
+  --version "${METRICS_SERVER_CHART_VERSION}" \
+  metrics-server metrics-server/metrics-server --namespace kube-system
 
 "${KUBECTL[@]}" rollout status deployment/metrics-server -n kube-system --timeout=3m
 "${KUBECTL[@]}" get deploy,svc -n kube-system | grep -E metrics-server

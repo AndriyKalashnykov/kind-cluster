@@ -13,15 +13,17 @@
 ```
 Makefile              # Task runner with help target
 .mise.toml            # Pinned tool versions (shellcheck, actionlint, gitleaks,
-                      #   trivy, hadolint, act, jq, kind, kubectl)
+                      #   trivy, hadolint, act, bats, jq, kind, kubectl)
 scripts/              # Bash scripts for cluster lifecycle and app deployment
-                      #   (includes kind-add-{metallb,cloud-provider-kind}.sh
-                      #    and migrate-from-metallb.sh)
+                      #   (lib.sh = sourceable helpers; kind-add-* installers;
+                      #    migrate-from-metallb.sh; e2e-*.sh smoke tests)
+tests/                # bats unit tests for scripts/lib.sh (make test)
 k8s/                  # Kubernetes manifests (kind config, dashboard, NFS, etc.)
 images/               # Dockerfiles (kubectl-test image)
-docs/diagrams/        # PlantUML C4 sources + rendered PNGs
+docs/diagrams/        # PlantUML C4 sources (.puml) + rendered PNGs (out/)
 vm/                   # Multipass cloud-init playbook
-.github/workflows/    # CI: ci.yml, e2e-metallb.yml, cleanup-runs.yml
+.github/workflows/    # CI: ci.yml, e2e-metallb.yml, monitoring-test.yml,
+                      #   registry-test.yml, cleanup-runs.yml
 ```
 
 ## Common Commands
@@ -49,10 +51,12 @@ make vm-down                           # Stop + delete + purge the VM
 # Local quality gates (pinned tools installed on first run via `make deps`;
 # mise is auto-bootstrapped into ~/.local/bin if missing)
 make lint                              # shellcheck + actionlint + hadolint
+make test                              # bats unit tests for scripts/lib.sh helpers
 make secrets                           # gitleaks (suppressions: .gitleaks.toml)
 make trivy-fs                          # Trivy CVE/secret/misconfig scan (suppressions: .trivyignore.yaml)
 make trivy-config                      # Trivy K8s manifest scan
 make mermaid-lint                      # Validate mermaid diagrams in all *.md files (via docker)
+make diagrams                          # Render PlantUML C4 diagrams to PNG (via docker)
 make diagrams-check                    # Verify committed PNGs match docs/diagrams/*.puml (via docker)
 make static-check                      # Composite: all of the above
 make ci                                # static-check + renovate-validate
@@ -66,9 +70,9 @@ make vulncheck                         # Alias for trivy-fs (portfolio-standard 
 
 ## CI/CD
 
-- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Five jobs: `changes` → `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. The `changes` job uses `dorny/paths-filter` to detect whether any non-doc file changed; downstream jobs short-circuit on doc-only changes via `if: needs.changes.outputs.code == 'true'`. `static-check` and `e2e` use `jdx/mise-action` to install the pinned toolchain from `.mise.toml` (kind, kubectl, jq, shellcheck, actionlint, gitleaks, trivy, hadolint, act — Renovate-tracked via the mise manager). The `e2e` job installs **cloud-provider-kind** as the LoadBalancer provider, runs all install/deploy scripts, polls until the ingress route is data-plane-ready (K1.5 — IP assigned ≠ IP routable), then `make e2e` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
-- **e2e-metallb.yml** — weekly cron (Sunday 04:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-metallb.sh` (positive-include `paths:` filter is intentional — workflow only runs when its own code changes). Mirrors the `e2e` job but installs **MetalLB** instead of cloud-provider-kind; same K1.5 route-readiness poll before `LB=metallb make e2e`. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the **MetalLB → cloud-provider-kind migration** path so regressions in `migrate-from-metallb.sh` surface here.
-- **monitoring-test.yml** — weekly cron (Sunday 05:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-kube-prometheus-stack.sh`. Brings up the full stack via `make install-all` (cloud-provider-kind), installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. Off the default install-all path — kept on its own cron to keep PR feedback fast.
+- **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Five jobs: `changes` → `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. The `changes` job uses `dorny/paths-filter` to detect whether any non-doc file changed; downstream jobs short-circuit on doc-only changes via `if: needs.changes.outputs.code == 'true'`. `static-check` and `e2e` use `jdx/mise-action` to install the pinned toolchain from `.mise.toml` (kind, kubectl, jq, shellcheck, actionlint, gitleaks, trivy, hadolint, act — Renovate-tracked via the mise manager). The `e2e` job installs **cloud-provider-kind** as the LoadBalancer provider, runs all install/deploy scripts, polls until the ingress route is data-plane-ready (K1.5 — IP assigned ≠ IP routable), then `make e2e-smoke` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
+- **e2e-metallb.yml** — weekly cron (Sunday 04:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-metallb.sh` (positive-include `paths:` filter is intentional — workflow only runs when its own code changes). Mirrors the `e2e` job but installs **MetalLB** instead of cloud-provider-kind; same K1.5 route-readiness poll before `LB=metallb make e2e-smoke`. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the **MetalLB → cloud-provider-kind migration** path so regressions in `migrate-from-metallb.sh` surface here.
+- **monitoring-test.yml** — weekly cron (Sunday 05:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-kube-prometheus-stack.sh`. Brings up the full stack via `make install-all` (cloud-provider-kind), installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. Off the default install-all path — kept on its own cron to keep PR feedback fast.
 - **registry-test.yml** — weekly cron (Sunday 06:00 UTC) + `workflow_dispatch` + push on registry-related files. Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` (pull → retag → push → deploy → curl). Distinct from the install-all flow; separate workflow rather than another job.
 - **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
@@ -76,14 +80,14 @@ make vulncheck                         # Alias for trivy-fs (portfolio-standard 
 
 The following paths require resources GitHub-hosted runners can't reliably provide; they are verified manually before each release:
 
-- **`make vm-up` / `make vm-install-all` (Multipass)** — nested virtualization isn't reliably supported on `ubuntu-24.04` runners; cloud-init bootstrap takes 3–5 minutes; CI cost outweighs catch rate. Verify locally before tagging a release.
+- **`make vm-up` / `make vm-install-all` (Multipass)** — nested virtualization isn't reliably supported on `ubuntu-24.04` GitHub-hosted runners; cloud-init bootstrap takes 3–5 minutes; CI cost outweighs catch rate. Verify locally before tagging a release.
 - **`make nfs-host-setup`** — modifies `/etc/exports`, opens the firewall, requires interactive `sudo`. Out of scope for unattended CI. Verify locally on Ubuntu/Debian before tagging.
 
 ## Dependencies
 
 Runtime (user provides): Docker, helm, curl, base64.
 
-Pinned in [`.mise.toml`](./.mise.toml) and installed by `make deps` via [mise](https://mise.jdx.dev): `kind`, `kubectl`, `jq`, `shellcheck`, `actionlint`, `gitleaks`, `trivy`, `hadolint`, `act`. `make deps` auto-bootstraps mise into `~/.local/bin` if missing, then runs `mise install` (idempotent; no-op at pinned versions).
+Pinned in [`.mise.toml`](./.mise.toml) and installed by `make deps` via [mise](https://mise.jdx.dev): `kind`, `kubectl`, `jq`, `shellcheck`, `actionlint`, `gitleaks`, `trivy`, `hadolint`, `act`, `bats`. `make deps` auto-bootstraps mise into `~/.local/bin` if missing, then runs `mise install` (idempotent; no-op at pinned versions).
 
 Docker-image-pinned in Makefile (Renovate-tracked via inline `# renovate:` comments): `KUBECTL_VERSION` (shared with `images/Dockerfile` `--build-arg`; kept in sync with `aqua:kubernetes/kubectl` in `.mise.toml` via the `kubectl` packageRule), `MERMAID_CLI_VERSION`, `PLANTUML_VERSION`, `PUML2DRAWIO_VERSION`, `KIND_NODE_IMAGE`, `CLOUD_PROVIDER_KIND_VERSION`. `mermaid-cli` is invoked from `make mermaid-lint` (part of the `static-check` composite); `plantuml/plantuml` from `make diagrams` / `diagrams-check`.
 

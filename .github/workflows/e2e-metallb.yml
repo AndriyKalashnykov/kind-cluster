@@ -120,8 +120,13 @@ jobs:
           exit 1
 
       - name: Smoke test
+        # metrics-server + in-cluster NFS are installed above — opt their
+        # assertions in (off by default; install-all omits both). Quoted so
+        # YAML keeps them the literal string "yes" the smoke script compares to.
         env:
           LB: metallb
+          TEST_METRICS_SERVER: "yes"
+          TEST_NFS: "yes"
         run: make e2e-smoke
 
       - name: Verify deploy idempotency
@@ -130,7 +135,8 @@ jobs:
           ./scripts/kind-deploy-app-helloweb.sh
           ./scripts/kind-deploy-app-foo-bar-service.sh
 
-      - name: Migration smoke test (MetalLB → cloud-provider-kind)
+      # Migration smoke test: MetalLB → cloud-provider-kind.
+      - name: Migration smoke test
         # After the MetalLB e2e passes, exercise the migrate-from-metallb.sh
         # path — switches the running cluster off MetalLB onto cloud-provider-kind
         # and re-asserts demo.localdev.me through the freshly-reallocated LB IP.
