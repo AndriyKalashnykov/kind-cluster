@@ -83,17 +83,23 @@ jobs:
             || { echo "ERROR: demo-apps ingress did not propagate after 60s"; kubectl get ingress/demo-apps -o yaml; exit 1; }
 
       - name: Wait for ingress route readiness
-        # K1.5 — same poll as ci.yml.
+        # K1.5 — same dual-probe poll as ci.yml: wait for both the
+        # demo-localhost Ingress (demo.localdev.me) and the demo-apps
+        # Ingress (helloweb host) before running the smoke test.
         run: |
           INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          probe() {
+            docker exec kind-control-plane curl -sf --max-time 3 \
+              -H "Host: $1" "http://${INGRESS_IP}/" 2>/dev/null | grep -q "$2"
+          }
           for i in $(seq 1 60); do
-            if docker exec kind-control-plane curl -sf --max-time 3 -H 'Host: demo.localdev.me' "http://${INGRESS_IP}/" 2>/dev/null | grep -q 'It works!'; then
-              echo "ingress route ready after $((i*2))s"
+            if probe demo.localdev.me 'It works!' && probe helloweb.localdev.me 'Hello, world!'; then
+              echo "ingress routes ready after $((i*2))s"
               exit 0
             fi
             sleep 2
           done
-          echo "ERROR: ingress route did not become reachable within 120s"
+          echo "ERROR: ingress routes did not become reachable within 120s"
           kubectl -n ingress-nginx get pods -o wide
           docker ps --filter name=cloud-provider-kind --filter name=kindccm- --format 'table {{.Names}}\t{{.Status}}'
           exit 1

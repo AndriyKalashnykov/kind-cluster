@@ -99,21 +99,26 @@ jobs:
             || { echo "ERROR: demo-apps ingress did not propagate after 60s"; kubectl get ingress/demo-apps -o yaml; exit 1; }
 
       - name: Wait for ingress route readiness
-        # K1.5 — `kubectl wait` returns once `.status.loadBalancer.ingress[0]`
-        # is populated, but MetalLB's L2 announcement / iptables rules take
-        # additional time to wire the data path. Poll demo.localdev.me through
-        # the ingress IP until the body assertion would succeed; bail with a
-        # diagnostic dump after 60×2s.
+        # K1.5 — MetalLB's L2 announcement / iptables rules take time to wire
+        # the data path. AND the demo-apps Ingress (helloweb / golang / foo)
+        # reconcile can lag the demo-localhost Ingress (demo.localdev.me) —
+        # polling only the latter misses that race; the `c3a9315` merge run
+        # failed 3/4 demo-app assertions for exactly this reason. Wait for
+        # BOTH ingresses to respond. Bail with a diagnostic dump after 60×2s.
         run: |
           INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          probe() {
+            docker exec kind-control-plane curl -sf --max-time 3 \
+              -H "Host: $1" "http://${INGRESS_IP}/" 2>/dev/null | grep -q "$2"
+          }
           for i in $(seq 1 60); do
-            if docker exec kind-control-plane curl -sf --max-time 3 -H 'Host: demo.localdev.me' "http://${INGRESS_IP}/" 2>/dev/null | grep -q 'It works!'; then
-              echo "ingress route ready after $((i*2))s"
+            if probe demo.localdev.me 'It works!' && probe helloweb.localdev.me 'Hello, world!'; then
+              echo "ingress routes ready after $((i*2))s"
               exit 0
             fi
             sleep 2
           done
-          echo "ERROR: ingress route did not become reachable within 120s"
+          echo "ERROR: ingress routes did not become reachable within 120s"
           kubectl -n ingress-nginx get pods -o wide
           kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --tail=80 || true
           kubectl -n metallb-system get pods,ipaddresspool,l2advertisement -o wide || true
