@@ -33,7 +33,7 @@ reg_port='5001'
 # invisible to Renovate). The scripts custom.regex manager bumps it via the
 # comment below; registry-test.yml gates the bump end-to-end before automerge.
 # renovate: datasource=docker depName=registry
-REGISTRY_IMAGE_VERSION=2
+REGISTRY_IMAGE_VERSION=3
 if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
   docker run \
     -d --restart=always -p "127.0.0.1:${reg_port}:5000" --network bridge --name "${reg_name}" \
