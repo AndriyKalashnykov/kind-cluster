@@ -18,7 +18,7 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 # Chart version pinned (was floating on `latest`). Renovate's scripts
 # custom.regex manager bumps it via the inline comment below.
 # renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
-KUBE_PROMETHEUS_STACK_VERSION=85.3.2
+KUBE_PROMETHEUS_STACK_VERSION=85.3.3
 
 helm upgrade --install --wait --timeout 15m \
   --namespace monitoring --create-namespace \
