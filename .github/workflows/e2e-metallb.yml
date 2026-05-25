@@ -54,8 +54,8 @@ jobs:
       - name: Export certs
         run: ./scripts/kind-export-cert.sh
 
-      - name: Install Kubernetes Dashboard
-        run: ./scripts/kind-add-dashboard.sh
+      - name: Install Headlamp
+        run: ./scripts/kind-add-headlamp.sh
 
       - name: Install Nginx ingress
         run: ./scripts/kind-add-ingress-nginx.sh

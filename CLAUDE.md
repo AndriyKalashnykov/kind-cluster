@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**kind-cluster** is a Shell/Kubernetes project for creating and managing local Kubernetes clusters using Docker with [KinD](https://kind.sigs.k8s.io/). It provides scripts for installing cluster components (Nginx ingress, LoadBalancer provider — cloud-provider-kind by default with MetalLB as alternative, dashboard) and deploying demo workloads.
+**kind-cluster** is a Shell/Kubernetes project for creating and managing local Kubernetes clusters using Docker with [KinD](https://kind.sigs.k8s.io/). It provides scripts for installing cluster components (Nginx ingress, LoadBalancer provider — cloud-provider-kind by default with MetalLB as alternative, Headlamp UI) and deploying demo workloads.
 
 - **Owner**: AndriyKalashnykov/kind-cluster
 - **License**: MIT
@@ -18,7 +18,7 @@ scripts/              # Bash scripts for cluster lifecycle and app deployment
                       #   (lib.sh = sourceable helpers; kind-add-* installers;
                       #    migrate-from-metallb.sh; e2e-*.sh smoke tests)
 tests/                # bats unit tests for scripts/lib.sh (make test)
-k8s/                  # Kubernetes manifests (kind config, dashboard, NFS, etc.)
+k8s/                  # Kubernetes manifests (kind config, Headlamp, NFS, etc.)
 images/               # Dockerfiles (kubectl-test image)
 docs/diagrams/        # PlantUML C4 sources (.puml) + rendered PNGs (out/)
 vm/                   # Multipass cloud-init playbook
