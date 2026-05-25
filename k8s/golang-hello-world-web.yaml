@@ -28,7 +28,7 @@ spec:
 
       containers:
         - name: golang-hello-world-web
-          image: ghcr.io/andriykalashnykov/golang-web:0.0.3
+          image: ghcr.io/andriykalashnykov/golang-web:0.0.3@sha256:f7d591a2422e2fae17f61384874933c1a8aeff448f3c322f82bead84ba7c2012
           imagePullPolicy: IfNotPresent
           env:
             # default variables available to be overridden
