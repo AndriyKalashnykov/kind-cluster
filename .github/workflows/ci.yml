@@ -109,19 +109,22 @@ jobs:
       - name: Export certs
         run: ./scripts/kind-export-cert.sh
 
-      - name: Install Headlamp
-        run: ./scripts/kind-add-headlamp.sh
-
-      - name: Install Traefik ingress
-        run: ./scripts/kind-add-traefik.sh
-
       - name: Install cloud-provider-kind
+        # CPK must be running before Traefik installs — Traefik's helm chart
+        # creates a Service of type LoadBalancer and `helm --wait` blocks on
+        # .status.loadBalancer being populated, which requires a LB controller.
         # CPK runs as a host docker container bound to the `kind` network and
         # `docker.sock`. Image version pinned in Makefile (CLOUD_PROVIDER_KIND_VERSION,
         # Renovate-tracked), exported via Makefile. Invoke via `make lb-cpk` so the
         # env var is set — the script itself hard-requires the var, no fallback.
         # MetalLB path covered by weekly e2e-metallb.yml.
         run: make lb-cpk
+
+      - name: Install Headlamp
+        run: ./scripts/kind-add-headlamp.sh
+
+      - name: Install Traefik ingress
+        run: ./scripts/kind-add-traefik.sh
 
       - name: Install metrics-server
         run: ./scripts/kind-add-metrics-server.sh

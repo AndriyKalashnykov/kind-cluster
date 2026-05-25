@@ -30,15 +30,19 @@ echo "Selected LoadBalancer: $LB"
 
 ./scripts/kind-export-cert.sh
 
-./scripts/kind-add-headlamp.sh
-
-./scripts/kind-add-traefik.sh
-
+# LB provider must be installed BEFORE Traefik — Traefik's helm chart
+# creates a Service of type LoadBalancer and `helm --wait` blocks until
+# .status.loadBalancer is populated, which only happens once a LB
+# controller (cloud-provider-kind or MetalLB) is running.
 if [ "$LB" = "cpk" ]; then
     ./scripts/kind-add-cloud-provider-kind.sh
 else
     ./scripts/kind-add-metallb.sh
 fi
+
+./scripts/kind-add-headlamp.sh
+
+./scripts/kind-add-traefik.sh
 
 
 # case insensitive comparison

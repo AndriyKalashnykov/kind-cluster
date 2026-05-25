@@ -45,14 +45,16 @@ jobs:
       - name: Export certs
         run: ./scripts/kind-export-cert.sh
 
+      - name: Install cloud-provider-kind
+        # Must run before Traefik — Traefik's helm chart creates a LoadBalancer
+        # Service and `helm --wait` blocks on .status.loadBalancer.
+        run: make lb-cpk
+
       - name: Install Headlamp
         run: ./scripts/kind-add-headlamp.sh
 
       - name: Install Traefik ingress
         run: ./scripts/kind-add-traefik.sh
-
-      - name: Install cloud-provider-kind
-        run: make lb-cpk
 
       - name: Install metrics-server
         run: ./scripts/kind-add-metrics-server.sh

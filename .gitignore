@@ -15,6 +15,7 @@
 # vendor/
 .idea/
 .vscode/
+.claude/
 client.crt
 client.key
 client.pfx
