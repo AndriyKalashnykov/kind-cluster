@@ -1,37 +1,32 @@
 #!/bin/bash
+# Deploy a httpd backend exposed via Traefik at http://demo.localdev.me/.
+# Used by `make install-all` and CI as the smoke-test target for the
+# ingress data path. Idempotent (re-running install-all must not error).
+#
+# The Traefik chart already creates a LoadBalancer Service — no service-type
+# patch needed (the previous ingress-nginx flow patched it post-install).
 
-# set -x
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
 # Use an explicit kubectl context so a parallel `make` invocation in
 # another KinD project (which may run `kubectl config use-context`)
-# cannot silently switch us to the wrong cluster mid-script. Default
-# is `kind` for backward compat with existing tooling that references
-# the `kind-kind` context.
+# cannot silently switch us to the wrong cluster mid-script.
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
 TIMEOUT=${1:-180s}
 
-if [ -z "$TIMEOUT" ]; then
-    echo "Provide deployment timeout"
-    exit 1
-fi
-
-
-# https://github.com/kubernetes/ingress-nginx/blob/main/docs/deploy/index.md
-
-echo "changing ingress-nginx-controller service type to LoadBlancer"
-"${KUBECTL[@]}" patch svc ingress-nginx-controller -n ingress-nginx --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
-echo "waiting for ingress-nginx-controller service to get External-IP"
+echo "waiting for Traefik service to get External-IP"
 for _ in $(seq 1 90); do
-    "${KUBECTL[@]}" get service/ingress-nginx-controller -n ingress-nginx --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
+    "${KUBECTL[@]}" get service/traefik -n traefik --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
     sleep 2
 done
-"${KUBECTL[@]}" get service/ingress-nginx-controller -n ingress-nginx --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: ingress-nginx-controller did not get an External-IP after 180s"; "${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller; exit 1; }
-service_ip=$("${KUBECTL[@]}" get services ingress-nginx-controller -n ingress-nginx -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
-echo "nginx ingress External-IP: ${service_ip}"
+"${KUBECTL[@]}" get service/traefik -n traefik --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: Traefik LoadBalancer did not get an External-IP after 180s"; "${KUBECTL[@]}" get svc -n traefik traefik; exit 1; }
+service_ip=$("${KUBECTL[@]}" get services traefik -n traefik -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
+echo "Traefik External-IP: ${service_ip}"
 
 echo "deploying a httpd web server and the associated service"
 DEMO_SVC_NAME=demo-localhost
@@ -43,7 +38,7 @@ echo "waiting for httpd pods"
 "${KUBECTL[@]}" expose deployment ${DEMO_SVC_NAME} --dry-run=client -o yaml | "${KUBECTL[@]}" apply -f -
 
 echo "creating an ingress resource and mapping demo.localdev.me to localhost"
-"${KUBECTL[@]}" create ingress demo-localhost --class=nginx --rule="demo.localdev.me/*=${DEMO_SVC_NAME}:${DEMO_SVC_PORT}" --dry-run=client -o yaml | "${KUBECTL[@]}" apply -f -
+"${KUBECTL[@]}" create ingress demo-localhost --class=traefik --rule="demo.localdev.me/*=${DEMO_SVC_NAME}:${DEMO_SVC_PORT}" --dry-run=client -o yaml | "${KUBECTL[@]}" apply -f -
 
 echo "waiting for ingress demo-localhost"
 wait_period=0
@@ -64,16 +59,13 @@ while [ -z "$hostname" ]; do
 done
 echo "ingress demo-localhost hostname: $hostname"
 
-# kubectl port-forward --namespace=ingress-nginx service/ingress-nginx-controller 8080:${DEMO_SVC_PORT}
-
 # demo.localdev.me NXDOMAIN on many hosts (GH runners included); curl the
-# ingress-nginx LoadBalancer IP directly from INSIDE the kind control-plane
+# Traefik LoadBalancer IP directly from INSIDE the kind control-plane
 # node with an explicit Host header. Retry up to 30s for async rule propagation.
 KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
-INGRESS_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+INGRESS_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 for _ in $(seq 1 15); do
     RESP=$(docker exec "${KIND_NODE}" curl -sf --max-time 5 -H "Host: demo.localdev.me" "http://${INGRESS_IP}:80/" 2>/dev/null) && { echo "$RESP" | head -c 200; echo; break; }
     sleep 2
 done
 [ -n "${RESP:-}" ] || echo "(curl http://${INGRESS_IP} via ${KIND_NODE} with Host demo.localdev.me failed after 30s)"
-

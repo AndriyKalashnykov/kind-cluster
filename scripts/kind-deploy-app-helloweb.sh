@@ -37,7 +37,7 @@ echo "deploying helloweb"
 
 echo "waiting for helloweb pods"
 "${KUBECTL[@]}" wait deployment -n default helloweb --for condition=Available=True --timeout="${TIMEOUT}"
-# Service is ClusterIP — exposed to the host through ingress-nginx via the
+# Service is ClusterIP — exposed to the host through Traefik via the
 # demo-apps Ingress (k8s/demo-apps-ingress.yaml, applied by kind-install-all.sh).
 # Reach it at http://helloweb.localdev.me/ after adding the host to /etc/hosts.
 

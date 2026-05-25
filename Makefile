@@ -215,11 +215,11 @@ ci-run: deps-tools deps-docker
 			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
 	done
 
-#install-all: @ Install all (kind cluster, Nginx ingress, cloud-provider-kind LoadBalancer, demo workloads; override with LB=metallb)
+#install-all: @ Install all (kind cluster, Traefik ingress, cloud-provider-kind LoadBalancer, demo workloads; override with LB=metallb)
 install-all: deps
 	@./scripts/kind-install-all.sh yes
 
-#install-all-no-demo-workloads: @ Install all (kind cluster, Nginx ingress, cloud-provider-kind LoadBalancer; override with LB=metallb)
+#install-all-no-demo-workloads: @ Install all (kind cluster, Traefik ingress, cloud-provider-kind LoadBalancer; override with LB=metallb)
 install-all-no-demo-workloads: deps
 	@./scripts/kind-install-all.sh no
 
@@ -256,9 +256,9 @@ headlamp-forward: deps
 headlamp-token: deps
 	@./scripts/kind-headlamp-token.sh
 
-#nginx-ingress: @ Install Nginx ingress
-nginx-ingress: deps
-	@./scripts/kind-add-ingress-nginx.sh
+#ingress-traefik: @ Install Traefik ingress controller (replaces ingress-nginx which entered retirement Mar 2026)
+ingress-traefik: deps
+	@./scripts/kind-add-traefik.sh
 
 #lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
 lb-metallb: deps
@@ -285,9 +285,9 @@ nfs-host-provisioner: deps
 	@if [ -z "$(NFS_SERVER)" ]; then echo "Error: NFS_SERVER=<ip> required. Example: make nfs-host-provisioner NFS_SERVER=192.168.1.27"; exit 1; fi
 	@./scripts/kind-add-nfs-host-provisioner.sh $(NFS_SERVER) $(if $(NFS_PATH),$(NFS_PATH),)
 
-#deploy-app-nginx-ingress-localhost: @ Deploy httpd with ingress at http://demo.localdev.me:80/ (patches ingress-nginx-controller to LoadBalancer)
-deploy-app-nginx-ingress-localhost: deps
-	@./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+#deploy-app-ingress-localhost: @ Deploy httpd with Ingress at http://demo.localdev.me/
+deploy-app-ingress-localhost: deps
+	@./scripts/kind-deploy-app-ingress-localhost.sh
 
 #deploy-app-helloweb: @ Deploy helloweb
 deploy-app-helloweb: deps
@@ -364,10 +364,10 @@ clean:
 	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
-	headlamp-install headlamp-forward headlamp-token nginx-ingress \
+	headlamp-install headlamp-forward headlamp-token ingress-traefik \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
-	deploy-app-nginx-ingress-localhost deploy-app-helloweb \
+	deploy-app-ingress-localhost deploy-app-helloweb \
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
 	image-build image-test registry registry-test renovate-validate \
 	kind-destroy delete-cluster \
