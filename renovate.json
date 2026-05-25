@@ -78,9 +78,10 @@
       "groupName": "Docker dependencies"
     },
     {
-      "description": "Keep workload image bumps in sync across k8s/*.yaml and scripts/*.sh — YAML image: field (kubernetes manager) and matching scripts' IMAGE= variable (custom.regex on shell) land in one PR so `kind load docker-image` and `kubectl apply` can't disagree on the tag.",
+      "description": "Keep workload image bumps in sync across k8s/*.yaml and scripts/*.sh — YAML image: field (kubernetes manager) and matching scripts' IMAGE= variable (custom.regex on shell) land in one PR so `kind load docker-image` and `kubectl apply` can't disagree on the tag. matchUpdateTypes scopes the rule to per-package updates only — Renovate's Pin Dependencies operation bundles many unrelated deps into one PR with no single {{depName}} for the template to resolve, which produced a literal `workload-image-depname` branch name and an `Error updating branch: update failure` in the Dependency Dashboard. Letting `pin` fall back to default grouping fixes the collapse.",
       "matchDatasources": ["docker"],
       "matchManagers": ["kubernetes", "custom.regex"],
+      "matchUpdateTypes": ["major", "minor", "patch", "digest"],
       "groupName": "workload image {{depName}}"
     },
     {
