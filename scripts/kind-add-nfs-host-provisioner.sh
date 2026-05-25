@@ -50,12 +50,15 @@ SC_NAME=nfs-host
 echo "=== Ensuring csi-driver-nfs ${CSI_DRIVER_NFS_VERSION} is installed ==="
 echo "    NFS server: ${NFS_SERVER}:${NFS_PATH}"
 
-helm repo add csi-driver-nfs https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts >/dev/null 2>&1 || true
+# Pin the repo path to the released tag so an upstream restructure of
+# `master/charts/` cannot break this install silently. Helm chart versions
+# are bare semver (no `v`); strip the `v` on --version.
+helm repo add csi-driver-nfs "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/${CSI_DRIVER_NFS_VERSION}/charts" >/dev/null 2>&1 || true
 helm repo update csi-driver-nfs >/dev/null
 
 helm upgrade --install "$RELEASE" csi-driver-nfs/csi-driver-nfs \
     --namespace "$NS_DRIVER" \
-    --version "${CSI_DRIVER_NFS_VERSION}" \
+    --version "${CSI_DRIVER_NFS_VERSION#v}" \
     --wait --timeout 5m
 
 echo
