@@ -17,7 +17,7 @@ MERMAID_CLI_VERSION := 11.15.0
 # renovate: datasource=docker depName=plantuml/plantuml
 PLANTUML_VERSION := 1.2026.4
 # renovate: datasource=docker depName=ghcr.io/andriykalashnykov/puml2drawio
-PUML2DRAWIO_VERSION := 1.0.1
+PUML2DRAWIO_VERSION := 1.6.0
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
 KUBECTL_VERSION := v1.36.1
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
