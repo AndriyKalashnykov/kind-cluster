@@ -78,6 +78,13 @@
       "groupName": "Docker dependencies"
     },
     {
+      "description": "Disable digest pinning for Makefile-tracked docker dev tools (MERMAID_CLI_VERSION, PLANTUML_VERSION, PUML2DRAWIO_VERSION, KIND_NODE_IMAGE, ACT_UBUNTU_VERSION). The `docker:pinDigests` preset (inherited via config:best-practices) would otherwise generate a pinDigest update that collides with version bumps in `renovate/makefile-tools` and silently suppresses the bump — at-risk pattern per /renovate skill, preventive fix. Makefile-tracked deps are dev tools (PlantUML/mermaid renderers, kindest/node, catthehacker/ubuntu for act), not production runtime — version pinning alone is sufficient. Production-runtime docker pins (Dockerfile FROM, k8s/*.yaml image: fields) keep their digest pins via the same preset.",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["Makefile"],
+      "matchDatasources": ["docker"],
+      "pinDigests": false
+    },
+    {
       "description": "Keep workload image bumps in sync across k8s/*.yaml and scripts/*.sh — YAML image: field (kubernetes manager) and matching scripts' IMAGE= variable (custom.regex on shell) land in one PR so `kind load docker-image` and `kubectl apply` can't disagree on the tag. matchUpdateTypes scopes the rule to per-package updates only — Renovate's Pin Dependencies operation bundles many unrelated deps into one PR with no single {{depName}} for the template to resolve, which produced a literal `workload-image-depname` branch name and an `Error updating branch: update failure` in the Dependency Dashboard. Letting `pin` fall back to default grouping fixes the collapse.",
       "matchDatasources": ["docker"],
       "matchManagers": ["kubernetes", "custom.regex"],
@@ -85,7 +92,7 @@
       "groupName": "workload image {{depName}}"
     },
     {
-      "description": "Keep kubectl in sync across .mise.toml (mise manager) and Makefile KUBECTL_VERSION (custom.regex, used as a Dockerfile --build-arg).",
+      "description": "Keep kubectl in sync across .mise.toml (mise manager) and Makefile KUBECTL_VERSION (custom.regex, used as a Dockerfile --build-arg). The Makefile pin is `# renovate: datasource=github-tags depName=kubernetes/kubernetes`; the mise pin extracts to `aqua:kubernetes/kubectl`. The `kubernetes/kubectl` entry is a defensive alias in case Renovate's docker-tag manager surfaces that depName form for any future Dockerfile reference.",
       "matchPackageNames": ["kubernetes/kubernetes", "kubernetes/kubectl", "aqua:kubernetes/kubectl"],
       "groupName": "kubectl"
     },
