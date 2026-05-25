@@ -244,20 +244,17 @@ create-cluster: kind-create
 export-cert: deps
 	@./scripts/kind-export-cert.sh
 
-#dashboard-install: @ Install Kubernetes Dashboard (Helm chart v7.x) and admin ServiceAccount
-dashboard-install: deps
-	@./scripts/kind-add-dashboard.sh
+#headlamp-install: @ Install Headlamp (Helm chart 0.42.x) and admin ServiceAccount — successor to the archived kubernetes/dashboard
+headlamp-install: deps
+	@./scripts/kind-add-headlamp.sh
 
-#dashboard-forward: @ Port-forward dashboard to https://localhost:8443 and open browser
-dashboard-forward: deps
-	@./scripts/kind-forward-dashboard.sh
+#headlamp-forward: @ Port-forward Headlamp to http://localhost:8081 and open browser
+headlamp-forward: deps
+	@./scripts/kind-forward-headlamp.sh
 
-#dashboard-token: @ Print the admin-user token for the Dashboard login screen
-dashboard-token: deps
-	@./scripts/kind-dashboard-token.sh
-
-#k8s-dashboard: @ Alias for dashboard-install (backwards compatible)
-k8s-dashboard: dashboard-install
+#headlamp-token: @ Print the admin-user token for the Headlamp login screen
+headlamp-token: deps
+	@./scripts/kind-headlamp-token.sh
 
 #nginx-ingress: @ Install Nginx ingress
 nginx-ingress: deps
@@ -361,13 +358,13 @@ vulncheck: trivy-fs
 #clean: @ Tear down cluster and remove generated scratch artifacts (certs, tokens)
 clean:
 	@./scripts/kind-delete.sh 2>/dev/null || true
-	@rm -f client.crt client.key client.pfx cluster-ca.crt dashboard-admin-token.txt
+	@rm -f client.crt client.key client.pfx cluster-ca.crt headlamp-admin-token.txt
 
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
 	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
-	k8s-dashboard dashboard-install dashboard-forward dashboard-token nginx-ingress \
+	headlamp-install headlamp-forward headlamp-token nginx-ingress \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-nginx-ingress-localhost deploy-app-helloweb \

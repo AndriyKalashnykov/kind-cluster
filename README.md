@@ -5,7 +5,7 @@
 
 # kind-cluster — Local Kubernetes Lab on KinD
 
-Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, LoadBalancer (cloud-provider-kind, or MetalLB), Dashboard, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
+Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, LoadBalancer (cloud-provider-kind, or MetalLB), Headlamp UI, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
 <img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="700">
 
@@ -17,7 +17,7 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 | Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.16.0 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
 | Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.2 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
-| Dashboard | [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) v7.x | Helm chart v7 ships Kong-fronted dashboard with admin token in repo root |
+| Web UI | [Headlamp](https://github.com/kubernetes-sigs/headlamp) 0.42.x | SIG-UI-endorsed Kubernetes UI (successor to the archived `kubernetes/dashboard`); single-pod ClusterIP with token-based login |
 | CI | GitHub Actions | `make deps` + `make kind-create` — same Makefile path users hit locally; CI verifies install scripts on every push |
 
 ## Quick Start
@@ -44,9 +44,9 @@ User provides (host-level):
 | [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Task orchestration |
 | [Git](https://git-scm.com/) | latest | Version control |
 | [Docker](https://www.docker.com/) | latest | Container runtime for KinD nodes |
-| [helm](https://helm.sh/docs/intro/install/) | v3+ | Chart-based installs (dashboard, Prometheus, NFS) |
+| [helm](https://helm.sh/docs/intro/install/) | v3+ | Chart-based installs (Headlamp, Prometheus, NFS) |
 | [curl](https://curl.se/) | latest | Download helpers used by scripts |
-| [base64](https://command-not-found.com/base64) | latest | Token decoding for dashboard access |
+| [base64](https://command-not-found.com/base64) | latest | Token decoding for Headlamp access |
 
 Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise](https://mise.jdx.dev) (mise itself is bootstrapped into `~/.local/bin` on first run):
 
@@ -77,7 +77,7 @@ The cluster runs entirely on the local Docker bridge. The LoadBalancer provider 
 
 Ingress is pinned to the control-plane node (via the `ingress-ready` nodeSelector label). `kind-config.yaml` maps host ports 80/443 to that node, so `http://demo.localdev.me/` resolves through the host port — independent of which LoadBalancer provider is active.
 
-The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it via the `dashboard-forward` target.
+Headlamp listens on port 80 inside the cluster — reach it via the `headlamp-forward` target (forwards to `http://localhost:8081`).
 
 ### Deployment View
 
@@ -85,7 +85,7 @@ The dashboard's Kong proxy listens on port 8443 inside the cluster — reach it 
 
 Source: [`docs/diagrams/c4-deployment.puml`](./docs/diagrams/c4-deployment.puml).
 
-- **`kind-control-plane` node** — kindest/node container running kube-apiserver/etcd/scheduler plus ingress-nginx, kubernetes-dashboard, and metrics-server (the latter pinned to control-plane via nodeSelector for kind compat).
+- **`kind-control-plane` node** — kindest/node container running kube-apiserver/etcd/scheduler plus ingress-nginx, Headlamp, and metrics-server (the latter pinned to control-plane via nodeSelector for kind compat).
 - **`kind-worker` node** — runs application workloads (demo apps, in-cluster NFS server pod, kube-prometheus-stack).
 - **`cloud-provider-kind`** — host docker container watching `Service: LoadBalancer` on the kind docker network; allocates LB IPs from the kind subnet (172.18.0.0/16 by default).
 - **`kindccm-<hash>`** — per-Service Envoy sidecars spawned by cloud-provider-kind that route LB-IP traffic to backend pods. Cleaned up by `make kind-destroy` (failing to clean these up was the cause of the K1.5 "connection reset on first curl" flake — see `scripts/kind-delete.sh`).
@@ -111,28 +111,25 @@ make lb-metallb                # already-running cluster, no LB yet — install 
 
 Switching providers on a live cluster requires tearing down the first one — each script hard-refuses if the other is present. Run `make kind-down && LB=<provider> make kind-up` for a clean reset.
 
-## Kubernetes Dashboard install
+## Headlamp install
 
-Pinned to Helm chart [`kubernetes-dashboard`](https://github.com/kubernetes/dashboard) **v7.14.0**. Dashboard v7 splits the monolithic v2 service into microservices (`api`, `web`, `auth`, `metrics-scraper`) behind a **Kong Gateway** reverse proxy — you port-forward the `kong-proxy` Service, not a pod.
+Pinned to Helm chart [`headlamp`](https://github.com/kubernetes-sigs/headlamp) **0.42.0**. Headlamp is the SIG-UI-endorsed successor to the [archived](https://github.com/kubernetes/dashboard) kubernetes/dashboard project — a single Pod fronted by a ClusterIP Service on port 80 (HTTP), with token-based login.
 
 ```mermaid
 flowchart LR
-    B[Browser<br/>https://localhost:8443] -->|kubectl port-forward| K[Service<br/>kubernetes-dashboard-kong-proxy]
-    K --> W[web]
-    K --> A[api]
-    K --> U[auth]
-    K --> M[metrics-scraper]
+    B[Browser<br/>http://localhost:8081] -->|kubectl port-forward| S[Service<br/>headlamp:80]
+    S --> P[Pod<br/>headlamp]
 ```
 
 ```bash
-make dashboard-install   # helm upgrade --install + apply admin ServiceAccount + write token to dashboard-admin-token.txt
-make dashboard-forward   # kubectl port-forward svc/kubernetes-dashboard-kong-proxy 8443:443 + xdg-open
-make dashboard-token     # print the admin-user token
+make headlamp-install   # helm upgrade --install + apply admin ServiceAccount + write token to headlamp-admin-token.txt
+make headlamp-forward   # kubectl port-forward svc/headlamp 8081:80 + xdg-open
+make headlamp-token     # print the admin-user token
 ```
 
-At the login screen, select **Token** and paste the token printed by `make dashboard-token`. See [Access services · Kubernetes Dashboard](#kubernetes-dashboard) for the bare-host vs VM port-forward/tunnel recipes.
+At the login screen, paste the token printed by `make headlamp-token`. See [Access services · Headlamp](#headlamp) for the bare-host vs VM port-forward/tunnel recipes.
 
-Uninstall: `helm delete kubernetes-dashboard --namespace kubernetes-dashboard`.
+Uninstall: `helm delete headlamp --namespace headlamp`.
 
 ## NFS & RWX storage
 
@@ -208,7 +205,7 @@ flowchart LR
     subgraph vm[Multipass VM: kind-host]
         subgraph cluster[kind cluster]
             ING[ingress-nginx]
-            DASH[Dashboard]
+            HL[Headlamp]
             APPS[demo apps]
         end
         LB[cloud-provider-kind<br/>host container on kind docker net]
@@ -282,7 +279,7 @@ Three patterns map to three needs — the stack uses each where it fits:
 |---|---|---|
 | **Ingress** | one L7 gateway (ingress-nginx) fronts every HTTP demo, routed by Host header | `demo.localdev.me`, `helloweb.localdev.me`, `golang.localdev.me`, `foo.localdev.me` |
 | **LoadBalancer** | the LB provider (cloud-provider-kind or MetalLB) allocates ONE external IP — for the ingress controller — plus a distinct IP for Grafana (persistent admin UI) | ingress-nginx-controller, Grafana |
-| **Port-forward** | `kubectl port-forward` from your terminal to an in-cluster Service; ephemeral, admin-only | Kubernetes Dashboard, Prometheus, Alertmanager |
+| **Port-forward** | `kubectl port-forward` from your terminal to an in-cluster Service; ephemeral, admin-only | Headlamp, Prometheus, Alertmanager |
 
 All HTTP demo apps use **ingress**. Step 2–4 below set up one LB IP plus one `/etc/hosts` entry that covers every demo app.
 
@@ -397,24 +394,24 @@ curl http://foo.localdev.me/               # "foo" or "bar"  (http-echo; Service
 | golang-hello-world-web | `http://golang.localdev.me/myhello/` · `/healthz` |
 | foo-bar-service | `http://foo.localdev.me/` |
 
-### Kubernetes Dashboard
+### Headlamp
 
-The dashboard listens on port 8443 inside the cluster. Same flow on both paths: a `kubectl port-forward`. Path B adds an outer SSH tunnel to reach the VM.
+Headlamp listens on port 80 inside the cluster (HTTP). Same flow on both paths: a `kubectl port-forward`. Path B adds an outer SSH tunnel to reach the VM.
 
 ```bash
 # Path A — port-forward directly from your host (foreground; Ctrl+C to stop)
-make dashboard-forward
+make headlamp-forward
 
 # Path B — port-forward runs inside the VM (terminal 1), outer tunnel from host (terminal 2)
-# terminal 1:  make vm-ssh   →   make dashboard-forward
+# terminal 1:  make vm-ssh   →   make headlamp-forward
 # terminal 2:
-ssh -fN -L 8443:localhost:8443 ubuntu@"$VM_IP"
+ssh -fN -L 8081:localhost:8081 ubuntu@"$VM_IP"
 
 # Both paths — grab the admin token for the login screen (reuses the `kube` function from Step 1)
-kube -n kubernetes-dashboard create token admin-user
+kube -n headlamp create token admin-user
 ```
 
-Browser: `https://localhost:8443`
+Browser: `http://localhost:8081`
 
 ## Observability
 
@@ -480,7 +477,7 @@ Summary — pick the column matching your install path:
 | Alertmanager | `http://localhost:9093/` | `http://localhost:9093/` | `http://localhost:9093/` |
 | Login (Grafana) | `admin` / `$GRAFANA_PASSWORD` | same | same |
 
-If you're running inside a Multipass VM, prefix with `multipass exec $NAME --` or run the port-forward inside the VM and add a host-side SSH tunnel exactly like the Dashboard flow in §4 above (replace `8443` with `9090` / `9093`).
+If you're running inside a Multipass VM, prefix with `multipass exec $NAME --` or run the port-forward inside the VM and add a host-side SSH tunnel exactly like the Headlamp flow in §4 above (replace `8081` with `9090` / `9093`).
 
 ### metrics-server
 
@@ -517,9 +514,9 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Cluster | `make e2e` | Bring up the full stack and run smoke tests (chains `install-all` + `e2e-smoke`) |
 | Cluster | `make e2e-smoke` | Smoke-test an already-running cluster (no install) |
 | Cluster | `make clean` | Tear down cluster + remove generated scratch artifacts (certs, tokens) |
-| Add-ons | `make dashboard-install` | Kubernetes Dashboard (Helm chart v7.14.0) + admin ServiceAccount |
-| Add-ons | `make dashboard-forward` | Port-forward dashboard to `https://localhost:8443` and open browser |
-| Add-ons | `make dashboard-token` | Print the admin-user token |
+| Add-ons | `make headlamp-install` | Headlamp UI (Helm chart 0.42.0) + admin ServiceAccount — successor to the archived kubernetes/dashboard |
+| Add-ons | `make headlamp-forward` | Port-forward Headlamp to `http://localhost:8081` and open browser |
+| Add-ons | `make headlamp-token` | Print the admin-user token |
 | Add-ons | `make nginx-ingress` | Install Nginx ingress controller |
 | Add-ons | `make lb-cpk` | Install cloud-provider-kind (default LoadBalancer) |
 | Add-ons | `make lb-metallb` | Install MetalLB (alternative; also: `LB=metallb make install-all`) |
@@ -558,7 +555,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Quality | `make ci-run` | run the GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
 
 Suppressions (intentional, justified inline):
-- `.gitleaks.toml` — allowlist for the local `dashboard-admin-token.txt`.
+- `.gitleaks.toml` — allowlist for the local `headlamp-admin-token.txt`.
 - `.trivyignore.yaml` — demo workloads use default securityContext, the in-cluster NFS pod needs privileged mode.
 - `.hadolint.yaml` — `kubectl-test` is a throwaway debug image; alpine-package pinning is overkill.
 
@@ -573,7 +570,7 @@ Suppressions (intentional, justified inline):
 | **changes** | — | `dorny/paths-filter` outputs `code=true` if anything outside docs/markdown/images changed; downstream jobs gate on it |
 | **static-check** | changes | `make static-check` (lint + test + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
 | **docker** | changes, static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
-| **e2e** | changes, static-check | `jdx/mise-action` + `make deps` + `make kind-create`, install ingress + cloud-provider-kind + dashboard, deploy all demo workloads, K1.5 route-readiness poll, run `make e2e-smoke` for body-asserting smoke tests via `docker exec` (~4 min end-to-end) |
+| **e2e** | changes, static-check | `jdx/mise-action` + `make deps` + `make kind-create`, install ingress + cloud-provider-kind + Headlamp, deploy all demo workloads, K1.5 route-readiness poll, run `make e2e-smoke` for body-asserting smoke tests via `docker exec` (~4 min end-to-end) |
 | **ci-pass** | changes, static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
 
 ### Sibling workflows

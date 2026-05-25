@@ -30,7 +30,7 @@ echo "Selected LoadBalancer: $LB"
 
 ./scripts/kind-export-cert.sh
 
-./scripts/kind-add-dashboard.sh
+./scripts/kind-add-headlamp.sh
 
 ./scripts/kind-add-ingress-nginx.sh
 

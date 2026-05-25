@@ -144,17 +144,17 @@ else
   fail "client.pfx missing or empty"
 fi
 
-# --- Dashboard token: kind-add-dashboard.sh writes to repo root ---
-if [ -s "$REPO_ROOT/dashboard-admin-token.txt" ]; then
-  TOKEN=$(tr -d '[:space:]' < "$REPO_ROOT/dashboard-admin-token.txt")
+# --- Headlamp token: kind-add-headlamp.sh writes to repo root ---
+if [ -s "$REPO_ROOT/headlamp-admin-token.txt" ]; then
+  TOKEN=$(tr -d '[:space:]' < "$REPO_ROOT/headlamp-admin-token.txt")
   # JWT = three base64url segments separated by dots
   if [[ "$TOKEN" =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]]; then
-    pass "dashboard-admin-token.txt is a well-formed JWT"
+    pass "headlamp-admin-token.txt is a well-formed JWT"
   else
-    fail "dashboard-admin-token.txt is not a JWT (got ${#TOKEN} chars)"
+    fail "headlamp-admin-token.txt is not a JWT (got ${#TOKEN} chars)"
   fi
 else
-  fail "dashboard-admin-token.txt missing or empty"
+  fail "headlamp-admin-token.txt missing or empty"
 fi
 
 # --- Metrics-server API (opt-in via TEST_METRICS_SERVER=yes) ---

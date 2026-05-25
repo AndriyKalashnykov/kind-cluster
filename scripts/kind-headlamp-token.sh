@@ -1,6 +1,6 @@
 #!/bin/bash
-# Print the Kubernetes Dashboard admin-user token.
-# Prefers the long-lived Secret created by k8s/dashboard-admin.yaml;
+# Print the Headlamp admin-user token.
+# Prefers the long-lived Secret created by k8s/headlamp-admin.yaml;
 # falls back to a short-lived token via `kubectl create token`.
 
 set -euo pipefail
@@ -11,7 +11,7 @@ set -euo pipefail
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
-NS=kubernetes-dashboard
+NS=headlamp
 SA=admin-user
 SECRET=admin-user-token
 
