@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: nfs-server
-          image: itsthenetwork/nfs-server-alpine:12@sha256:79f203edfcf81e8ef27e81ca47049d8b3e6007969337b808a49288317b6a26c3
+          image: itsthenetwork/nfs-server-alpine:12@sha256:7fa99ae65c23c5af87dd4300e543a86b119ed15ba61422444207efc7abd0ba20
           ports:
             - name: nfs
               containerPort: 2049
