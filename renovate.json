@@ -78,9 +78,8 @@
       "groupName": "Docker dependencies"
     },
     {
-      "description": "Disable digest pinning for Makefile-tracked docker dev tools (MERMAID_CLI_VERSION, PLANTUML_VERSION, PUML2DRAWIO_VERSION, KIND_NODE_IMAGE, ACT_UBUNTU_VERSION). The `docker:pinDigests` preset (inherited via config:best-practices) would otherwise generate a pinDigest update that collides with version bumps in `renovate/makefile-tools` and silently suppresses the bump — at-risk pattern per /renovate skill, preventive fix. Makefile-tracked deps are dev tools (PlantUML/mermaid renderers, kindest/node, catthehacker/ubuntu for act), not production runtime — version pinning alone is sufficient. Production-runtime docker pins (Dockerfile FROM, k8s/*.yaml image: fields) keep their digest pins via the same preset.",
+      "description": "Disable digest pinning for ALL custom.regex-tracked docker pins. Covers two file groups: (a) Makefile dev tools (MERMAID_CLI_VERSION, PLANTUML_VERSION, PUML2DRAWIO_VERSION, KIND_NODE_IMAGE, ACT_UBUNTU_VERSION) — preventive per /renovate skill's `docker:pinDigests × version-bump` collision class; (b) scripts/*.sh workload-image refs (hashicorp/http-echo, gcr.io/.../hello-app, ghcr.io/.../golang-web, registry, itsthenetwork/nfs-server-alpine) — the shell-script regex captures `IMAGE=foo/bar:${X_VERSION}` constructions which cannot carry an `@sha256:...` digest in the variable's value, so the Pin Dependencies operation kept failing on these (Dependency Dashboard 'Repository Problem: Error updating branch'). Production-runtime docker pins (Dockerfile FROM, k8s/*.yaml image: fields) keep their digest pins via the dockerfile + kubernetes managers respectively.",
       "matchManagers": ["custom.regex"],
-      "matchFileNames": ["Makefile"],
       "matchDatasources": ["docker"],
       "pinDigests": false
     },
