@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Smoke-test deployed demo services. Assumes install-all has already been run
-# (KinD cluster, ingress-nginx, LoadBalancer provider, demo apps).
+# (KinD cluster, Traefik, LoadBalancer provider, demo apps).
 #
 # All HTTP demo apps (httpd, helloweb, golang, foo) are reached through
-# ingress-nginx's LoadBalancer IP with a Host header — the LB provider
+# Traefik's LoadBalancer IP with a Host header — the LB provider
 # (cloud-provider-kind or MetalLB) allocates exactly ONE IP for the ingress
 # controller, which fronts every demo app by virtual-host routing.
 set -euo pipefail
@@ -26,7 +26,7 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 # container for `docker exec`.
 KIND_NODE="${KIND_NODE:-$(kube_node_name "$KIND_CLUSTER_NAME")}"
 
-INGRESS_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+INGRESS_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 PASS=0
 FAIL=0
@@ -74,16 +74,16 @@ check_status_code() {
 echo "=== E2E smoke tests ==="
 
 # --- Cluster infrastructure: readiness of ingress controller and MetalLB ---
-if "${KUBECTL[@]}" -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=60s >/dev/null 2>&1; then
-  pass "ingress-nginx controller deployment is rolled out"
+if "${KUBECTL[@]}" -n traefik rollout status deploy/traefik --timeout=60s >/dev/null 2>&1; then
+  pass "Traefik controller deployment is rolled out"
 else
-  fail "ingress-nginx controller rollout did not complete within 60s"
+  fail "Traefik controller rollout did not complete within 60s"
 fi
 
-if [ -n "$("${KUBECTL[@]}" -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)" ]; then
-  pass "ingress-nginx-controller has a LoadBalancer ingress IP"
+if [ -n "$("${KUBECTL[@]}" -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)" ]; then
+  pass "Traefik service has a LoadBalancer ingress IP"
 else
-  fail "ingress-nginx-controller has no .status.loadBalancer.ingress[0].ip — LB provider did not assign an IP"
+  fail "Traefik service has no .status.loadBalancer.ingress[0].ip — LB provider did not assign an IP"
 fi
 
 case "${LB:-cpk}" in

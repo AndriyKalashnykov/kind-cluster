@@ -57,8 +57,8 @@ jobs:
       - name: Install Headlamp
         run: ./scripts/kind-add-headlamp.sh
 
-      - name: Install Nginx ingress
-        run: ./scripts/kind-add-ingress-nginx.sh
+      - name: Install Traefik ingress
+        run: ./scripts/kind-add-traefik.sh
 
       - name: Install MetalLB
         run: ./scripts/kind-add-metallb.sh
@@ -70,7 +70,7 @@ jobs:
         run: ./scripts/kind-add-nfs-incluster.sh
 
       - name: Deploy ingress demo
-        run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+        run: ./scripts/kind-deploy-app-ingress-localhost.sh
 
       - name: Deploy helloweb
         run: ./scripts/kind-deploy-app-helloweb.sh
@@ -85,11 +85,11 @@ jobs:
         # Subdomain-based routing for helloweb / golang / foo. See ci.yml
         # for the same step — bundled ingress file must be applied after
         # Services exist but before smoke test runs, plus a wait for
-        # ingress-nginx to propagate the rules (avoids a race that passed
+        # Traefik to propagate the rules (avoids a race that passed
         # on laptops but failed on runners).
         run: |
           kubectl apply -f k8s/demo-apps-ingress.yaml
-          # See ci.yml for the rationale — kind's ingress-nginx fills
+          # See ci.yml for the rationale — Traefik fills
           # .status.loadBalancer.ingress[0].hostname, not .ip.
           for _ in $(seq 1 60); do
             [ -n "$(kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' 2>/dev/null)" ] && break
@@ -106,7 +106,7 @@ jobs:
         # failed 3/4 demo-app assertions for exactly this reason. Wait for
         # BOTH ingresses to respond. Bail with a diagnostic dump after 60×2s.
         run: |
-          INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           probe() {
             docker exec kind-control-plane curl -sf --max-time 3 \
               -H "Host: $1" "http://${INGRESS_IP}/" 2>/dev/null | grep -q "$2"
@@ -119,8 +119,8 @@ jobs:
             sleep 2
           done
           echo "ERROR: ingress routes did not become reachable within 120s"
-          kubectl -n ingress-nginx get pods -o wide
-          kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --tail=80 || true
+          kubectl -n traefik get pods -o wide
+          kubectl -n traefik logs deploy/traefik --tail=80 || true
           kubectl -n metallb-system get pods,ipaddresspool,l2advertisement -o wide || true
           exit 1
 
@@ -136,7 +136,7 @@ jobs:
 
       - name: Verify deploy idempotency
         run: |
-          ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+          ./scripts/kind-deploy-app-ingress-localhost.sh
           ./scripts/kind-deploy-app-helloweb.sh
           ./scripts/kind-deploy-app-foo-bar-service.sh
 

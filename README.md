@@ -12,7 +12,7 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
 | Cluster | [KinD](https://kind.sigs.k8s.io/) v0.31.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
-| Ingress | [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) | Reference controller; matches what most cloud-managed clusters expose |
+| Ingress | [Traefik](https://traefik.io/) v3 (chart 40.x) | Replaces the [retired](https://www.kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) ingress-nginx; supports `networking.k8s.io/v1` Ingress + Gateway API on one binary |
 | Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.10.0 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
 | Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.16.0 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
 | Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.2 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
@@ -24,7 +24,7 @@ Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress
 
 ```bash
 make deps        # auto-bootstraps mise + installs pinned tools from .mise.toml
-make kind-up     # create cluster + Nginx ingress + cloud-provider-kind + demo workloads
+make kind-up     # create cluster + Traefik ingress + cloud-provider-kind + demo workloads
 kubectl cluster-info --context kind-kind
 echo "127.0.0.1 demo.localdev.me" | sudo tee -a /etc/hosts   # one-time
 # Open http://demo.localdev.me/
@@ -85,11 +85,11 @@ Headlamp listens on port 80 inside the cluster — reach it via the `headlamp-fo
 
 Source: [`docs/diagrams/c4-deployment.puml`](./docs/diagrams/c4-deployment.puml).
 
-- **`kind-control-plane` node** — kindest/node container running kube-apiserver/etcd/scheduler plus ingress-nginx, Headlamp, and metrics-server (the latter pinned to control-plane via nodeSelector for kind compat).
+- **`kind-control-plane` node** — kindest/node container running kube-apiserver/etcd/scheduler plus Traefik, Headlamp, and metrics-server (the latter pinned to control-plane via nodeSelector for kind compat).
 - **`kind-worker` node** — runs application workloads (demo apps, in-cluster NFS server pod, kube-prometheus-stack).
 - **`cloud-provider-kind`** — host docker container watching `Service: LoadBalancer` on the kind docker network; allocates LB IPs from the kind subnet (172.18.0.0/16 by default).
 - **`kindccm-<hash>`** — per-Service Envoy sidecars spawned by cloud-provider-kind that route LB-IP traffic to backend pods. Cleaned up by `make kind-destroy` (failing to clean these up was the cause of the K1.5 "connection reset on first curl" flake — see `scripts/kind-delete.sh`).
-- **Developer access** — host port 80/443 forwards to ingress-nginx via `kind-config.yaml` extraPortMappings, so `http://*.localdev.me/` resolves through the kind host port without needing the LB IP. The LB IP route is also host-routable for direct-IP access.
+- **Developer access** — host port 80/443 forwards to Traefik via `kind-config.yaml` extraPortMappings (and Traefik's chart hostPort overrides), so `http://*.localdev.me/` resolves through the kind host port without needing the LB IP. The LB IP route is also host-routable for direct-IP access.
 
 ### Which LoadBalancer?
 
@@ -204,7 +204,7 @@ flowchart LR
     DEV[Developer<br/>laptop shell]
     subgraph vm[Multipass VM: kind-host]
         subgraph cluster[kind cluster]
-            ING[ingress-nginx]
+            ING[Traefik]
             HL[Headlamp]
             APPS[demo apps]
         end
@@ -277,8 +277,8 @@ Three patterns map to three needs — the stack uses each where it fits:
 
 | Pattern | What | Used by |
 |---|---|---|
-| **Ingress** | one L7 gateway (ingress-nginx) fronts every HTTP demo, routed by Host header | `demo.localdev.me`, `helloweb.localdev.me`, `golang.localdev.me`, `foo.localdev.me` |
-| **LoadBalancer** | the LB provider (cloud-provider-kind or MetalLB) allocates ONE external IP — for the ingress controller — plus a distinct IP for Grafana (persistent admin UI) | ingress-nginx-controller, Grafana |
+| **Ingress** | one L7 gateway (Traefik) fronts every HTTP demo, routed by Host header | `demo.localdev.me`, `helloweb.localdev.me`, `golang.localdev.me`, `foo.localdev.me` |
+| **LoadBalancer** | the LB provider (cloud-provider-kind or MetalLB) allocates ONE external IP — for the ingress controller — plus a distinct IP for Grafana (persistent admin UI) | traefik, Grafana |
 | **Port-forward** | `kubectl port-forward` from your terminal to an in-cluster Service; ephemeral, admin-only | Headlamp, Prometheus, Alertmanager |
 
 All HTTP demo apps use **ingress**. Step 2–4 below set up one LB IP plus one `/etc/hosts` entry that covers every demo app.
@@ -302,10 +302,10 @@ From here on, every `kubectl` command is written as `kube …` so both paths run
 
 ### Step 2 — discover the ingress IP
 
-Only ingress-nginx gets a LoadBalancer IP now (demo apps are ClusterIP services behind ingress). Grab it once:
+Only Traefik gets a LoadBalancer IP now (demo apps are ClusterIP services behind ingress). Grab it once:
 
 ```bash
-INGRESS_IP=$(kube get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+INGRESS_IP=$(kube get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo "INGRESS_IP=$INGRESS_IP"
 ```
 
@@ -313,7 +313,7 @@ echo "INGRESS_IP=$INGRESS_IP"
 
 All four demo apps are reached by hostname under `demo.localdev.me`, `helloweb.localdev.me`, `golang.localdev.me`, `foo.localdev.me`. Pick the target based on install path:
 
-**Path A (bare host) and Path B · Option 1 — point them at `127.0.0.1`.** `kind-config.yaml`'s `extraPortMappings` already wires `127.0.0.1:80` to the kind control-plane node (where ingress-nginx is pinned via `ingress-ready`), so host-side ingress traffic works without touching any LB IP:
+**Path A (bare host) and Path B · Option 1 — point them at `127.0.0.1`.** `kind-config.yaml`'s `extraPortMappings` already wires `127.0.0.1:80` to the kind control-plane node (where Traefik is pinned via `ingress-ready`), so host-side ingress traffic works without touching any LB IP:
 
 ```bash
 # Idempotent — replace any existing *.localdev.me entries
@@ -506,7 +506,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 |---|---|---|
 | Cluster | `make kind-up` | docker-compose-style alias for `install-all` (bring the whole stack up) |
 | Cluster | `make kind-down` | docker-compose-style alias for `kind-destroy` (tear the whole stack down) |
-| Cluster | `make install-all` | cluster + Nginx ingress + LoadBalancer (CPK default, or `LB=metallb`) + demo workloads |
+| Cluster | `make install-all` | cluster + Traefik ingress + LoadBalancer (CPK default, or `LB=metallb`) + demo workloads |
 | Cluster | `make install-all-no-demo-workloads` | same minus demo apps |
 | Cluster | `make kind-create` | Create KinD cluster only (alias: `make create-cluster`) |
 | Cluster | `make kind-destroy` | Delete KinD cluster + clean up cloud-provider-kind sidecars (alias: `make delete-cluster`) |
@@ -517,7 +517,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Add-ons | `make headlamp-install` | Headlamp UI (Helm chart 0.42.0) + admin ServiceAccount — successor to the archived kubernetes/dashboard |
 | Add-ons | `make headlamp-forward` | Port-forward Headlamp to `http://localhost:8081` and open browser |
 | Add-ons | `make headlamp-token` | Print the admin-user token |
-| Add-ons | `make nginx-ingress` | Install Nginx ingress controller |
+| Add-ons | `make ingress-traefik` | Install Traefik ingress controller (replaces retired ingress-nginx) |
 | Add-ons | `make lb-cpk` | Install cloud-provider-kind (default LoadBalancer) |
 | Add-ons | `make lb-metallb` | Install MetalLB (alternative; also: `LB=metallb make install-all`) |
 | Add-ons | `make metrics-server` | metrics-server (for `kubectl top` / HPA) |
@@ -525,7 +525,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | NFS | `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
 | NFS | `make nfs-host-setup` | Option 2, step 1 — configure host as NFS server (sudo; Ubuntu/Debian) |
 | NFS | `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install csi-driver-nfs pointing at the host export |
-| Demo apps | `make deploy-app-nginx-ingress-localhost` | httpd behind ingress at `http://demo.localdev.me/` |
+| Demo apps | `make deploy-app-ingress-localhost` | httpd behind ingress at `http://demo.localdev.me/` |
 | Demo apps | `make deploy-app-helloweb` | helloweb sample |
 | Demo apps | `make deploy-app-golang-hello-world-web` | golang-hello-world-web sample |
 | Demo apps | `make deploy-app-foo-bar-service` | foo-bar-service (two backends behind one Service) |

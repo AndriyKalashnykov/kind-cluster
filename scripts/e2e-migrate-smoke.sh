@@ -2,7 +2,7 @@
 # Smoke-test scripts/migrate-from-metallb.sh on a running MetalLB cluster.
 # Pre-conditions (caller's responsibility):
 #   - KinD cluster running
-#   - ingress-nginx + MetalLB installed
+#   - Traefik + MetalLB installed
 #   - demo workloads deployed and serving (i.e. `LB=metallb make install-all`
 #     or the equivalent CI sequence has just succeeded)
 #
@@ -11,7 +11,7 @@
 #   2. migrate-from-metallb.sh runs cleanly
 #   3. cloud-provider-kind container is Up post-migration
 #   4. metallb-system namespace is gone post-migration
-#   5. ingress-nginx Service gets a fresh LoadBalancer IP from CPK
+#   5. Traefik Service gets a fresh LoadBalancer IP from CPK
 #   6. demo.localdev.me responds with the expected body through the new IP
 set -euo pipefail
 
@@ -49,11 +49,11 @@ else
   exit 1
 fi
 
-INITIAL_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+INITIAL_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
 if [ -n "$INITIAL_IP" ]; then
-  pass "ingress-nginx had MetalLB-assigned IP pre-migration ($INITIAL_IP)"
+  pass "Traefik had MetalLB-assigned IP pre-migration ($INITIAL_IP)"
 else
-  fail "ingress-nginx had no MetalLB-assigned IP pre-migration"
+  fail "Traefik had no MetalLB-assigned IP pre-migration"
 fi
 
 # --- Run migration ---
@@ -83,15 +83,15 @@ fi
 # CPK re-allocates LB IPs after the kick. Wait for ingress to get a fresh one.
 NEW_IP=""
 for _ in $(seq 1 60); do
-  NEW_IP=$("${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+  NEW_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
   [ -n "$NEW_IP" ] && break
   sleep 2
 done
 if [ -n "$NEW_IP" ]; then
-  pass "ingress-nginx reassigned a LoadBalancer IP under CPK ($NEW_IP)"
+  pass "Traefik reassigned a LoadBalancer IP under CPK ($NEW_IP)"
 else
-  fail "ingress-nginx did not get a LoadBalancer IP from CPK within 120s"
-  "${KUBECTL[@]}" get svc -n ingress-nginx ingress-nginx-controller -o yaml || true
+  fail "Traefik did not get a LoadBalancer IP from CPK within 120s"
+  "${KUBECTL[@]}" get svc -n traefik traefik -o yaml || true
   echo "=== Results: $PASS passed, $FAIL failed ==="
   exit 1
 fi
@@ -108,7 +108,7 @@ for i in $(seq 1 60); do
 done
 if [ "$ROUTED" -ne 1 ]; then
   fail "demo.localdev.me did not respond through CPK within 120s"
-  "${KUBECTL[@]}" -n ingress-nginx get pods -o wide || true
+  "${KUBECTL[@]}" -n traefik get pods -o wide || true
   docker ps --filter name=cloud-provider-kind --filter name=kindccm- --format 'table {{.Names}}\t{{.Status}}' || true
 fi
 

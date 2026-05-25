@@ -112,8 +112,8 @@ jobs:
       - name: Install Headlamp
         run: ./scripts/kind-add-headlamp.sh
 
-      - name: Install Nginx ingress
-        run: ./scripts/kind-add-ingress-nginx.sh
+      - name: Install Traefik ingress
+        run: ./scripts/kind-add-traefik.sh
 
       - name: Install cloud-provider-kind
         # CPK runs as a host docker container bound to the `kind` network and
@@ -130,7 +130,7 @@ jobs:
         run: ./scripts/kind-add-nfs-incluster.sh
 
       - name: Deploy ingress demo
-        run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+        run: ./scripts/kind-deploy-app-ingress-localhost.sh
 
       - name: Deploy helloweb
         run: ./scripts/kind-deploy-app-helloweb.sh
@@ -143,23 +143,23 @@ jobs:
 
       - name: Apply demo-apps ingress rules
         # Subdomain-based routing for helloweb / golang / foo. Services
-        # above are ClusterIP; ingress-nginx fronts them via
-        # *.localdev.me virtual hosts. `kind-install-all.sh` applies this
-        # too, but CI invokes the deploy scripts directly, so the ingress
-        # file needs its own explicit step here (and in e2e-metallb.yml).
+        # above are ClusterIP; Traefik fronts them via *.localdev.me
+        # virtual hosts. `kind-install-all.sh` applies this too, but CI
+        # invokes the deploy scripts directly, so the ingress file needs
+        # its own explicit step here (and in e2e-metallb.yml).
         #
-        # `kubectl apply` returns after etcd commit; ingress-nginx needs
-        # additional time to watch the resource, reload nginx.conf, and
-        # populate .status.loadBalancer. Block until that happens so smoke
-        # tests don't race the controller — previously passed locally then
-        # failed in CI because the human delay between install and test
-        # closed the race on laptops but not on runners.
+        # `kubectl apply` returns after etcd commit; Traefik needs
+        # additional time to watch the resource, reconcile the routers,
+        # and populate .status.loadBalancer. Block until that happens so
+        # smoke tests don't race the controller — previously passed
+        # locally then failed in CI because the human delay between
+        # install and test closed the race on laptops but not on runners.
         run: |
           kubectl apply -f k8s/demo-apps-ingress.yaml
-          # Wait for ingress-nginx to reconcile the new rules. Kind's controller
-          # runs with --publish-status-address=localhost, so it fills
-          # .status.loadBalancer.ingress[0].hostname (not .ip) — poll on the
-          # array-element being non-empty, portable across publication modes.
+          # Wait for Traefik to reconcile the new rules. The ingress[0]
+          # element gets .ip (cloud-provider-kind / MetalLB) or .hostname
+          # depending on the LB provider — poll for the array element
+          # being non-empty, portable across either.
           for _ in $(seq 1 60); do
             [ -n "$(kubectl get ingress/demo-apps -o jsonpath='{.status.loadBalancer.ingress[0]}' 2>/dev/null)" ] && break
             sleep 1
@@ -178,7 +178,7 @@ jobs:
         # merge run and earlier on `170c7c9`). Wait for BOTH ingresses to
         # respond. Bail with a diagnostic dump after 60×2s.
         run: |
-          INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           probe() {
             docker exec kind-control-plane curl -sf --max-time 3 \
               -H "Host: $1" "http://${INGRESS_IP}/" 2>/dev/null | grep -q "$2"
@@ -191,8 +191,8 @@ jobs:
             sleep 2
           done
           echo "ERROR: ingress routes did not become reachable within 120s"
-          kubectl -n ingress-nginx get pods -o wide
-          kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --tail=80 || true
+          kubectl -n traefik get pods -o wide
+          kubectl -n traefik logs deploy/traefik --tail=80 || true
           docker ps --filter name=cloud-provider-kind --filter name=kindccm- --format 'table {{.Names}}\t{{.Status}}'
           exit 1
 
@@ -207,7 +207,7 @@ jobs:
 
       - name: Verify deploy idempotency
         run: |
-          ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+          ./scripts/kind-deploy-app-ingress-localhost.sh
           ./scripts/kind-deploy-app-helloweb.sh
           ./scripts/kind-deploy-app-foo-bar-service.sh
 

@@ -48,8 +48,8 @@ jobs:
       - name: Install Headlamp
         run: ./scripts/kind-add-headlamp.sh
 
-      - name: Install Nginx ingress
-        run: ./scripts/kind-add-ingress-nginx.sh
+      - name: Install Traefik ingress
+        run: ./scripts/kind-add-traefik.sh
 
       - name: Install cloud-provider-kind
         run: make lb-cpk
@@ -61,7 +61,7 @@ jobs:
         run: ./scripts/kind-add-nfs-incluster.sh
 
       - name: Deploy ingress demo
-        run: ./scripts/kind-deploy-app-nginx-ingress-localhost.sh
+        run: ./scripts/kind-deploy-app-ingress-localhost.sh
 
       - name: Deploy helloweb
         run: ./scripts/kind-deploy-app-helloweb.sh
@@ -87,7 +87,7 @@ jobs:
         # demo-localhost Ingress (demo.localdev.me) and the demo-apps
         # Ingress (helloweb host) before running the smoke test.
         run: |
-          INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           probe() {
             docker exec kind-control-plane curl -sf --max-time 3 \
               -H "Host: $1" "http://${INGRESS_IP}/" 2>/dev/null | grep -q "$2"
@@ -100,7 +100,7 @@ jobs:
             sleep 2
           done
           echo "ERROR: ingress routes did not become reachable within 120s"
-          kubectl -n ingress-nginx get pods -o wide
+          kubectl -n traefik get pods -o wide
           docker ps --filter name=cloud-provider-kind --filter name=kindccm- --format 'table {{.Names}}\t{{.Status}}'
           exit 1
 
