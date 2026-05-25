@@ -50,15 +50,17 @@ SC_NAME=nfs-host
 echo "=== Ensuring csi-driver-nfs ${CSI_DRIVER_NFS_VERSION} is installed ==="
 echo "    NFS server: ${NFS_SERVER}:${NFS_PATH}"
 
-# Pin the repo path to the released tag so an upstream restructure of
-# `master/charts/` cannot break this install silently. Helm chart versions
-# are bare semver (no `v`); strip the `v` on --version.
-helm repo add csi-driver-nfs "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/${CSI_DRIVER_NFS_VERSION}/charts" >/dev/null 2>&1 || true
-helm repo update csi-driver-nfs >/dev/null
+# Install the chart from the per-release tarball URL directly — bypasses
+# `helm repo add`+index.yaml. The committed index.yaml at the v4.13.x tags
+# rewrites `urls:` to point at the `release-4.12` maintenance branch (which
+# lacks newer versions), so `helm repo add` against the release tag returns
+# chart names but the resolved download URL 404s. The per-version tarball
+# under `charts/${TAG}/csi-driver-nfs-${VER}.tgz` is the canonical artifact.
+# Renovate tracks CSI_DRIVER_NFS_VERSION via the comment above.
+CHART_URL="https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/${CSI_DRIVER_NFS_VERSION}/charts/${CSI_DRIVER_NFS_VERSION}/csi-driver-nfs-${CSI_DRIVER_NFS_VERSION#v}.tgz"
 
-helm upgrade --install "$RELEASE" csi-driver-nfs/csi-driver-nfs \
+helm upgrade --install "$RELEASE" "$CHART_URL" \
     --namespace "$NS_DRIVER" \
-    --version "${CSI_DRIVER_NFS_VERSION#v}" \
     --wait --timeout 5m
 
 echo
