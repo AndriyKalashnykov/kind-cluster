@@ -8,6 +8,11 @@ on:
     branches: [main]
     paths:
       - 'scripts/kind-add-kube-prometheus-stack.sh'
+      # Shared smoke chain: the TEST_MONITORING assertions live in e2e-smoke.sh,
+      # which ci.yml never runs with TEST_MONITORING=yes — so a regression there
+      # is only caught here. Include the shared scripts.
+      - 'scripts/e2e-smoke.sh'
+      - 'scripts/lib.sh'
       - '.github/workflows/monitoring-test.yml'
 
 permissions:

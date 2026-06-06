@@ -5,13 +5,13 @@
 
 # kind-cluster — Local Kubernetes Lab on KinD
 
-Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, LoadBalancer (cloud-provider-kind, or MetalLB), Headlamp UI, RWX NFS storage, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
+Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — ingress, LoadBalancer (cloud-provider-kind, or MetalLB), Headlamp UI, RWX NFS storage, a local image registry, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
 <img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="700">
 
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
-| Cluster | [KinD](https://kind.sigs.k8s.io/) v0.31.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
+| Cluster | [KinD](https://kind.sigs.k8s.io/) v0.32.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
 | Ingress | [Traefik](https://traefik.io/) v3 (chart 40.x) | Replaces the [retired](https://www.kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) ingress-nginx; supports `networking.k8s.io/v1` Ingress + Gateway API on one binary |
 | Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.10.0 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
 | Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.16.0 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
@@ -52,15 +52,15 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 
 | Tool | Pinned version |
 |------|----------------|
-| [kind](https://kind.sigs.k8s.io/) | 0.31.0 |
+| [kind](https://kind.sigs.k8s.io/) | 0.32.0 |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.1 |
 | [jq](https://github.com/jqlang/jq) | 1.8.1 |
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | 8.30.1 |
-| [trivy](https://github.com/aquasecurity/trivy) | 0.70.0 |
+| [trivy](https://github.com/aquasecurity/trivy) | 0.71.0 |
 | [hadolint](https://github.com/hadolint/hadolint) | 2.14.0 |
-| [act](https://github.com/nektos/act) | 0.2.88 |
+| [act](https://github.com/nektos/act) | 0.2.89 |
 | [bats](https://github.com/bats-core/bats-core) | 1.13.0 |
 
 Renovate's native `mise` manager keeps `.mise.toml` up to date (platform automerge enabled).

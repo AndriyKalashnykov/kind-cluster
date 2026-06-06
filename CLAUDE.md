@@ -20,7 +20,7 @@ scripts/              # Bash scripts for cluster lifecycle and app deployment
 tests/                # bats unit tests for scripts/lib.sh (make test)
 k8s/                  # Kubernetes manifests (kind config, Headlamp, NFS, etc.)
 images/               # Dockerfiles (kubectl-test image)
-docs/diagrams/        # PlantUML C4 sources (.puml) + rendered PNGs (out/)
+docs/diagrams/        # PlantUML C4 sources (.puml) + rendered PNGs (out/) + .drawio exports (drawio/)
 vm/                   # Multipass cloud-init playbook
 .github/workflows/    # CI: ci.yml, e2e-metallb.yml, monitoring-test.yml,
                       #   registry-test.yml, cleanup-runs.yml
@@ -64,6 +64,10 @@ make ci-run                            # Run GitHub Actions workflow locally via
 make e2e                               # install-all + e2e-smoke (full pipeline; fresh-checkout convenience)
 make e2e-smoke                         # Body-asserting smoke test on a running cluster (no install)
 make vulncheck                         # Alias for trivy-fs (portfolio-standard target name)
+
+# Local registry cluster (separate from install-all)
+make registry                          # Create a KinD cluster wired to a local registry (localhost:5001)
+make registry-test                     # Push hello-app:2.0 to the local registry and deploy it (run after 'make registry')
 ```
 
 `make ci-run` only iterates `static-check` + `docker` jobs under `act`. The `e2e` and `e2e-metallb` jobs are skipped because KinD's Docker-in-Docker requirement is unstable under `act push`. Push to a feature branch and watch the real workflow when changing anything in the e2e path (deploy scripts, ingress wiring, K8s manifests).
@@ -71,9 +75,9 @@ make vulncheck                         # Alias for trivy-fs (portfolio-standard 
 ## CI/CD
 
 - **ci.yml** — runs on push to `main`, tags `v*`, and PRs. Five jobs: `changes` → `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. The `changes` job uses `dorny/paths-filter` to detect whether any non-doc file changed; downstream jobs short-circuit on doc-only changes via `if: needs.changes.outputs.code == 'true'`. `static-check` and `e2e` use `jdx/mise-action` to install the pinned toolchain from `.mise.toml` (kind, kubectl, jq, shellcheck, actionlint, gitleaks, trivy, hadolint, act — Renovate-tracked via the mise manager). The `e2e` job installs **cloud-provider-kind** as the LoadBalancer provider, runs all install/deploy scripts, polls until the ingress route is data-plane-ready (K1.5 — IP assigned ≠ IP routable), then `make e2e-smoke` (delegates to `scripts/e2e-smoke.sh`) for body-asserting smoke tests via `docker exec` curl. `helm/kind-action` was dropped in favor of explicit `make` invocations to avoid the action's built-in Post-step teardown flaking on Docker daemon `did not receive an exit event` errors at job-end.
-- **e2e-metallb.yml** — weekly cron (Sunday 04:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-metallb.sh` (positive-include `paths:` filter is intentional — workflow only runs when its own code changes). Mirrors the `e2e` job but installs **MetalLB** instead of cloud-provider-kind; same K1.5 route-readiness poll before `LB=metallb make e2e-smoke`. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the **MetalLB → cloud-provider-kind migration** path so regressions in `migrate-from-metallb.sh` surface here.
-- **monitoring-test.yml** — weekly cron (Sunday 05:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-kube-prometheus-stack.sh`. Brings up the full stack via `make install-all` (cloud-provider-kind), installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. Off the default install-all path — kept on its own cron to keep PR feedback fast.
-- **registry-test.yml** — weekly cron (Sunday 06:00 UTC) + `workflow_dispatch` + push on registry-related files. Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` (pull → retag → push → deploy → curl). Distinct from the install-all flow; separate workflow rather than another job.
+- **e2e-metallb.yml** — weekly cron (Sunday 04:00 UTC) + `workflow_dispatch` + push on its MetalLB/migration scripts and the shared smoke chain (`scripts/kind-add-metallb.sh`, `scripts/migrate-from-metallb.sh`, `scripts/e2e-migrate-smoke.sh`, `scripts/kind-add-cloud-provider-kind.sh`, `scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file) (positive-include `paths:` filter is intentional — runs when its own or the shared smoke-chain code changes; the shared scripts are included so a fix that only breaks the MetalLB path, which `ci.yml`'s cloud-provider-kind `e2e` job doesn't exercise, isn't missed until the weekly cron). Mirrors the `e2e` job but installs **MetalLB** instead of cloud-provider-kind; same K1.5 route-readiness poll before `LB=metallb make e2e-smoke`. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the **MetalLB → cloud-provider-kind migration** path so regressions in `migrate-from-metallb.sh` surface here.
+- **monitoring-test.yml** — weekly cron (Sunday 05:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-kube-prometheus-stack.sh` plus the shared smoke chain (`scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file — the `TEST_MONITORING` assertions live in `e2e-smoke.sh`, which `ci.yml` never runs with `TEST_MONITORING=yes`). Brings up the full stack via `make install-all` (cloud-provider-kind), installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. Off the default install-all path — kept on its own cron to keep PR feedback fast.
+- **registry-test.yml** — weekly cron (Sunday 06:00 UTC) + `workflow_dispatch` + push on registry-related files (`scripts/kind-with-registry.sh`, `scripts/test-registry.sh`, `scripts/lib.sh`, `k8s/helloweb-deployment-local.yaml`, the workflow file). Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` (pull → retag → push → deploy → curl). Distinct from the install-all flow; separate workflow rather than another job.
 - **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
 ### Paths that CI does NOT exercise
@@ -81,7 +85,7 @@ make vulncheck                         # Alias for trivy-fs (portfolio-standard 
 The following paths require resources GitHub-hosted runners can't reliably provide; they are verified manually before each release:
 
 - **`make vm-up` / `make vm-install-all` (Multipass)** — nested virtualization isn't reliably supported on `ubuntu-24.04` GitHub-hosted runners; cloud-init bootstrap takes 3–5 minutes; CI cost outweighs catch rate. Verify locally before tagging a release.
-- **`make nfs-host-setup`** — modifies `/etc/exports`, opens the firewall, requires interactive `sudo`. Out of scope for unattended CI. Verify locally on Ubuntu/Debian before tagging.
+- **`make nfs-host-setup`** — modifies `/etc/exports`, opens the firewall, requires interactive `sudo`. Out of scope for unattended CI. Verify locally on Ubuntu/Debian before tagging. The host-NFS provisioner has an opt-in smoke assertion gated behind `TEST_NFS_HOST=yes` (asserts the `nfs-host` StorageClass exists and `k8s/nfs/pvc.yaml`'s `demo-claim` PVC binds); it stays manual-only for the same reason — run `make nfs-host-setup && make nfs-host-provisioner NFS_SERVER=<ip>` then `TEST_NFS_HOST=yes make e2e-smoke`.
 
 ## Dependencies
 
@@ -89,7 +93,7 @@ Runtime (user provides): Docker, helm, curl, base64.
 
 Pinned in [`.mise.toml`](./.mise.toml) and installed by `make deps` via [mise](https://mise.jdx.dev): `kind`, `kubectl`, `jq`, `shellcheck`, `actionlint`, `gitleaks`, `trivy`, `hadolint`, `act`, `bats`. `make deps` auto-bootstraps mise into `~/.local/bin` if missing, then runs `mise install` (idempotent; no-op at pinned versions).
 
-Docker-image-pinned in Makefile (Renovate-tracked via inline `# renovate:` comments): `KUBECTL_VERSION` (shared with `images/Dockerfile` `--build-arg`; kept in sync with `aqua:kubernetes/kubectl` in `.mise.toml` via the `kubectl` packageRule), `MERMAID_CLI_VERSION`, `PLANTUML_VERSION`, `PUML2DRAWIO_VERSION`, `KIND_NODE_IMAGE`, `CLOUD_PROVIDER_KIND_VERSION`. `mermaid-cli` is invoked from `make mermaid-lint` (part of the `static-check` composite); `plantuml/plantuml` from `make diagrams` / `diagrams-check`.
+Docker-image-pinned in Makefile (Renovate-tracked via inline `# renovate:` comments): `KUBECTL_VERSION` (shared with `images/Dockerfile` `--build-arg`; kept in sync with `aqua:kubernetes/kubectl` in `.mise.toml` via the `kubectl` packageRule), `MERMAID_CLI_VERSION`, `PLANTUML_VERSION`, `PUML2DRAWIO_VERSION`, `KIND_NODE_IMAGE`, `CLOUD_PROVIDER_KIND_VERSION`, `ACT_UBUNTU_VERSION` (catthehacker/ubuntu). `mermaid-cli` is invoked from `make mermaid-lint` (part of the `static-check` composite); `plantuml/plantuml` from `make diagrams` / `diagrams-check`.
 
 No Go modules; no package manager lockfiles.
 

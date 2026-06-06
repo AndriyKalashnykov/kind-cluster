@@ -10,6 +10,12 @@ on:
       - 'scripts/kind-add-metallb.sh'
       - 'scripts/migrate-from-metallb.sh'
       - 'scripts/e2e-migrate-smoke.sh'
+      # Shared smoke chain: a fix that only breaks the MetalLB path is NOT caught
+      # by ci.yml's cloud-provider-kind e2e job, so include the shared scripts and
+      # the migration's cloud-provider-kind target.
+      - 'scripts/kind-add-cloud-provider-kind.sh'
+      - 'scripts/e2e-smoke.sh'
+      - 'scripts/lib.sh'
       - '.github/workflows/e2e-metallb.yml'
 
 permissions:
