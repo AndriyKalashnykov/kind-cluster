@@ -45,6 +45,7 @@ helm --kube-context="kind-${KIND_CLUSTER_NAME}" upgrade --install traefik "$CHAR
     --create-namespace --namespace traefik \
     --set 'ports.web.hostPort=80' \
     --set 'ports.websecure.hostPort=443' \
+    --set 'updateStrategy.type=Recreate' \
     --set-string 'nodeSelector.ingress-ready=true' \
     --set 'tolerations[0].key=node-role.kubernetes.io/control-plane' \
     --set 'tolerations[0].operator=Exists' \

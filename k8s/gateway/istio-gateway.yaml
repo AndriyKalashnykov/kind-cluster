@@ -1,0 +1,71 @@
+# Istio Gateway API demo — a Gateway bound to Istio's built-in `istio`
+# GatewayClass (controllerName istio.io/gateway-controller). Applying this Gateway
+# auto-provisions an Envoy Deployment+Service named "demo-istio" (<gateway>-<class>)
+# in the default namespace; that Service is type LoadBalancer, so cloud-provider-kind
+# hands it its OWN external IP — a distinct front door from Traefik's hostPort 80.
+#
+# The HTTPRoutes front the SAME backend Services as the classic Ingress and the
+# Traefik Gateway, on the original *.localdev.me hostnames (no collision — Istio
+# answers on a different IP). This is the "same app, two front doors" demo.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: demo
+  namespace: default
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: istio-helloweb
+  namespace: default
+spec:
+  parentRefs:
+    - name: demo
+  hostnames: ["helloweb.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: helloweb
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: istio-golang
+  namespace: default
+spec:
+  parentRefs:
+    - name: demo
+  hostnames: ["golang.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: golang-hello-world-web-service
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: istio-foo
+  namespace: default
+spec:
+  parentRefs:
+    - name: demo
+  hostnames: ["foo.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: foo-service
+          port: 5678

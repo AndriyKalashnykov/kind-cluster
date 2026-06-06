@@ -407,6 +407,56 @@ if flag_enabled "${TEST_MONITORING:-}"; then
   rm -f "$PROM_PF_LOG"
 fi
 
+# --- Gateway API controllers (opt-in via TEST_GATEWAY_API=yes) ---
+# Off by default because install-all does NOT enable Gateway API. Run
+# `make gateway-traefik` and/or `make gateway-istio` first, then
+# TEST_GATEWAY_API=yes make e2e-smoke. See docs/gateway-api-ingress.md.
+if flag_enabled "${TEST_GATEWAY_API:-}"; then
+  # Traefik Gateway API provider: GatewayClass Accepted + HTTPRoutes reach the
+  # SAME demo backends on *.gw.localdev.me via the Traefik LB IP — same pod as
+  # classic Ingress, proving the two providers coexist.
+  if "${KUBECTL[@]}" get gatewayclass traefik -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "Traefik GatewayClass is Accepted"
+  else
+    fail "Traefik GatewayClass not Accepted — run 'make gateway-traefik' first"
+  fi
+  check_curl "helloweb via Traefik Gateway API"       "http://${INGRESS_IP}/"        "Hello, world!"  -H "Host: helloweb.gw.localdev.me"
+  check_curl "golang /healthz via Traefik Gateway API" "http://${INGRESS_IP}/healthz" '"health":"ok"'  -H "Host: golang.gw.localdev.me"
+
+  # Istio Gateway controller: coexists with Traefik (distinct controllerName),
+  # gets its OWN LoadBalancer IP from cloud-provider-kind, fronts the SAME apps.
+  if "${KUBECTL[@]}" get gatewayclass istio -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "Istio GatewayClass is Accepted"
+  else
+    fail "Istio GatewayClass not Accepted — run 'make gateway-istio' first"
+  fi
+  ISTIO_GW_IP=""
+  for _ in $(seq 1 30); do
+    ISTIO_GW_IP=$("${KUBECTL[@]}" -n default get svc demo-istio -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [ -n "$ISTIO_GW_IP" ] && break
+    sleep 2
+  done
+  if [ -n "$ISTIO_GW_IP" ]; then
+    pass "Istio gateway Service has its own LoadBalancer IP ($ISTIO_GW_IP)"
+    # K1.5 route-readiness: assigned IP != routable; poll until it serves.
+    ISTIO_OK=""
+    for _ in $(seq 1 30); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${ISTIO_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        ISTIO_OK=yes; break
+      fi
+      sleep 2
+    done
+    if [ -n "$ISTIO_OK" ]; then
+      pass "helloweb reachable via Istio Gateway at ${ISTIO_GW_IP} (same backend as Traefik)"
+    else
+      fail "Istio Gateway at ${ISTIO_GW_IP} did not route to helloweb within 60s"
+    fi
+    check_curl "golang /healthz via Istio Gateway" "http://${ISTIO_GW_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+  else
+    fail "Istio gateway Service demo-istio got no LoadBalancer IP within 60s"
+  fi
+fi
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]

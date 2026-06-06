@@ -111,6 +111,19 @@ make lb-metallb                # already-running cluster, no LB yet — install 
 
 Switching providers on a live cluster requires tearing down the first one — each script hard-refuses if the other is present. Run `make kind-down && LB=<provider> make kind-up` for a clean reset.
 
+## Ingress vs Gateway API
+
+The default routing path is **classic Ingress** (`networking.k8s.io/v1`, `ingressClassName: traefik`) — the simplest thing that works. The Kubernetes **[Gateway API](https://gateway-api.sigs.k8s.io/)** is its GA successor (the Ingress API is frozen; ingress-nginx is retiring — the reason this project moved to Traefik). Both **Traefik** and **Istio** are conformant Gateway API controllers and can be enabled here opt-in, routing the **same** demo apps:
+
+```bash
+make gateway-traefik   # enable Traefik's Gateway API provider (same pod also keeps classic Ingress)
+make gateway-istio     # add Istio as a 2nd Gateway API controller, its own LB IP, same backends
+```
+
+They coexist because each GatewayClass has a distinct `controllerName` and cloud-provider-kind gives each gateway its own LoadBalancer IP. **Antrea is *not* in this comparison** — it's a CNI, not a Gateway API controller (its "gateway" is the `antrea-gw0` dataplane interface); the real CNI-integrated gateways are **Cilium** / **Calico**.
+
+📖 **Full comparison (Traefik vs Istio vs Cilium/Calico), coexistence mechanics, and "is it advisable to run all of them?" — see [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md).**
+
 ## Headlamp install
 
 Pinned to Helm chart [`headlamp`](https://github.com/kubernetes-sigs/headlamp) **0.42.0**. Headlamp is the SIG-UI-endorsed successor to the [archived](https://github.com/kubernetes/dashboard) kubernetes/dashboard project — a single Pod fronted by a ClusterIP Service on port 80 (HTTP), with token-based login.
