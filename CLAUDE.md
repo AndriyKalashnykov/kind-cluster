@@ -20,10 +20,12 @@ scripts/              # Bash scripts for cluster lifecycle and app deployment
 tests/                # bats unit tests for scripts/lib.sh (make test)
 k8s/                  # Kubernetes manifests (kind config, Headlamp, NFS, gateway/, etc.)
 images/               # Dockerfiles (kubectl-test image)
-docs/diagrams/        # PlantUML C4 sources (.puml) + rendered PNGs (out/) + .drawio exports (drawio/)
+docs/diagrams/        # PlantUML C4 sources (.puml) + rendered PNGs (out/)
+                      #   (drawio/ holds on-demand `make diagrams-drawio` exports; gitignored)
+docs/                 # gateway-api-ingress.md (Gateway API / ingress comparison)
 vm/                   # Multipass cloud-init playbook
 .github/workflows/    # CI: ci.yml, e2e-metallb.yml, monitoring-test.yml,
-                      #   registry-test.yml, cleanup-runs.yml
+                      #   registry-test.yml, gateway-test.yml, cleanup-runs.yml
 ```
 
 ## Common Commands

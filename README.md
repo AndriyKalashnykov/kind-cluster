@@ -85,7 +85,7 @@ Headlamp listens on port 80 inside the cluster — reach it via the `headlamp-fo
 
 Source: [`docs/diagrams/c4-deployment.puml`](./docs/diagrams/c4-deployment.puml).
 
-- **`kind-control-plane` node** — kindest/node container running kube-apiserver/etcd/scheduler plus Traefik, Headlamp, and metrics-server (the latter pinned to control-plane via nodeSelector for kind compat).
+- **`kind-control-plane` node** — kindest/node container running kube-apiserver/etcd/scheduler plus Traefik (pinned here via the `ingress-ready=true` nodeSelector + control-plane toleration), with Headlamp and metrics-server scheduled cluster-wide.
 - **`kind-worker` node** — runs application workloads (demo apps, in-cluster NFS server pod, kube-prometheus-stack).
 - **`cloud-provider-kind`** — host docker container watching `Service: LoadBalancer` on the kind docker network; allocates LB IPs from the kind subnet (172.18.0.0/16 by default).
 - **`kindccm-<hash>`** — per-Service Envoy sidecars spawned by cloud-provider-kind that route LB-IP traffic to backend pods. Cleaned up by `make kind-destroy` (failing to clean these up was the cause of the K1.5 "connection reset on first curl" flake — see `scripts/kind-delete.sh`).
@@ -494,7 +494,7 @@ If you're running inside a Multipass VM, prefix with `multipass exec $NAME --` o
 
 ### metrics-server
 
-Required for `kubectl top` and HorizontalPodAutoscalers. On KinD, the default manifest is patched with `--kubelet-insecure-tls` (the KinD kubelet serving cert isn't signed by the cluster CA).
+Required for `kubectl top` and HorizontalPodAutoscalers. On KinD, it's installed via the `metrics-server` Helm chart with `--set args={--kubelet-insecure-tls}` (the KinD kubelet serving cert isn't signed by the cluster CA).
 
 ```bash
 make metrics-server
