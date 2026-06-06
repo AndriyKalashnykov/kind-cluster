@@ -191,8 +191,28 @@ diagrams-drawio: deps-docker
 test: deps-tools
 	@bats tests/
 
-#static-check: @ Composite quality gate (lint + test + secrets + trivy + mermaid-lint + diagrams-check)
-static-check: lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
+#check-toolchain-alignment: @ Fail if the kubectl/kind versions mirrored across Makefile, .mise.toml, Dockerfile and cloud-init disagree
+check-toolchain-alignment:
+	@set -euo pipefail; \
+	norm() { sed 's/^v//'; }; \
+	mk_kubectl=$$(printf '%s' '$(KUBECTL_VERSION)' | norm); \
+	mise_kubectl=$$(grep -E '"aqua:kubernetes/kubectl"' .mise.toml | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' | norm); \
+	docker_kubectl=$$(grep -E '^ARG KUBECTL_VERSION=' images/Dockerfile | sed -E 's/.*=//' | norm); \
+	ci_kubectl=$$(grep -E '^[[:space:]]*KUBECTL_VERSION=' vm/cloud-init.yaml | sed -E 's/.*=//' | norm); \
+	for v in "$$mise_kubectl" "$$docker_kubectl" "$$ci_kubectl"; do \
+		if [ "$$v" != "$$mk_kubectl" ]; then \
+			echo "ERROR: kubectl version drift — Makefile=$$mk_kubectl .mise.toml=$$mise_kubectl Dockerfile=$$docker_kubectl cloud-init=$$ci_kubectl"; exit 1; \
+		fi; \
+	done; \
+	mise_kind=$$(grep -E '"aqua:kubernetes-sigs/kind"' .mise.toml | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' | norm); \
+	ci_kind=$$(grep -E '^[[:space:]]*KIND_VERSION=' vm/cloud-init.yaml | sed -E 's/.*=//' | norm); \
+	if [ "$$mise_kind" != "$$ci_kind" ]; then \
+		echo "ERROR: kind version drift — .mise.toml=$$mise_kind cloud-init=$$ci_kind"; exit 1; \
+	fi; \
+	echo "Toolchain alignment OK (kubectl=$$mk_kubectl, kind=$$mise_kind)."
+
+#static-check: @ Composite quality gate (alignment + lint + test + secrets + trivy + mermaid-lint + diagrams-check)
+static-check: check-toolchain-alignment lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
 	@echo "Static check passed."
 
 #ci: @ Full local CI pipeline (static-check + renovate-validate)
@@ -361,7 +381,7 @@ clean:
 	@rm -f client.crt client.key client.pfx cluster-ca.crt headlamp-admin-token.txt
 
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
-	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint static-check ci ci-run \
+	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint check-toolchain-alignment static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \

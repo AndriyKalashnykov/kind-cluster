@@ -27,10 +27,10 @@ System_Boundary(host, "Host or Multipass VM") {
     Container(cp, "control-plane node", "kindest/node", "API server, scheduler, etcd, kubelet")
     Container(worker, "worker node", "kindest/node", "Pod runtime")
 
-    Container(ingress, "ingress-nginx", "Helm chart", "L7 routing; pinned to control-plane via nodeSelector")
+    Container(ingress, "Traefik", "Helm chart v3 (40.x)", "L7 routing; ingressClass traefik; pinned to control-plane via nodeSelector")
     Container(lb, "cloud-provider-kind", "docker container on kind network", "Allocates LoadBalancer IPs (primary; MetalLB alternative via LB=metallb)")
     Container(metrics, "metrics-server", "manifest", "Serves metrics.k8s.io for kubectl top / HPA")
-    Container(dash, "Kubernetes Dashboard", "Helm chart v7.x, Kong proxy", "https://localhost:8443 via port-forward")
+    Container(dash, "Headlamp", "Helm chart 0.42.x", "ClusterIP :80; http://localhost:8081 via port-forward")
     ContainerDb(nfs, "NFS server + csi-driver-nfs", "in-cluster pod or host NFS", "ReadWriteMany PVCs")
     Container(prom, "kube-prometheus-stack", "Helm chart", "Prometheus + Grafana + Alertmanager")
     Container(apps, "Demo workloads", "httpd / hello-app / golang-web / http-echo", "Routed via ingress + LoadBalancer Services")

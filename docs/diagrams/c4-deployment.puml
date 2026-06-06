@@ -24,11 +24,11 @@ Person(dev, "Developer", "Workstation shell")
 Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker") {
   Deployment_Node(net, "Docker network: kind", "172.18.0.0/16 IPv4 bridge") {
     Deployment_Node(cp, "kind-control-plane", "kindest/node container") {
-      Deployment_Node(kube, "kube-system + ingress-nginx + dashboard", "namespaces") {
+      Deployment_Node(kube, "kube-system + traefik + headlamp", "namespaces") {
         Container(api, "kube-apiserver, etcd, scheduler, controller-manager", "control-plane components")
-        Container(ingress, "ingress-nginx-controller", "Helm release; pinned to control-plane via nodeSelector ingress-ready=true")
+        Container(ingress, "traefik controller", "Helm release v3 (40.x); pinned to control-plane via nodeSelector ingress-ready=true")
         Container(metrics, "metrics-server", "manifest")
-        Container(dash, "kubernetes-dashboard + Kong proxy", "Helm release v7.x")
+        Container(dash, "headlamp", "Helm release 0.42.x; ClusterIP :80")
       }
     }
     Deployment_Node(worker, "kind-worker", "kindest/node container") {
@@ -43,7 +43,7 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
   }
 }
 
-System_Ext(charts, "Helm chart repos", "ingress-nginx, kube-prometheus, dashboard, csi-driver-nfs")
+System_Ext(charts, "Helm chart repos", "traefik, kube-prometheus, headlamp, csi-driver-nfs")
 System_Ext(registries, "Container registries", "Docker Hub, GHCR, k8s.gcr.io")
 
 Rel(dev, ingress, "HTTP via Host: *.localdev.me", "127.0.0.1:80 hostPort")

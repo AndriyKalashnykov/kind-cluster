@@ -9,6 +9,9 @@ on:
     paths:
       - 'scripts/kind-with-registry.sh'
       - 'scripts/test-registry.sh'
+      # test-registry.sh sources scripts/lib.sh — include it so a helper change
+      # that breaks the registry smoke test triggers this workflow.
+      - 'scripts/lib.sh'
       - 'k8s/helloweb-deployment-local.yaml'
       - '.github/workflows/registry-test.yml'
 
