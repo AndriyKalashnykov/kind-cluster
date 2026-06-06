@@ -41,6 +41,13 @@ jobs:
             code:
               - '!(**.md|docs/**|LICENSE|.gitignore|.claudeignore|.claude/**|**.png|**.jpg|**.gif|**.svg)'
               - 'CLAUDE.md'
+              # Diagram SOURCES are code — diagrams-check (in static-check) renders
+              # them and git-diffs the committed PNGs. Without this re-include, a
+              # docs/diagrams/*.puml change (e.g. a Renovate C4-PlantUML !include
+              # bump) is classified docs-only, static-check is skipped on the PR,
+              # and a stale-PNG change merges green (the rendered PNGs under out/
+              # stay excluded via **.png above, so PNG-only commits still skip).
+              - 'docs/diagrams/**/*.puml'
 
   static-check:
     needs: [changes]
