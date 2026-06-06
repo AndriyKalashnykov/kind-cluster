@@ -87,7 +87,7 @@ kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/re
 
 All three rows below are **conformant** Gateway API controllers on the official
 [implementations registry](https://gateway-api.sigs.k8s.io/implementations/)
-(checked 2026-06): Traefik Proxy (v1.5.1), Istio (v1.4), Cilium (v1.5.1).
+(checked 2026-06): Traefik Proxy (v1.5.1), Istio (v1.4.0), Cilium (v1.5.1), Calico (v1.4.1).
 
 | | **Traefik** (this project's default proxy) | **Istio** | **Cilium / Calico** (CNI-integrated) |
 |---|---|---|---|
@@ -117,11 +117,10 @@ The chart can also auto-create a default `traefik` GatewayClass and a default
 `Gateway` (`gatewayClass.enabled` / `gateway.enabled`). `make gateway-traefik`
 enables the provider and applies the demo `Gateway` + `HTTPRoute`s.
 
-> ⚠️ **Doc-vs-spec conflict we verified:** Traefik's prose docs list `TLSRoute`
-> under the *standard* channel, but the Gateway API project (and Traefik's own
-> Helm chart comment) place `TLSRoute` in the **experimental** channel. Treat
-> `TLSRoute` as experimental — it needs `experimental-install.yaml` CRDs **and**
-> `experimentalChannel=true`.
+> ⚠️ **`TLSRoute` is an experimental-channel resource.** Traefik v3 supports it,
+> but it needs the `experimental-install.yaml` CRDs **and**
+> `providers.kubernetesGateway.experimentalChannel=true`. (`HTTPRoute` and
+> `GRPCRoute` are standard-channel and need neither.)
 
 ### Istio (Gateway API mode)
 
@@ -156,8 +155,9 @@ API conformance list:
 - **Cilium** — eBPF CNI with built-in Gateway API (GatewayClass `cilium`), served
   by an embedded **Envoy**; requires kube-proxy replacement and an LB/L2 path.
 - **Calico** — its **Calico Ingress Gateway** is a hardened distribution of the
-  **Envoy Gateway** project, provisioned by the Tigera operator from a
-  `GatewayAPI` CR.
+  **Envoy Gateway** project — enabled cluster-wide via the Tigera operator's
+  `GatewayAPI` installation CR, then provisioned per-gateway from a standard
+  `Gateway` resource.
 
 **These cannot be "added" to the running cluster.** A cluster has exactly one
 CNI, and kind installs `kindnetd` by default; switching CNIs is a
@@ -256,8 +256,8 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 | Target | What it does | Reach it at |
 |--------|--------------|-------------|
 | `make ingress-traefik` | **Default.** Traefik as a classic Ingress controller (`ingressClassName: traefik`), hostPort 80/443 | `http://<app>.localdev.me/` via `localhost` |
-| `make gateway-traefik` | Opt-in. Installs Gateway API CRDs (pinned), enables Traefik's Gateway API provider, applies a `Gateway` + `HTTPRoute`s for the demo apps | same Traefik entry (hostPort), now also via Gateway API |
-| `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps | `http://<istio-gateway-LB-IP>/` |
+| `make gateway-traefik` | Opt-in. Installs Gateway API CRDs (pinned), enables Traefik's Gateway API provider, applies a `Gateway` + `HTTPRoute`s for the demo apps on `*.gw.localdev.me` | `curl -H 'Host: helloweb.gw.localdev.me' http://localhost/` (same Traefik hostPort, now also via Gateway API) |
+| `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts | `curl -H 'Host: helloweb.localdev.me' http://<istio-gateway-LB-IP>/` |
 
 Both `gateway-*` targets are idempotent on the shared Gateway API CRDs
 (install-if-absent), require **cloud-provider-kind** to be running (for LB IPs),
