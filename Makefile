@@ -280,6 +280,18 @@ headlamp-token: deps
 ingress-traefik: deps
 	@./scripts/kind-add-traefik.sh
 
+#gateway-api-crds: @ Install Kubernetes Gateway API CRDs (standard channel, pinned)
+gateway-api-crds: deps
+	@./scripts/kind-add-gateway-api-crds.sh
+
+#gateway-traefik: @ Opt-in: enable Traefik's Gateway API provider + demo HTTPRoutes (see docs/gateway-api-ingress.md)
+gateway-traefik: deps
+	@./scripts/kind-add-gateway-traefik.sh
+
+#gateway-istio: @ Opt-in: install Istio as a 2nd Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
+gateway-istio: deps
+	@./scripts/kind-add-gateway-istio.sh
+
 #lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
 lb-metallb: deps
 	@./scripts/kind-add-metallb.sh
@@ -385,6 +397,7 @@ clean:
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
+	gateway-api-crds gateway-traefik gateway-istio \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-ingress-localhost deploy-app-helloweb \

@@ -1,0 +1,70 @@
+# Traefik Gateway API demo — a Gateway bound to the chart-created `traefik`
+# GatewayClass (controllerName traefik.io/gateway-controller), plus HTTPRoutes
+# that front the SAME demo Services as the classic Ingress, on *.gw.localdev.me
+# hostnames (so they don't collide with the classic Ingress *.localdev.me on
+# Traefik's shared web entrypoint).
+#
+# Listener port 8000 is Traefik's internal `web` entrypoint (exposed on hostPort
+# 80 by kind-add-traefik.sh), so curl http://localhost/ reaches these routes.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: traefik-gateway
+  namespace: default
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: web
+      protocol: HTTP
+      port: 8000
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gw-helloweb
+  namespace: default
+spec:
+  parentRefs:
+    - name: traefik-gateway
+  hostnames: ["helloweb.gw.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: helloweb
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gw-golang
+  namespace: default
+spec:
+  parentRefs:
+    - name: traefik-gateway
+  hostnames: ["golang.gw.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: golang-hello-world-web-service
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gw-foo
+  namespace: default
+spec:
+  parentRefs:
+    - name: traefik-gateway
+  hostnames: ["foo.gw.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: foo-service
+          port: 5678
