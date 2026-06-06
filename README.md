@@ -241,7 +241,7 @@ First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docke
 
 The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
 
-1. Installs Docker CE, KinD v0.31.0, kubectl v1.36.1, helm v4.2.0
+1. Installs Docker CE, KinD v0.32.0, kubectl v1.36.1, helm v4.2.0
 2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
 3. Clones this repo to `/home/ubuntu/kind-cluster`
 4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.

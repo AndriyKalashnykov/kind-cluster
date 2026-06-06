@@ -30,10 +30,11 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update Makefile tool versions via inline renovate comments",
+      "description": "Update Makefile tool versions via inline renovate comments. Two matchStrings: (1) plain `VAR := value` pins (mermaid-cli, plantuml, puml2drawio, kubectl, cloud-provider-kind, act-ubuntu); (2) `VAR := image:tag` pins (KIND_NODE_IMAGE) where only the trailing tag is the version. The var-name class is [A-Z0-9_]+ so digit-containing names like PUML2DRAWIO_VERSION match (a prior [A-Z_]+ stopped at the digit and silently dropped it). extractVersion/registryUrl/versioning are all optional so cloud-provider-kind's `extractVersion=^v...` and act-ubuntu's `versioning=loose` are honored (a prior matchString lacked extractVersion and silently dropped CLOUD_PROVIDER_KIND_VERSION). matchString (1) excludes the image:tag shape by anchoring currentValue to end-of-line; matchString (2) captures the tag after the last colon (a prior single matchString captured the whole `kindest/node:v1.35.0` ref as currentValue, which the docker datasource cannot resolve to a version).",
       "managerFilePatterns": ["/^Makefile$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( versioning=(?<versioning>\\S+))?\\s*\\n[A-Z_]+\\s*:=\\s*(?<currentValue>\\S+)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( extractVersion=(?<extractVersion>\\S+))?( registryUrl=(?<registryUrl>\\S+))?( versioning=(?<versioning>\\S+))?\\s*\\n[A-Z0-9_]+\\s*:=\\s*(?<currentValue>[^:\\s]+)\\n",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( extractVersion=(?<extractVersion>\\S+))?( registryUrl=(?<registryUrl>\\S+))?( versioning=(?<versioning>\\S+))?\\s*\\n[A-Z0-9_]+\\s*:=\\s*[^\\s:]+:(?<currentValue>\\S+)"
       ]
     },
     {
