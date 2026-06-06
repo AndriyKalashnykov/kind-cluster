@@ -62,7 +62,7 @@ echo "kind network /16 prefix: ${ip_subclass}"
 # https://github.com/metallb/metallb/issues/1473
 # On v0.13.4 and older
 echo "creating kind IPAddressPool and L2Advertisement"
-cat <<EOF | "${KUBECTL[@]}" apply -f=-
+metallb_crs=$(cat <<EOF
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -82,4 +82,29 @@ spec:
   ipAddressPools:
   - default
 EOF
+)
+
+# MetalLB's validating webhook (metallb-webhook-service -> controller pod) can
+# refuse connections for a few seconds AFTER the controller pod reports Ready:
+# the readiness probe passes before the webhook's HTTPS server + cert are
+# actually serving, so an immediate apply fails with
+# "failed calling webhook ... connect: connection refused".
+# Retry until the webhook accepts the resources — "webhook ready" == "apply
+# succeeds" — mirroring the K1.5 route-readiness poll the e2e harness uses.
+applied=""
+for _ in $(seq 1 30); do
+    if printf '%s\n' "$metallb_crs" | "${KUBECTL[@]}" apply -f=- 2>/tmp/metallb-apply.err; then
+        applied=yes
+        break
+    fi
+    sleep 2
+done
+if [ -z "$applied" ]; then
+    echo "ERROR: IPAddressPool/L2Advertisement apply failed after 60s (webhook never became ready)"
+    cat /tmp/metallb-apply.err 2>/dev/null || true
+    "${KUBECTL[@]}" -n metallb-system get pods,svc,endpoints
+    rm -f /tmp/metallb-apply.err
+    exit 1
+fi
+rm -f /tmp/metallb-apply.err
 
