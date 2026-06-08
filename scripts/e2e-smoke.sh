@@ -455,6 +455,40 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
   else
     fail "Istio gateway Service demo-istio got no LoadBalancer IP within 60s"
   fi
+
+  # NGINX Gateway Fabric: coexists with Traefik+Istio (distinct controllerName),
+  # provisions a per-Gateway nginx data plane ("ngf-nginx") that gets its OWN
+  # LoadBalancer IP from cloud-provider-kind, fronting the SAME apps.
+  if "${KUBECTL[@]}" get gatewayclass nginx -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "NGINX Gateway Fabric GatewayClass is Accepted"
+  else
+    fail "NGINX GatewayClass not Accepted — run 'make gateway-nginx' first"
+  fi
+  NGF_GW_IP=""
+  for _ in $(seq 1 30); do
+    NGF_GW_IP=$("${KUBECTL[@]}" -n default get svc ngf-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [ -n "$NGF_GW_IP" ] && break
+    sleep 2
+  done
+  if [ -n "$NGF_GW_IP" ]; then
+    pass "NGF gateway Service has its own LoadBalancer IP ($NGF_GW_IP)"
+    # K1.5 route-readiness: assigned IP != routable; poll until it serves.
+    NGF_OK=""
+    for _ in $(seq 1 30); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${NGF_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        NGF_OK=yes; break
+      fi
+      sleep 2
+    done
+    if [ -n "$NGF_OK" ]; then
+      pass "helloweb reachable via NGF Gateway at ${NGF_GW_IP} (same backend as Traefik)"
+    else
+      fail "NGF Gateway at ${NGF_GW_IP} did not route to helloweb within 60s"
+    fi
+    check_curl "golang /healthz via NGF Gateway" "http://${NGF_GW_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+  else
+    fail "NGF gateway Service ngf-nginx got no LoadBalancer IP within 60s"
+  fi
 fi
 
 echo ""

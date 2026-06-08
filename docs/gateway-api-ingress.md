@@ -2,14 +2,15 @@
 
 > How `kind-cluster` exposes HTTP services, why the Kubernetes **Gateway API** is
 > the strategic successor to classic **Ingress**, and a fact-checked comparison of
-> three Gateway API implementations — **Traefik**, **Istio**, and a
-> CNI-integrated option (**Cilium** / **Calico**) — including how to run more than
-> one of them in the same cluster.
+> the headline Gateway API implementations — **Traefik**, **Istio**, and a
+> CNI-integrated option (**Cilium** / **Calico**) — plus additional opt-in
+> conformant controllers (**NGINX Gateway Fabric**) wired as extra GatewayClasses,
+> including how to run more than one of them in the same cluster.
 >
 > Every version, conformance status, and behaviour below is cited to a primary
 > source (see [References](#references)). Verified 2026-06-06 against Gateway API
 > **v1.5.1**, Traefik chart **40.2.0** (appVersion **v3.7.1**), Istio **1.30.1**,
-> Cilium **v1.19.4**, Calico **v3.32.0**.
+> NGINX Gateway Fabric **2.6.3**, Cilium **v1.19.4**, Calico **v3.32.0**.
 
 ## TL;DR
 
@@ -28,6 +29,10 @@
   - `make gateway-istio` — installs Istio (minimal) as a **second** Gateway API
     controller that coexists with Traefik and fronts the **same** demo apps via
     its own LoadBalancer IP.
+  - `make gateway-nginx` — installs **NGINX Gateway Fabric** (OSS) as another
+    conformant Gateway API controller. Like Istio it provisions a per-Gateway data
+    plane with its own LoadBalancer IP, fronting the **same** demo apps. NGF is
+    NGINX's Gateway-API-native successor to the retired `ingress-nginx`.
 - **Antrea is not in this comparison.** Antrea is a **CNI**, not a Gateway API
   controller — its "gateway" (`antrea-gw0`) is an Open vSwitch dataplane interface,
   unrelated to `gateway.networking.k8s.io`. If you want a **CNI-integrated**
@@ -241,10 +246,13 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 
 ### Is it advisable to install all of them?
 
-- **Traefik + Istio (Gateway API):** ✅ fine for a comparison lab — distinct
-  GatewayClass, distinct entry IP, same backends. Istio adds real weight
-  (`istiod` + a per-gateway Envoy), so it's opt-in, not part of `install-all`.
-- **A third "Antrea gateway":** ❌ not a thing — Antrea is a CNI (see above).
+- **Traefik + Istio + NGINX Gateway Fabric (Gateway API):** ✅ fine for a
+  comparison lab — each has a distinct GatewayClass `controllerName` and its own
+  entry address, all fronting the same backends. They use LoadBalancer Services
+  (not hostPort), so only Traefik holds host ports 80/443 and the others coexist
+  on their own cloud-provider-kind IPs. Each adds real weight, so all are opt-in,
+  not part of `install-all`.
+- **A "CNI gateway" (Antrea):** ❌ not a thing — Antrea is a CNI (see above).
 - **Cilium/Calico (CNI gateway):** ⚠️ a **separate cluster** — a CNI is chosen at
   creation time and is mutually exclusive with kindnet (and with each other). You
   don't run it *alongside*; you recreate the cluster with it.
@@ -258,8 +266,9 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 | `make ingress-traefik` | **Default.** Traefik as a classic Ingress controller (`ingressClassName: traefik`), hostPort 80/443 | `http://<app>.localdev.me/` via `localhost` |
 | `make gateway-traefik` | Opt-in. Installs Gateway API CRDs (pinned), enables Traefik's Gateway API provider, applies a `Gateway` + `HTTPRoute`s for the demo apps on `*.gw.localdev.me` | `curl -H 'Host: helloweb.gw.localdev.me' http://localhost/` (same Traefik hostPort, now also via Gateway API) |
 | `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts | `curl -H 'Host: helloweb.localdev.me' http://<istio-gateway-LB-IP>/` |
+| `make gateway-nginx` | Opt-in. Installs Gateway API CRDs + NGINX Gateway Fabric (OSS, chart `2.6.3`, GatewayClass `nginx`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts. Provisions a per-Gateway `ngf-nginx` data-plane Service with its own LB IP | `curl -H 'Host: helloweb.localdev.me' http://<ngf-gateway-LB-IP>/` |
 
-Both `gateway-*` targets are idempotent on the shared Gateway API CRDs
+All `gateway-*` targets are idempotent on the shared Gateway API CRDs
 (install-if-absent), require **cloud-provider-kind** to be running (for LB IPs),
 and route to the **existing** demo Services — so you can enable either or both on
 a cluster brought up with `make install-all` and compare them side by side.

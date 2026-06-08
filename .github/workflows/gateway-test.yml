@@ -10,6 +10,7 @@ on:
       - 'scripts/kind-add-gateway-api-crds.sh'
       - 'scripts/kind-add-gateway-traefik.sh'
       - 'scripts/kind-add-gateway-istio.sh'
+      - 'scripts/kind-add-gateway-nginx.sh'
       - 'scripts/kind-add-traefik.sh'
       - 'k8s/gateway/**'
       # Shared smoke chain: the TEST_GATEWAY_API assertions live in e2e-smoke.sh,
@@ -75,9 +76,13 @@ jobs:
       - name: Install Istio Gateway API controller
         run: make gateway-istio
 
-      # Asserts both Gateway API controllers (Traefik provider + Istio) front the
-      # same demo backends, on top of the standard smoke checks. Quoted so YAML
-      # keeps the literal string "yes" the smoke script compares to.
+      - name: Install NGINX Gateway Fabric controller
+        run: make gateway-nginx
+
+      # Asserts all Gateway API controllers (Traefik provider + Istio + NGINX
+      # Gateway Fabric) front the same demo backends, on top of the standard
+      # smoke checks. Quoted so YAML keeps the literal string "yes" the smoke
+      # script compares to.
       - name: Smoke test
         env:
           TEST_GATEWAY_API: "yes"
