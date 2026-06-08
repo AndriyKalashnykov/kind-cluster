@@ -15,7 +15,7 @@ export PATH := $(HOME)/.local/share/mise/shims:$(HOME)/.local/bin:$(PATH)
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION := 11.15.0
 # renovate: datasource=docker depName=plantuml/plantuml
-PLANTUML_VERSION := 1.2026.4
+PLANTUML_VERSION := 1.2026.6
 # renovate: datasource=docker depName=ghcr.io/andriykalashnykov/puml2drawio
 PUML2DRAWIO_VERSION := 1.6.0
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
