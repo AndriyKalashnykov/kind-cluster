@@ -292,6 +292,10 @@ gateway-traefik: deps
 gateway-istio: deps
 	@./scripts/kind-add-gateway-istio.sh
 
+#gateway-nginx: @ Opt-in: install NGINX Gateway Fabric as another Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
+gateway-nginx: deps
+	@./scripts/kind-add-gateway-nginx.sh
+
 #lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
 lb-metallb: deps
 	@./scripts/kind-add-metallb.sh
@@ -397,7 +401,7 @@ clean:
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
-	gateway-api-crds gateway-traefik gateway-istio \
+	gateway-api-crds gateway-traefik gateway-istio gateway-nginx \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-ingress-localhost deploy-app-helloweb \
