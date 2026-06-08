@@ -113,12 +113,14 @@ Switching providers on a live cluster requires tearing down the first one — ea
 
 ## Ingress vs Gateway API
 
-The default routing path is **classic Ingress** (`networking.k8s.io/v1`, `ingressClassName: traefik`) — the simplest thing that works. The Kubernetes **[Gateway API](https://gateway-api.sigs.k8s.io/)** is its GA successor (the Ingress API is frozen; ingress-nginx is retiring — the reason this project moved to Traefik). **Traefik**, **Istio**, and **NGINX Gateway Fabric** are all conformant Gateway API controllers and can be enabled here opt-in, each routing the **same** demo apps:
+The default routing path is **classic Ingress** (`networking.k8s.io/v1`, `ingressClassName: traefik`) — the simplest thing that works. The Kubernetes **[Gateway API](https://gateway-api.sigs.k8s.io/)** is its GA successor (the Ingress API is frozen; ingress-nginx is retiring — the reason this project moved to Traefik). **Traefik**, **Istio**, **NGINX Gateway Fabric**, **Contour**, and **HAProxy Ingress** are all conformant Gateway API controllers and can be enabled here opt-in, each routing the **same** demo apps:
 
 ```bash
 make gateway-traefik   # enable Traefik's Gateway API provider (same pod also keeps classic Ingress)
 make gateway-istio     # add Istio as a 2nd Gateway API controller, its own LB IP, same backends
 make gateway-nginx     # add NGINX Gateway Fabric (the Gateway-API successor to ingress-nginx), its own LB IP, same backends
+make gateway-contour   # add Project Contour (Gateway provisioner), its own LB IP, same backends
+make gateway-haproxy   # add HAProxy Ingress (one shared proxy), its own LB IP, same backends
 ```
 
 They coexist because each GatewayClass has a distinct `controllerName` and cloud-provider-kind gives each gateway its own LoadBalancer IP. **Antrea is *not* in this comparison** — it's a CNI, not a Gateway API controller (its "gateway" is the `antrea-gw0` dataplane interface); the real CNI-integrated gateways are **Cilium** / **Calico**.

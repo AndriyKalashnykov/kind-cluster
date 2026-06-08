@@ -489,6 +489,68 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
   else
     fail "NGF gateway Service ngf-nginx got no LoadBalancer IP within 60s"
   fi
+
+  # Project Contour (Gateway provisioner): distinct controllerName, provisions a
+  # per-Gateway Envoy ("envoy-contour") that gets its OWN LB IP, same backends.
+  if "${KUBECTL[@]}" get gatewayclass contour -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "Contour GatewayClass is Accepted"
+  else
+    fail "Contour GatewayClass not Accepted — run 'make gateway-contour' first"
+  fi
+  CONTOUR_GW_IP=""
+  for _ in $(seq 1 30); do
+    CONTOUR_GW_IP=$("${KUBECTL[@]}" -n default get svc envoy-contour -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [ -n "$CONTOUR_GW_IP" ] && break
+    sleep 2
+  done
+  if [ -n "$CONTOUR_GW_IP" ]; then
+    pass "Contour Envoy Service has its own LoadBalancer IP ($CONTOUR_GW_IP)"
+    # K1.5 route-readiness: assigned IP != routable; poll until it serves.
+    CONTOUR_OK=""
+    for _ in $(seq 1 30); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${CONTOUR_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        CONTOUR_OK=yes; break
+      fi
+      sleep 2
+    done
+    if [ -n "$CONTOUR_OK" ]; then
+      pass "helloweb reachable via Contour Gateway at ${CONTOUR_GW_IP} (same backend as Traefik)"
+    else
+      fail "Contour Gateway at ${CONTOUR_GW_IP} did not route to helloweb within 60s"
+    fi
+    check_curl "golang /healthz via Contour Gateway" "http://${CONTOUR_GW_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+  else
+    fail "Contour Envoy Service envoy-contour got no LoadBalancer IP within 60s"
+  fi
+
+  # HAProxy Ingress: ONE shared proxy Service (not per-Gateway). v0.16.1 does NOT
+  # update Gateway/GatewayClass .status, so we verify via the controller Service's
+  # LB IP + an actual request rather than an Accepted condition.
+  HAPROXY_GW_IP=""
+  for _ in $(seq 1 30); do
+    HAPROXY_GW_IP=$("${KUBECTL[@]}" -n haproxy-ingress get svc haproxy-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [ -n "$HAPROXY_GW_IP" ] && break
+    sleep 2
+  done
+  if [ -n "$HAPROXY_GW_IP" ]; then
+    pass "HAProxy Ingress Service has its own LoadBalancer IP ($HAPROXY_GW_IP)"
+    # K1.5 route-readiness: assigned IP != routable; poll until it serves.
+    HAPROXY_OK=""
+    for _ in $(seq 1 30); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${HAPROXY_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        HAPROXY_OK=yes; break
+      fi
+      sleep 2
+    done
+    if [ -n "$HAPROXY_OK" ]; then
+      pass "helloweb reachable via HAProxy Gateway at ${HAPROXY_GW_IP} (same backend as Traefik)"
+    else
+      fail "HAProxy Gateway at ${HAPROXY_GW_IP} did not route to helloweb within 60s"
+    fi
+    check_curl "golang /healthz via HAProxy Gateway" "http://${HAPROXY_GW_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+  else
+    fail "HAProxy Ingress Service got no LoadBalancer IP within 60s"
+  fi
 fi
 
 echo ""
