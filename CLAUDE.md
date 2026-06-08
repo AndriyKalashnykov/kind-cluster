@@ -127,3 +127,33 @@ Use the following skills when working on related files:
 | `.github/workflows/*.{yml,yaml}` | `/ci-workflow` |
 
 When spawning subagents, always pass conventions from the respective skill into the agent's prompt.
+
+## In-progress / handoff (remove when PR #91 lands)
+
+> Temporary block on branch `feat/gateway-contour-haproxy` only — delete this
+> section as part of merging PR #91. Agent-side detail: memory file
+> `gateway-controllers-expansion`.
+
+**Adding Contour + HAProxy as opt-in Gateway API controllers** (NGF already
+merged via PR #90; CNIs Cilium/Calico deliberately out of scope).
+
+- PR #91 is OPEN; its first dispatched `gateway-test.yml` run FAILED at Contour.
+- Root cause (from logs): **Contour 1.33 fatally needs `TLSRoute@v1alpha2`**
+  (experimental-channel only). Fix in this branch: `kind-add-gateway-api-crds.sh`
+  switched standard→**experimental** channel (a strict superset — Traefik/Istio/
+  NGF/HAProxy unaffected) + `kubectl apply --server-side --force-conflicts` (the
+  experimental `httproutes` CRD exceeds the 256 KiB client-side annotation limit).
+- **OPEN question before merge:** does Contour actually *route* on v1.5
+  experimental CRDs despite `GatewayClass contour` reporting
+  `SupportedVersion=False`? Not yet confirmed end-to-end.
+
+Next steps:
+1. `make kind-destroy` then verify on a FRESH cluster (`make install-all` +
+   `gateway-{traefik,istio,nginx,contour,haproxy}` + `TEST_GATEWAY_API=yes make
+   e2e-smoke`). The `safe-upgrades` VAP "experimental on top of standard" block
+   only happens on a dirty cluster; fresh clusters install experimental cleanly.
+2. If Contour's helloweb curl passes → push, dispatch `gateway-test.yml` on the
+   branch, merge #91 on green, watch ALL post-merge `main` workflows.
+3. If Contour is broken on v1.5 → ship NGF + HAProxy only, drop Contour, document
+   the incompatibility (latest stable Contour targets GW API v1.3 + experimental).
+4. Then run `/readme`, `/repo-about`, `/ship-it` (self-review-bias guard active).
