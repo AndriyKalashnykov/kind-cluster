@@ -18,7 +18,7 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 # Chart version pinned (was floating on `latest`). Renovate's scripts
 # custom.regex manager bumps it via the inline comment below.
 # renovate: datasource=helm depName=metrics-server registryUrl=https://kubernetes-sigs.github.io/metrics-server/
-METRICS_SERVER_CHART_VERSION=3.13.0
+METRICS_SERVER_CHART_VERSION=3.13.1
 
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
 helm repo update
