@@ -53,7 +53,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | Tool | Pinned version |
 |------|----------------|
 | [kind](https://kind.sigs.k8s.io/) | 0.32.0 |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.1 |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.2 |
 | [jq](https://github.com/jqlang/jq) | 1.8.1 |
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
