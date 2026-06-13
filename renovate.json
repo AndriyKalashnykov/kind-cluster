@@ -22,7 +22,7 @@
   "labels": ["dependencies"],
   "prConcurrentLimit": 50,
   "prHourlyLimit": 0,
-  "platformAutomerge": true,
+  "platformAutomerge": false,
   "automerge": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",
