@@ -1,0 +1,81 @@
+# Project Contour (Gateway provisioner) demo — a GatewayClass + Gateway bound to
+# Contour's controller (controllerName projectcontour.io/gateway-controller).
+# The Contour Gateway provisioner watches this GatewayClass and provisions a
+# per-Gateway Contour + Envoy data plane in the Gateway's namespace. For the
+# Gateway `contour` in `default`, the Envoy Service is `envoy-contour` (type
+# LoadBalancer, the provisioner default), so cloud-provider-kind hands it its OWN
+# external IP — a distinct front door from Traefik/Istio/NGF.
+#
+# Contour's provisioner requires a GatewayClass to exist before it provisions, so
+# we declare it here. The HTTPRoutes front the SAME backend Services as every
+# other controller, on the original *.localdev.me hostnames (no collision —
+# Contour answers on its own IP).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: contour
+spec:
+  controllerName: projectcontour.io/gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: contour
+  namespace: default
+spec:
+  gatewayClassName: contour
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: contour-helloweb
+  namespace: default
+spec:
+  parentRefs:
+    - name: contour
+  hostnames: ["helloweb.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: helloweb
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: contour-golang
+  namespace: default
+spec:
+  parentRefs:
+    - name: contour
+  hostnames: ["golang.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: golang-hello-world-web-service
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: contour-foo
+  namespace: default
+spec:
+  parentRefs:
+    - name: contour
+  hostnames: ["foo.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: foo-service
+          port: 5678

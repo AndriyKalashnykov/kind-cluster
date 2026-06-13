@@ -4,13 +4,14 @@
 > the strategic successor to classic **Ingress**, and a fact-checked comparison of
 > the headline Gateway API implementations — **Traefik**, **Istio**, and a
 > CNI-integrated option (**Cilium** / **Calico**) — plus additional opt-in
-> conformant controllers (**NGINX Gateway Fabric**) wired as extra GatewayClasses,
-> including how to run more than one of them in the same cluster.
+> conformant controllers (**NGINX Gateway Fabric**, **Contour**) wired as extra
+> GatewayClasses, including how to run more than one of them in the same cluster.
 >
 > Every version, conformance status, and behaviour below is cited to a primary
 > source (see [References](#references)). Verified 2026-06-06 against Gateway API
 > **v1.5.1**, Traefik chart **40.2.0** (appVersion **v3.7.1**), Istio **1.30.1**,
-> NGINX Gateway Fabric **2.6.3**, Cilium **v1.19.4**, Calico **v3.32.0**.
+> NGINX Gateway Fabric **2.6.3**, Contour **v1.33.5**,
+> Cilium **v1.19.4**, Calico **v3.32.0**.
 
 ## TL;DR
 
@@ -33,6 +34,9 @@
     conformant Gateway API controller. Like Istio it provisions a per-Gateway data
     plane with its own LoadBalancer IP, fronting the **same** demo apps. NGF is
     NGINX's Gateway-API-native successor to the retired `ingress-nginx`.
+  - `make gateway-contour` — installs **Project Contour** via its **Gateway
+    provisioner**; each Gateway gets its own Envoy data plane + LoadBalancer IP,
+    fronting the **same** demo apps.
 - **Antrea is not in this comparison.** Antrea is a **CNI**, not a Gateway API
   controller — its "gateway" (`antrea-gw0`) is an Open vSwitch dataplane interface,
   unrelated to `gateway.networking.k8s.io`. If you want a **CNI-integrated**
@@ -246,12 +250,13 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 
 ### Is it advisable to install all of them?
 
-- **Traefik + Istio + NGINX Gateway Fabric (Gateway API):** ✅ fine for a
-  comparison lab — each has a distinct GatewayClass `controllerName` and its own
+- **Traefik + Istio + NGINX Gateway Fabric + Contour (Gateway API):** ✅ fine for
+  a comparison lab — each has a distinct GatewayClass `controllerName` and its own
   entry address, all fronting the same backends. They use LoadBalancer Services
   (not hostPort), so only Traefik holds host ports 80/443 and the others coexist
-  on their own cloud-provider-kind IPs. Each adds real weight, so all are opt-in,
-  not part of `install-all`.
+  on their own cloud-provider-kind IPs. Istio/NGF/Contour each provision a
+  **per-Gateway** data plane. Each adds real weight, so all are opt-in, not part
+  of `install-all`.
 - **A "CNI gateway" (Antrea):** ❌ not a thing — Antrea is a CNI (see above).
 - **Cilium/Calico (CNI gateway):** ⚠️ a **separate cluster** — a CNI is chosen at
   creation time and is mutually exclusive with kindnet (and with each other). You
@@ -267,6 +272,7 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 | `make gateway-traefik` | Opt-in. Installs Gateway API CRDs (pinned), enables Traefik's Gateway API provider, applies a `Gateway` + `HTTPRoute`s for the demo apps on `*.gw.localdev.me` | `curl -H 'Host: helloweb.gw.localdev.me' http://localhost/` (same Traefik hostPort, now also via Gateway API) |
 | `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts | `curl -H 'Host: helloweb.localdev.me' http://<istio-gateway-LB-IP>/` |
 | `make gateway-nginx` | Opt-in. Installs Gateway API CRDs + NGINX Gateway Fabric (OSS, chart `2.6.3`, GatewayClass `nginx`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts. Provisions a per-Gateway `ngf-nginx` data-plane Service with its own LB IP | `curl -H 'Host: helloweb.localdev.me' http://<ngf-gateway-LB-IP>/` |
+| `make gateway-contour` | Opt-in. Installs Project Contour (Gateway provisioner, `v1.33.5`, GatewayClass `contour`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps. Provisions a per-Gateway `envoy-contour` Service with its own LB IP. The bundled Gateway API CRDs are stripped so the shared experimental-channel CRDs aren't clobbered. On the cluster's v1.5.1 CRDs the GatewayClass reports `SupportedVersion=False` but still routes correctly (best-effort reconcile — Gateway Programmed, routes Accepted) | `curl -H 'Host: helloweb.localdev.me' http://<contour-gateway-LB-IP>/` |
 
 All `gateway-*` targets are idempotent on the shared Gateway API CRDs
 (install-if-absent), require **cloud-provider-kind** to be running (for LB IPs),
@@ -274,6 +280,24 @@ and route to the **existing** demo Services — so you can enable either or both
 a cluster brought up with `make install-all` and compare them side by side.
 Smoke coverage for the Gateway API paths is gated behind `TEST_GATEWAY_API=yes`
 (see [`scripts/e2e-smoke.sh`](../scripts/e2e-smoke.sh)).
+
+> **The shared CRDs are the experimental channel.** `kind-add-gateway-api-crds.sh`
+> installs the **experimental** channel (a strict superset of standard) because
+> Project Contour's controller hard-requires `TLSRoute@v1alpha2` at startup — a
+> resource served only by the experimental channel. Traefik, Istio and NGINX
+> Gateway Fabric use only the v1 GA resources, which are identical across
+> channels, so the superset satisfies every controller. The CRDs are applied with
+> `kubectl apply --server-side` (the experimental `httproutes` schema exceeds the
+> 256 KiB client-side `last-applied-configuration` annotation limit).
+>
+> **HAProxy Ingress was evaluated and dropped.** Its current stable release
+> (`v0.16.1`) crash-loops on Gateway API **v1.5.1**: it vendors an older Gateway
+> API where `GatewayClassStatus.supportedFeatures` was a list of strings, but
+> v1.5 serves it as a list of objects (`{name: …}`), so the controller's
+> GatewayClass informer fails to sync and never becomes ready. This is independent
+> of channel (the field is structured in standard too). Compatibility only returns
+> in the `v0.17.0-alpha` prerelease line; pinning a demo lab to an alpha was not
+> worth it, so HAProxy is not wired here.
 
 ---
 
