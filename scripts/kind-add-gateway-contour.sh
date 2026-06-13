@@ -10,14 +10,18 @@
 # Contour+Envoy with a type=LoadBalancer Envoy Service, so cloud-provider-kind
 # gives it its own external IP — the same clean-coexistence model as Istio/NGF.
 #
-# CRITICAL: Contour's all-in-one provisioner render BUNDLES the upstream Gateway
-# API CRDs (experimental channel). Applying them would clobber/downgrade the
-# shared standard-channel v1.5.1 CRDs that Traefik/Istio/NGF rely on (and the
-# v1.5 safe-upgrades admission policy would reject a downgrade). So we strip the
-# bundled gateway.networking.k8s.io CRD documents and reuse the shared ones.
-# Contour 1.33 conforms to Gateway API v1.3, which is wire-compatible with the
-# v1.5.1 standard v1 resources via the Gateway API v1 backward-compatibility
-# guarantee (additive-only within the v1 major).
+# CRITICAL: Contour's all-in-one provisioner render BUNDLES its own copy of the
+# upstream Gateway API CRDs. Applying them would clobber the shared experimental-
+# channel v1.5.1 CRDs that every other controller relies on (and the v1.5 safe-
+# upgrades admission policy could reject the change). So we strip the bundled
+# gateway.networking.k8s.io CRD documents and reuse the shared ones.
+#
+# Contour 1.33 conforms to Gateway API v1.3. On the cluster's v1.5.1 CRDs its
+# GatewayClass reports SupportedVersion=False, but it still reconciles
+# "best-effort": the Gateway is Programmed, HTTPRoutes are Accepted, and it
+# routes correctly (verified end-to-end). Contour ALSO hard-requires
+# `TLSRoute@v1alpha2` at startup (an unconditional informer) — served only by the
+# experimental channel — which is why kind-add-gateway-api-crds.sh installs it.
 #
 # Requires `make install-all` first (cloud-provider-kind must be running so the
 # provisioned Envoy Service gets an external IP).
@@ -34,12 +38,12 @@ TIMEOUT="${1:-5m}"
 CONTOUR_VERSION=v1.33.5
 CONTOUR_MANIFEST="https://raw.githubusercontent.com/projectcontour/contour/${CONTOUR_VERSION}/examples/render/contour-gateway-provisioner.yaml"
 
-# Shared Gateway API CRDs first (idempotent, standard channel v1.5.1).
+# Shared Gateway API CRDs first (idempotent, experimental channel v1.5.1).
 "$SCRIPT_DIR/kind-add-gateway-api-crds.sh"
 
 echo "=== Installing Contour Gateway provisioner ${CONTOUR_VERSION} (bundled Gateway API CRDs stripped) ==="
 # Drop every `gateway.networking.k8s.io` CustomResourceDefinition document so we
-# do NOT overwrite the shared standard-channel CRDs; apply the rest (provisioner
+# do NOT overwrite the shared experimental-channel CRDs; apply the rest (provisioner
 # Deployment, RBAC, Namespace, Contour's own projectcontour.io CRDs). The awk
 # buffers each `---`-separated document and prints it unless it is a Gateway API
 # CRD — dependency-free (no yq/python) so it runs identically in CI.

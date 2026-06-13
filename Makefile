@@ -280,7 +280,7 @@ headlamp-token: deps
 ingress-traefik: deps
 	@./scripts/kind-add-traefik.sh
 
-#gateway-api-crds: @ Install Kubernetes Gateway API CRDs (standard channel, pinned)
+#gateway-api-crds: @ Install Kubernetes Gateway API CRDs (experimental channel, pinned)
 gateway-api-crds: deps
 	@./scripts/kind-add-gateway-api-crds.sh
 
@@ -299,10 +299,6 @@ gateway-nginx: deps
 #gateway-contour: @ Opt-in: install Project Contour (Gateway provisioner) as another Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
 gateway-contour: deps
 	@./scripts/kind-add-gateway-contour.sh
-
-#gateway-haproxy: @ Opt-in: install HAProxy Ingress as another Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
-gateway-haproxy: deps
-	@./scripts/kind-add-gateway-haproxy.sh
 
 #lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
 lb-metallb: deps
@@ -409,7 +405,7 @@ clean:
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
-	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour gateway-haproxy \
+	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-ingress-localhost deploy-app-helloweb \

@@ -23,8 +23,9 @@ NGF_VERSION=2.6.3
 NGF_CHART="oci://ghcr.io/nginx/charts/nginx-gateway-fabric"
 
 # Shared Gateway API CRDs first (idempotent). NGF 2.6.3 targets Gateway API
-# v1.5.1 — the exact version this repo installs — so the shared standard-channel
-# CRDs satisfy it; do NOT install NGF's own bundled copy (avoids CRD ownership
+# v1.5.1 — the exact version this repo installs — so the shared experimental-
+# channel CRDs satisfy it (NGF uses only the v1 GA resources, identical across
+# channels); do NOT install NGF's own bundled copy (avoids CRD ownership
 # conflicts with Traefik/Istio that share the same CRDs).
 "$SCRIPT_DIR/kind-add-gateway-api-crds.sh"
 

@@ -9,9 +9,9 @@
 # ones (TCPRoute, TLSRoute@v1alpha2, UDPRoute). Project Contour's controller
 # FATALLY requires `TLSRoute` at `gateway.networking.k8s.io/v1alpha2` to start
 # (it creates a TLSRoute informer unconditionally) — that version is served only
-# by the experimental channel. Traefik, Istio, NGINX Gateway Fabric and HAProxy
-# Ingress all use only the v1 GA resources, which are identical across channels,
-# so the superset satisfies every controller this repo wires.
+# by the experimental channel. Traefik, Istio and NGINX Gateway Fabric all use
+# only the v1 GA resources, which are identical across channels, so the superset
+# satisfies every controller this repo wires.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

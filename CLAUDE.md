@@ -76,7 +76,6 @@ make gateway-traefik                   # Enable Traefik's Gateway API provider +
 make gateway-istio                     # Install Istio as a 2nd Gateway API controller (own LB IP, same apps)
 make gateway-nginx                     # Install NGINX Gateway Fabric as another Gateway API controller (own LB IP, same apps)
 make gateway-contour                   # Install Project Contour (Gateway provisioner) as another Gateway API controller (own LB IP, same apps)
-make gateway-haproxy                   # Install HAProxy Ingress as another Gateway API controller (one shared proxy, own LB IP, same apps)
 TEST_GATEWAY_API=yes make e2e-smoke    # Smoke-assert all Gateway API controllers (after the targets above)
 ```
 
@@ -88,7 +87,7 @@ TEST_GATEWAY_API=yes make e2e-smoke    # Smoke-assert all Gateway API controller
 - **e2e-metallb.yml** — weekly cron (Sunday 04:00 UTC) + `workflow_dispatch` + push on its MetalLB/migration scripts and the shared smoke chain (`scripts/kind-add-metallb.sh`, `scripts/migrate-from-metallb.sh`, `scripts/e2e-migrate-smoke.sh`, `scripts/kind-add-cloud-provider-kind.sh`, `scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file) (positive-include `paths:` filter is intentional — runs when its own or the shared smoke-chain code changes; the shared scripts are included so a fix that only breaks the MetalLB path, which `ci.yml`'s cloud-provider-kind `e2e` job doesn't exercise, isn't missed until the weekly cron). Mirrors the `e2e` job but installs **MetalLB** instead of cloud-provider-kind; same K1.5 route-readiness poll before `LB=metallb make e2e-smoke`. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the **MetalLB → cloud-provider-kind migration** path so regressions in `migrate-from-metallb.sh` surface here.
 - **monitoring-test.yml** — weekly cron (Sunday 05:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-kube-prometheus-stack.sh` plus the shared smoke chain (`scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file — the `TEST_MONITORING` assertions live in `e2e-smoke.sh`, which `ci.yml` never runs with `TEST_MONITORING=yes`). Brings up the full stack via `make install-all` (cloud-provider-kind), installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. Off the default install-all path — kept on its own cron to keep PR feedback fast.
 - **registry-test.yml** — weekly cron (Sunday 06:00 UTC) + `workflow_dispatch` + push on registry-related files (`scripts/kind-with-registry.sh`, `scripts/test-registry.sh`, `scripts/lib.sh`, `k8s/helloweb-deployment-local.yaml`, the workflow file). Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` (pull → retag → push → deploy → curl). Distinct from the install-all flow; separate workflow rather than another job.
-- **gateway-test.yml** — weekly cron (Sunday 07:00 UTC) + `workflow_dispatch` + push on the gateway scripts/manifests + the shared smoke chain (`scripts/kind-add-gateway-*.sh`, `k8s/gateway/**`, `scripts/kind-add-traefik.sh`, `scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file). Brings up `make install-all`, then `make gateway-traefik` (Traefik's Gateway API provider) + `make gateway-istio` (Istio) + `make gateway-nginx` (NGINX Gateway Fabric) + `make gateway-contour` (Project Contour) + `make gateway-haproxy` (HAProxy Ingress), then `TEST_GATEWAY_API=yes make e2e-smoke` to assert all controllers front the same demo apps. Off the default install-all path — Gateway API is opt-in (see `docs/gateway-api-ingress.md`).
+- **gateway-test.yml** — weekly cron (Sunday 07:00 UTC) + `workflow_dispatch` + push on the gateway scripts/manifests + the shared smoke chain (`scripts/kind-add-gateway-*.sh`, `k8s/gateway/**`, `scripts/kind-add-traefik.sh`, `scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file). Brings up `make install-all`, then `make gateway-traefik` (Traefik's Gateway API provider) + `make gateway-istio` (Istio) + `make gateway-nginx` (NGINX Gateway Fabric) + `make gateway-contour` (Project Contour), then `TEST_GATEWAY_API=yes make e2e-smoke` to assert all controllers front the same demo apps. The shared Gateway API CRDs are the **experimental** channel (Contour requires `TLSRoute@v1alpha2`); HAProxy Ingress was evaluated but dropped (v0.16.1 crash-loops on GW API v1.5.1 — see `docs/gateway-api-ingress.md`). Off the default install-all path — Gateway API is opt-in.
 - **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
 ### Paths that CI does NOT exercise
@@ -127,33 +126,3 @@ Use the following skills when working on related files:
 | `.github/workflows/*.{yml,yaml}` | `/ci-workflow` |
 
 When spawning subagents, always pass conventions from the respective skill into the agent's prompt.
-
-## In-progress / handoff (remove when PR #91 lands)
-
-> Temporary block on branch `feat/gateway-contour-haproxy` only — delete this
-> section as part of merging PR #91. Agent-side detail: memory file
-> `gateway-controllers-expansion`.
-
-**Adding Contour + HAProxy as opt-in Gateway API controllers** (NGF already
-merged via PR #90; CNIs Cilium/Calico deliberately out of scope).
-
-- PR #91 is OPEN; its first dispatched `gateway-test.yml` run FAILED at Contour.
-- Root cause (from logs): **Contour 1.33 fatally needs `TLSRoute@v1alpha2`**
-  (experimental-channel only). Fix in this branch: `kind-add-gateway-api-crds.sh`
-  switched standard→**experimental** channel (a strict superset — Traefik/Istio/
-  NGF/HAProxy unaffected) + `kubectl apply --server-side --force-conflicts` (the
-  experimental `httproutes` CRD exceeds the 256 KiB client-side annotation limit).
-- **OPEN question before merge:** does Contour actually *route* on v1.5
-  experimental CRDs despite `GatewayClass contour` reporting
-  `SupportedVersion=False`? Not yet confirmed end-to-end.
-
-Next steps:
-1. `make kind-destroy` then verify on a FRESH cluster (`make install-all` +
-   `gateway-{traefik,istio,nginx,contour,haproxy}` + `TEST_GATEWAY_API=yes make
-   e2e-smoke`). The `safe-upgrades` VAP "experimental on top of standard" block
-   only happens on a dirty cluster; fresh clusters install experimental cleanly.
-2. If Contour's helloweb curl passes → push, dispatch `gateway-test.yml` on the
-   branch, merge #91 on green, watch ALL post-merge `main` workflows.
-3. If Contour is broken on v1.5 → ship NGF + HAProxy only, drop Contour, document
-   the incompatibility (latest stable Contour targets GW API v1.3 + experimental).
-4. Then run `/readme`, `/repo-about`, `/ship-it` (self-review-bias guard active).

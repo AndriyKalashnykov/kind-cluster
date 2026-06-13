@@ -6,10 +6,10 @@
 # LoadBalancer, the provisioner default), so cloud-provider-kind hands it its OWN
 # external IP — a distinct front door from Traefik/Istio/NGF.
 #
-# v0.16-style chart for HAProxy ships no GatewayClass, but Contour's provisioner
-# requires one to exist before it provisions, so we declare it here. The
-# HTTPRoutes front the SAME backend Services as every other controller, on the
-# original *.localdev.me hostnames (no collision — Contour answers on its own IP).
+# Contour's provisioner requires a GatewayClass to exist before it provisions, so
+# we declare it here. The HTTPRoutes front the SAME backend Services as every
+# other controller, on the original *.localdev.me hostnames (no collision —
+# Contour answers on its own IP).
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
