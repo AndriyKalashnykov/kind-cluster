@@ -113,28 +113,34 @@ Switching providers on a live cluster requires tearing down the first one — ea
 
 ## Ingress vs Gateway API
 
-The default routing path is **classic Ingress** (`networking.k8s.io/v1`, `ingressClassName: traefik`) — the simplest thing that works. The Kubernetes **[Gateway API](https://gateway-api.sigs.k8s.io/)** is its GA successor (the Ingress API is frozen; ingress-nginx is retiring — the reason this project moved to Traefik). **Traefik**, **Istio**, **NGINX Gateway Fabric**, and **Contour** are all conformant Gateway API controllers and can be enabled here opt-in, each routing the **same** demo apps:
+The default routing path is **classic Ingress** (`networking.k8s.io/v1`, `ingressClassName: traefik`) — the simplest thing that works. The Kubernetes **[Gateway API](https://gateway-api.sigs.k8s.io/)** is its GA successor (the Ingress API is frozen; ingress-nginx retired March 2026 — the reason this project moved to Traefik). **Traefik**, **Istio**, **NGINX Gateway Fabric**, **Contour**, **Envoy Gateway**, and **kgateway** are all conformant Gateway API controllers and can be enabled here opt-in, each routing the **same** demo apps:
 
 ```bash
-make gateway-traefik   # enable Traefik's Gateway API provider (same pod also keeps classic Ingress)
-make gateway-istio     # add Istio as a 2nd Gateway API controller, its own LB IP, same backends
-make gateway-nginx     # add NGINX Gateway Fabric (the Gateway-API successor to ingress-nginx), its own LB IP, same backends
-make gateway-contour   # add Project Contour (Gateway provisioner), its own LB IP, same backends
+make gateway-traefik    # enable Traefik's Gateway API provider (same pod also keeps classic Ingress)
+make gateway-istio      # add Istio as a 2nd Gateway API controller, its own LB IP, same backends
+make gateway-nginx      # add NGINX Gateway Fabric (the Gateway-API successor to ingress-nginx), its own LB IP, same backends
+make gateway-contour    # add Project Contour (Gateway provisioner), its own LB IP, same backends
+make gateway-envoy      # add Envoy Gateway (CNCF), its own LB IP, same backends
+make gateway-kgateway   # add kgateway (CNCF, formerly Gloo OSS), its own LB IP, same backends
 ```
+
+All six vendor Gateway API **v1.5.1 / v1.4.x** clients, so they coexist on the shared experimental-channel CRDs without the `supportedFeatures` deserialization crash that dropped HAProxy (whose client predated the v1.2.0 `[]string`→`[]object` change).
 
 They coexist because each GatewayClass has a distinct `controllerName` and cloud-provider-kind gives each gateway its own LoadBalancer IP. **Antrea is *not* in this comparison** — it's a CNI, not a Gateway API controller (its "gateway" is the `antrea-gw0` dataplane interface); the real CNI-integrated gateways are **Cilium** / **Calico**.
 
 ### Reaching each gateway
 
-Every controller's `Gateway` gets its **own** LoadBalancer IP from cloud-provider-kind. List them (all four live in the `default` namespace):
+Every controller's `Gateway` gets its **own** LoadBalancer IP from cloud-provider-kind. List them (all six `Gateway` objects live in the `default` namespace):
 
 ```bash
 kubectl get gateway
-# NAME              CLASS     ADDRESS      PROGRAMMED
-# traefik-gateway   traefik   172.18.0.4   True
-# demo              istio     172.18.0.6   True
-# ngf               nginx     172.18.0.7   True
-# contour           contour   172.18.0.8   True
+# NAME              CLASS      ADDRESS      PROGRAMMED
+# traefik-gateway   traefik    172.18.0.4   True
+# demo              istio      172.18.0.6   True
+# ngf               nginx      172.18.0.7   True
+# contour           contour    172.18.0.8   True
+# eg                envoy      172.18.0.9   True
+# kgw               kgateway   172.18.0.10  True
 ```
 
 **Traefik**'s Gateway API provider shares Traefik's ingress IP, so its HTTPRoutes use `*.gw.localdev.me` (to avoid colliding with the classic Ingress `*.localdev.me` on the same pod):
@@ -145,17 +151,17 @@ curl -H "Host: helloweb.gw.localdev.me" "http://$GW/"        # Hello, world!
 curl -H "Host: golang.gw.localdev.me"  "http://$GW/healthz"  # {"health":"ok"}
 ```
 
-**Istio** (`demo`), **NGINX Gateway Fabric** (`ngf`), and **Contour** (`contour`) each have their own IP and reuse the plain `*.localdev.me` hostnames — so target each by its IP. The same hostname can't point at three IPs in `/etc/hosts`, so pass it as a `Host:` header (or use `curl --resolve helloweb.localdev.me:80:<ip>`):
+**Istio** (`demo`), **NGINX Gateway Fabric** (`ngf`), **Contour** (`contour`), **Envoy Gateway** (`eg`), and **kgateway** (`kgw`) each have their own IP and reuse the plain `*.localdev.me` hostnames — so target each by its IP. The same hostname can't point at five IPs in `/etc/hosts`, so pass it as a `Host:` header (or use `curl --resolve helloweb.localdev.me:80:<ip>`):
 
 ```bash
-for gw in demo ngf contour; do
+for gw in demo ngf contour eg kgw; do
   IP=$(kubectl get gateway "$gw" -o jsonpath='{.status.addresses[0].value}')
   echo "== $gw @ $IP =="
   curl -H "Host: helloweb.localdev.me" "http://$IP/"          # same backend, different front door
 done
 ```
 
-`TEST_GATEWAY_API=yes make e2e-smoke` runs exactly these assertions across all four controllers.
+`TEST_GATEWAY_API=yes make e2e-smoke` runs exactly these assertions across all six controllers.
 
 📖 **Full comparison (Traefik vs Istio vs Cilium/Calico), coexistence mechanics, and "is it advisable to run all of them?" — see [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md).**
 
@@ -575,6 +581,8 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Gateway API | `make gateway-istio` | Add Istio as a 2nd Gateway API controller (own LB IP, same apps) |
 | Gateway API | `make gateway-nginx` | Add NGINX Gateway Fabric as another Gateway API controller (own LB IP, same apps) |
 | Gateway API | `make gateway-contour` | Add Project Contour (Gateway provisioner) as another Gateway API controller (own LB IP, same apps) |
+| Gateway API | `make gateway-envoy` | Add Envoy Gateway (CNCF) as another Gateway API controller (own LB IP, same apps) |
+| Gateway API | `make gateway-kgateway` | Add kgateway (CNCF, formerly Gloo OSS) as another Gateway API controller (own LB IP, same apps) |
 | NFS | `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
 | NFS | `make nfs-host-setup` | Option 2, step 1 — configure host as NFS server (sudo; Ubuntu/Debian) |
 | NFS | `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install csi-driver-nfs pointing at the host export |
@@ -633,7 +641,7 @@ Suppressions (intentional, justified inline):
 | `e2e-metallb.yml` | Sun 04:00 UTC | `scripts/kind-add-metallb.sh`, `scripts/migrate-from-metallb.sh`, `scripts/e2e-migrate-smoke.sh`, the workflow itself | Mirrors `ci.yml`'s e2e job but installs MetalLB instead of cloud-provider-kind. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the MetalLB → cloud-provider-kind migration path. |
 | `monitoring-test.yml` | Sun 05:00 UTC | `scripts/kind-add-kube-prometheus-stack.sh`, the workflow itself | Brings up the full stack via the granular install scripts, installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. |
 | `registry-test.yml` | Sun 06:00 UTC | `scripts/kind-with-registry.sh`, `scripts/test-registry.sh`, `k8s/helloweb-deployment-local.yaml`, the workflow itself | Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` — pull → retag → push → deploy → curl. |
-| `gateway-test.yml` | Sun 07:00 UTC | `scripts/kind-add-gateway-*.sh`, `k8s/gateway/**`, `scripts/kind-add-traefik.sh`, the shared smoke chain (`scripts/e2e-smoke.sh`, `scripts/lib.sh`), the workflow itself | Brings up `make install-all`, then enables all four Gateway API controllers (`make gateway-traefik` + `gateway-istio` + `gateway-nginx` + `gateway-contour`), then runs `TEST_GATEWAY_API=yes make e2e-smoke` to assert each controller fronts the same demo apps on its own LB IP. Shared GW API CRDs are the experimental channel (Contour requires `TLSRoute@v1alpha2`). |
+| `gateway-test.yml` | Sun 07:00 UTC | `scripts/kind-add-gateway-*.sh`, `k8s/gateway/**`, `scripts/kind-add-traefik.sh`, the shared smoke chain (`scripts/e2e-smoke.sh`, `scripts/lib.sh`), the workflow itself | Brings up `make install-all`, then enables all six Gateway API controllers (`make gateway-traefik` + `gateway-istio` + `gateway-nginx` + `gateway-contour` + `gateway-envoy` + `gateway-kgateway`), then runs `TEST_GATEWAY_API=yes make e2e-smoke` to assert each controller fronts the same demo apps on its own LB IP. Shared GW API CRDs are the experimental channel (Contour requires `TLSRoute@v1alpha2`). |
 | `cleanup-runs.yml` | Sun 00:00 UTC | n/a | Prunes old workflow runs (keeps latest 5) and caches from closed PR branches. |
 
 No repo secrets or variables are required by any workflow — only the default `GITHUB_TOKEN`.

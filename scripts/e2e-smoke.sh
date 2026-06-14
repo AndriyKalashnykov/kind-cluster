@@ -522,6 +522,81 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
   else
     fail "Contour Envoy Service envoy-contour got no LoadBalancer IP within 60s"
   fi
+
+  # Envoy Gateway (CNCF): distinct controllerName, provisions a per-Gateway Envoy
+  # in envoy-gateway-system with a GENERATED name (discovered by the owning-gateway
+  # labels, not a fixed name) that gets its OWN LB IP, same backends.
+  if "${KUBECTL[@]}" get gatewayclass envoy -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "Envoy Gateway GatewayClass is Accepted"
+  else
+    fail "Envoy Gateway GatewayClass not Accepted — run 'make gateway-envoy' first"
+  fi
+  EG_SVC=""
+  for _ in $(seq 1 30); do
+    EG_SVC=$("${KUBECTL[@]}" -n envoy-gateway-system get svc \
+      -l gateway.envoyproxy.io/owning-gateway-namespace=default,gateway.envoyproxy.io/owning-gateway-name=eg \
+      -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    [ -n "$EG_SVC" ] && break
+    sleep 2
+  done
+  EG_GW_IP=""
+  if [ -n "$EG_SVC" ]; then
+    for _ in $(seq 1 30); do
+      EG_GW_IP=$("${KUBECTL[@]}" -n envoy-gateway-system get svc "$EG_SVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+      [ -n "$EG_GW_IP" ] && break
+      sleep 2
+    done
+  fi
+  if [ -n "$EG_GW_IP" ]; then
+    pass "Envoy Gateway Service ($EG_SVC) has its own LoadBalancer IP ($EG_GW_IP)"
+    EG_OK=""
+    for _ in $(seq 1 30); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${EG_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        EG_OK=yes; break
+      fi
+      sleep 2
+    done
+    if [ -n "$EG_OK" ]; then
+      pass "helloweb reachable via Envoy Gateway at ${EG_GW_IP} (same backend as Traefik)"
+    else
+      fail "Envoy Gateway at ${EG_GW_IP} did not route to helloweb within 60s"
+    fi
+    check_curl "golang /healthz via Envoy Gateway" "http://${EG_GW_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+  else
+    fail "Envoy Gateway Service got no LoadBalancer IP within 60s"
+  fi
+
+  # kgateway (CNCF, formerly Gloo OSS): distinct controllerName, provisions a
+  # per-Gateway Envoy ("kgw") that gets its OWN LB IP, same backends.
+  if "${KUBECTL[@]}" get gatewayclass kgateway -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "kgateway GatewayClass is Accepted"
+  else
+    fail "kgateway GatewayClass not Accepted — run 'make gateway-kgateway' first"
+  fi
+  KGW_IP=""
+  for _ in $(seq 1 30); do
+    KGW_IP=$("${KUBECTL[@]}" -n default get svc kgw -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [ -n "$KGW_IP" ] && break
+    sleep 2
+  done
+  if [ -n "$KGW_IP" ]; then
+    pass "kgateway gateway Service has its own LoadBalancer IP ($KGW_IP)"
+    KGW_OK=""
+    for _ in $(seq 1 30); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${KGW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        KGW_OK=yes; break
+      fi
+      sleep 2
+    done
+    if [ -n "$KGW_OK" ]; then
+      pass "helloweb reachable via kgateway at ${KGW_IP} (same backend as Traefik)"
+    else
+      fail "kgateway at ${KGW_IP} did not route to helloweb within 60s"
+    fi
+    check_curl "golang /healthz via kgateway" "http://${KGW_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+  else
+    fail "kgateway gateway Service kgw got no LoadBalancer IP within 60s"
+  fi
 fi
 
 echo ""

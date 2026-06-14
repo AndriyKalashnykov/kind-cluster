@@ -273,6 +273,8 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 | `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts | `curl -H 'Host: helloweb.localdev.me' http://<istio-gateway-LB-IP>/` |
 | `make gateway-nginx` | Opt-in. Installs Gateway API CRDs + NGINX Gateway Fabric (OSS, chart `2.6.3`, GatewayClass `nginx`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts. Provisions a per-Gateway `ngf-nginx` data-plane Service with its own LB IP | `curl -H 'Host: helloweb.localdev.me' http://<ngf-gateway-LB-IP>/` |
 | `make gateway-contour` | Opt-in. Installs Project Contour (Gateway provisioner, `v1.33.5`, GatewayClass `contour`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps. Provisions a per-Gateway `envoy-contour` Service with its own LB IP. The bundled Gateway API CRDs are stripped so the shared experimental-channel CRDs aren't clobbered. On the cluster's v1.5.1 CRDs the GatewayClass reports `SupportedVersion=False` but still routes correctly (best-effort reconcile — Gateway Programmed, routes Accepted) | `curl -H 'Host: helloweb.localdev.me' http://<contour-gateway-LB-IP>/` |
+| `make gateway-envoy` | Opt-in. Installs Envoy Gateway (CNCF, chart `v1.8.1`, GatewayClass `envoy`) + a `Gateway` (`eg`) + `HTTPRoute`s for the **same** demo apps. Reuses the shared GW API CRDs (`crds.gatewayAPI.enabled=false` + `--skip-crds`) and installs only its own `gateway.envoyproxy.io` CRDs. Provisions a per-Gateway Envoy Service in `envoy-gateway-system` with a **generated** name (discovered by `gateway.envoyproxy.io/owning-gateway-*` labels) and its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<envoy-gateway-LB-IP>/` |
+| `make gateway-kgateway` | Opt-in. Installs kgateway (CNCF, formerly Gloo OSS, `v2.3.3`, GatewayClass `kgateway`) + a `Gateway` (`kgw`) + `HTTPRoute`s for the **same** demo apps. Its CRD chart ships only `gateway.kgateway.dev` CRDs (never touches the shared GW API CRDs). Provisions a per-Gateway `kgw` Envoy Service with its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<kgateway-LB-IP>/` |
 
 All `gateway-*` targets are idempotent on the shared Gateway API CRDs
 (install-if-absent), require **cloud-provider-kind** to be running (for LB IPs),
@@ -284,20 +286,34 @@ Smoke coverage for the Gateway API paths is gated behind `TEST_GATEWAY_API=yes`
 > **The shared CRDs are the experimental channel.** `kind-add-gateway-api-crds.sh`
 > installs the **experimental** channel (a strict superset of standard) because
 > Project Contour's controller hard-requires `TLSRoute@v1alpha2` at startup — a
-> resource served only by the experimental channel. Traefik, Istio and NGINX
-> Gateway Fabric use only the v1 GA resources, which are identical across
-> channels, so the superset satisfies every controller. The CRDs are applied with
-> `kubectl apply --server-side` (the experimental `httproutes` schema exceeds the
-> 256 KiB client-side `last-applied-configuration` annotation limit).
+> resource served only by the experimental channel. Traefik, Istio, NGINX
+> Gateway Fabric, Envoy Gateway and kgateway use only the v1 GA resources, which
+> are identical across channels, so the superset satisfies every controller. The
+> CRDs are applied with `kubectl apply --server-side` (the experimental
+> `httproutes` schema exceeds the 256 KiB client-side `last-applied-configuration`
+> annotation limit).
+>
+> **The compatibility floor is "vendors Gateway API ≥ v1.2.0", not v1.5.**
+> `GatewayClass.status.supportedFeatures` changed from a list of strings
+> (`[]string`) to a list of objects (`[]{name}`) in Gateway API **v1.2.0**
+> ([PR #3200](https://github.com/kubernetes-sigs/gateway-api/pull/3200)); v1.4
+> only graduated the field to the standard channel and v1.5 did not re-change its
+> type. So any controller whose vendored `sigs.k8s.io/gateway-api` is **≥ v1.2.0**
+> deserializes the field natively and coexists on these v1.5.1 CRDs. The six wired
+> controllers all clear it (Traefik/Istio/NGF/Envoy Gateway/kgateway vendor
+> v1.5.x; Kong/KIC vendors v1.3.0).
 >
 > **HAProxy Ingress was evaluated and dropped.** Its current stable release
-> (`v0.16.1`) crash-loops on Gateway API **v1.5.1**: it vendors an older Gateway
-> API where `GatewayClassStatus.supportedFeatures` was a list of strings, but
-> v1.5 serves it as a list of objects (`{name: …}`), so the controller's
-> GatewayClass informer fails to sync and never becomes ready. This is independent
-> of channel (the field is structured in standard too). Compatibility only returns
-> in the `v0.17.0-alpha` prerelease line; pinning a demo lab to an alpha was not
-> worth it, so HAProxy is not wired here.
+> (`v0.16.1`) vendors a **pre-v1.2.0** Gateway API client where
+> `GatewayClassStatus.supportedFeatures` is still `[]string`, so once a sibling
+> controller populates the field in the v1.5.1 `[]object` form its GatewayClass
+> informer fails to unmarshal and the controller crash-loops (never becomes
+> ready). This is independent of channel (the field is structured in standard
+> too). Compatibility only returns in the `v0.17.0-alpha` prerelease line; pinning
+> a demo lab to an alpha was not worth it, so HAProxy is not wired here. (Note:
+> this is the *Gateway API mode* of `jcmoraisjr/haproxy-ingress`; the official
+> `haproxytech/kubernetes-ingress` as a **classic Ingress** controller is immune —
+> it never watches `GatewayClass` — and is a separate candidate.)
 
 ---
 
