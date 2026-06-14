@@ -21,7 +21,7 @@ title System Context — kind-cluster
 Person(dev, "Developer", "Runs make targets to bring up a local k8s lab")
 
 System_Boundary(host, "Workstation or Multipass VM") {
-  System(kind, "kind-cluster", "Local KinD stack: Traefik ingress, cloud-provider-kind, Headlamp, NFS, Prometheus; opt-in Gateway API controllers (Istio, NGINX Gateway Fabric, Contour)")
+  System(kind, "kind-cluster", "Local KinD stack: Traefik ingress, cloud-provider-kind, Headlamp, NFS, Prometheus; opt-in Gateway API controllers (Istio, NGINX Gateway Fabric, Contour, Envoy Gateway, kgateway, Kong)")
   System_Ext(docker, "Docker", "Container runtime hosting the KinD nodes")
 }
 

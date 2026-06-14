@@ -597,6 +597,48 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
   else
     fail "kgateway gateway Service kgw got no LoadBalancer IP within 60s"
   fi
+
+  # Kong (KIC, unmanaged Gateway): distinct controllerName; the data plane is the
+  # chart's single kong proxy LoadBalancer Service (discovered by type, since its
+  # name varies across chart versions), not a per-Gateway one. Same backends.
+  if "${KUBECTL[@]}" get gatewayclass kong -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "Kong GatewayClass is Accepted"
+  else
+    fail "Kong GatewayClass not Accepted — run 'make gateway-kong' first"
+  fi
+  KONG_SVC=""
+  for _ in $(seq 1 30); do
+    KONG_SVC=$("${KUBECTL[@]}" -n kong get svc \
+      -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1 || echo "")
+    [ -n "$KONG_SVC" ] && break
+    sleep 2
+  done
+  KONG_IP=""
+  if [ -n "$KONG_SVC" ]; then
+    for _ in $(seq 1 30); do
+      KONG_IP=$("${KUBECTL[@]}" -n kong get svc "$KONG_SVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+      [ -n "$KONG_IP" ] && break
+      sleep 2
+    done
+  fi
+  if [ -n "$KONG_IP" ]; then
+    pass "Kong proxy Service ($KONG_SVC) has its own LoadBalancer IP ($KONG_IP)"
+    KONG_OK=""
+    for _ in $(seq 1 30); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${KONG_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        KONG_OK=yes; break
+      fi
+      sleep 2
+    done
+    if [ -n "$KONG_OK" ]; then
+      pass "helloweb reachable via Kong at ${KONG_IP} (same backend as Traefik)"
+    else
+      fail "Kong at ${KONG_IP} did not route to helloweb within 60s"
+    fi
+    check_curl "golang /healthz via Kong" "http://${KONG_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+  else
+    fail "Kong proxy Service got no LoadBalancer IP within 60s"
+  fi
 fi
 
 echo ""

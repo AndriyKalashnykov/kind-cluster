@@ -308,6 +308,10 @@ gateway-envoy: deps
 gateway-kgateway: deps
 	@./scripts/kind-add-gateway-kgateway.sh
 
+#gateway-kong: @ Opt-in: install Kong (KIC, unmanaged Gateway) as another Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
+gateway-kong: deps
+	@./scripts/kind-add-gateway-kong.sh
+
 #lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
 lb-metallb: deps
 	@./scripts/kind-add-metallb.sh
@@ -413,7 +417,7 @@ clean:
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
-	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour gateway-envoy gateway-kgateway \
+	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour gateway-envoy gateway-kgateway gateway-kong \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-ingress-localhost deploy-app-helloweb \

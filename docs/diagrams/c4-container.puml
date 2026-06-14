@@ -42,6 +42,7 @@ System_Boundary(host, "Host or Multipass VM") {
       Container(gwcontour, "Project Contour", "Gateway provisioner v1.33.5", "gatewayClassName: contour; provisions per-Gateway Envoy on its own LoadBalancer IP")
       Container(gwenvoy, "Envoy Gateway", "CNCF, Helm v1.8.1", "gatewayClassName: envoy; auto-provisions Envoy data plane on its own LoadBalancer IP")
       Container(gwkgateway, "kgateway", "CNCF (ex-Gloo), Helm v2.3.3", "gatewayClassName: kgateway; auto-provisions Envoy data plane on its own LoadBalancer IP")
+      Container(gwkong, "Kong (KIC)", "umbrella chart 0.24.0, DB-less", "gatewayClassName: kong (unmanaged); binds to the single kong proxy LoadBalancer Service; also serves classic Ingress")
     }
   }
 }
@@ -61,11 +62,13 @@ Rel(gwngf, gwcrds, "Watches GatewayClass/HTTPRoute")
 Rel(gwcontour, gwcrds, "Watches GatewayClass/HTTPRoute")
 Rel(gwenvoy, gwcrds, "Watches GatewayClass/HTTPRoute")
 Rel(gwkgateway, gwcrds, "Watches GatewayClass/HTTPRoute")
+Rel(gwkong, gwcrds, "Watches GatewayClass/HTTPRoute")
 Rel(gwistio, apps, "Routes by Host header (own LB IP)")
 Rel(gwngf, apps, "Routes by Host header (own LB IP)")
 Rel(gwcontour, apps, "Routes by Host header (own LB IP)")
 Rel(gwenvoy, apps, "Routes by Host header (own LB IP)")
 Rel(gwkgateway, apps, "Routes by Host header (own LB IP)")
+Rel(gwkong, apps, "Routes by Host header (own LB IP)")
 Rel(apps, nfs, "Mounts RWX PVCs (optional)")
 Rel(prom, apps, "Scrapes /metrics", "HTTP")
 Rel(dev, prom, "Grafana UI", "kubectl port-forward")
