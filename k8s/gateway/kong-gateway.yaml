@@ -1,0 +1,82 @@
+# Kong (KIC) demo. KIC uses the UNMANAGED Gateway model: rather than provisioning
+# a per-Gateway data plane, it binds this GatewayClass to the chart's existing
+# `kong-gateway-proxy` LoadBalancer Service via the
+# konghq.com/gatewayclass-unmanaged annotation. So this Gateway answers on Kong's
+# one proxy LB IP — a distinct front door from Traefik / Istio / NGF / Contour /
+# Envoy Gateway / kgateway.
+#
+# The HTTPRoutes front the SAME backend Services as the classic Ingress and the
+# other Gateways, on the original *.localdev.me hostnames (no collision — Kong
+# answers on a different IP). The single listener has no hostname (matches any),
+# so the per-route hostnames do the virtual-host routing.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: kong
+  annotations:
+    konghq.com/gatewayclass-unmanaged: "true"
+spec:
+  controllerName: konghq.com/kic-gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kong
+  namespace: default
+spec:
+  gatewayClassName: kong
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kong-helloweb
+  namespace: default
+spec:
+  parentRefs:
+    - name: kong
+  hostnames: ["helloweb.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: helloweb
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kong-golang
+  namespace: default
+spec:
+  parentRefs:
+    - name: kong
+  hostnames: ["golang.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: golang-hello-world-web-service
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kong-foo
+  namespace: default
+spec:
+  parentRefs:
+    - name: kong
+  hostnames: ["foo.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: foo-service
+          port: 5678

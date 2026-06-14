@@ -47,6 +47,7 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
       Container(gwcontour, "Project Contour", "provisioner v1.33.5 in projectcontour; Gateway gatewayClassName=contour provisions Envoy DaemonSet+Service 'envoy-contour' (type=LoadBalancer) in default")
       Container(gwenvoy, "Envoy Gateway", "CNCF v1.8.1 in envoy-gateway-system; Gateway gatewayClassName=envoy auto-provisions an Envoy Deployment+Service (generated name) type=LoadBalancer in envoy-gateway-system")
       Container(gwkgateway, "kgateway", "CNCF v2.3.3 (ex-Gloo) in kgateway-system; Gateway gatewayClassName=kgateway auto-provisions Envoy Deployment+Service 'kgw' (type=LoadBalancer) in default")
+      Container(gwkong, "Kong (KIC)", "umbrella chart 0.24.0 (DB-less) in kong; unmanaged GatewayClass=kong binds to the single kong proxy Service (type=LoadBalancer); also serves classic Ingress")
     }
   }
 }
@@ -69,11 +70,13 @@ Rel(cpk, gwngf, "Allocates LB IP per provisioned gateway Service")
 Rel(cpk, gwcontour, "Allocates LB IP per provisioned gateway Service")
 Rel(cpk, gwenvoy, "Allocates LB IP per provisioned gateway Service")
 Rel(cpk, gwkgateway, "Allocates LB IP per provisioned gateway Service")
+Rel(cpk, gwkong, "Allocates LB IP for the kong proxy Service")
 Rel(gwistio, apps, "Routes by Host header (own LB IP)")
 Rel(gwngf, apps, "Routes by Host header (own LB IP)")
 Rel(gwcontour, apps, "Routes by Host header (own LB IP)")
 Rel(gwenvoy, apps, "Routes by Host header (own LB IP)")
 Rel(gwkgateway, apps, "Routes by Host header (own LB IP)")
+Rel(gwkong, apps, "Routes by Host header (own LB IP)")
 
 Rel(prom, apps, "Scrapes /metrics", "HTTP")
 Rel(apps, nfs, "Mounts RWX PVCs (optional)", "NFSv4")

@@ -250,13 +250,17 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 
 ### Is it advisable to install all of them?
 
-- **Traefik + Istio + NGINX Gateway Fabric + Contour (Gateway API):** ✅ fine for
-  a comparison lab — each has a distinct GatewayClass `controllerName` and its own
-  entry address, all fronting the same backends. They use LoadBalancer Services
-  (not hostPort), so only Traefik holds host ports 80/443 and the others coexist
-  on their own cloud-provider-kind IPs. Istio/NGF/Contour each provision a
-  **per-Gateway** data plane. Each adds real weight, so all are opt-in, not part
-  of `install-all`.
+- **Traefik + Istio + NGINX Gateway Fabric + Contour + Envoy Gateway + kgateway +
+  Kong (Gateway API):** ✅ fine for a comparison lab — each has a distinct
+  GatewayClass `controllerName` and its own entry address, all fronting the same
+  backends (verified together by `gateway-test.yml`). They use LoadBalancer
+  Services (not hostPort), so only Traefik holds host ports 80/443 and the others
+  coexist on their own cloud-provider-kind IPs. Istio/NGF/Contour/Envoy
+  Gateway/kgateway each provision a **per-Gateway** data plane; Kong (KIC) uses
+  the **unmanaged** model (one shared proxy Service). Each adds real weight, so
+  all are opt-in, not part of `install-all`. All seven vendor a Gateway API
+  client **≥ v1.2.0**, so they share the experimental-channel v1.5.1 CRDs without
+  the `supportedFeatures` crash that dropped HAProxy.
 - **A "CNI gateway" (Antrea):** ❌ not a thing — Antrea is a CNI (see above).
 - **Cilium/Calico (CNI gateway):** ⚠️ a **separate cluster** — a CNI is chosen at
   creation time and is mutually exclusive with kindnet (and with each other). You
@@ -275,6 +279,7 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 | `make gateway-contour` | Opt-in. Installs Project Contour (Gateway provisioner, `v1.33.5`, GatewayClass `contour`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps. Provisions a per-Gateway `envoy-contour` Service with its own LB IP. The bundled Gateway API CRDs are stripped so the shared experimental-channel CRDs aren't clobbered. On the cluster's v1.5.1 CRDs the GatewayClass reports `SupportedVersion=False` but still routes correctly (best-effort reconcile — Gateway Programmed, routes Accepted) | `curl -H 'Host: helloweb.localdev.me' http://<contour-gateway-LB-IP>/` |
 | `make gateway-envoy` | Opt-in. Installs Envoy Gateway (CNCF, chart `v1.8.1`, GatewayClass `envoy`) + a `Gateway` (`eg`) + `HTTPRoute`s for the **same** demo apps. Reuses the shared GW API CRDs (`crds.gatewayAPI.enabled=false` + `--skip-crds`) and installs only its own `gateway.envoyproxy.io` CRDs. Provisions a per-Gateway Envoy Service in `envoy-gateway-system` with a **generated** name (discovered by `gateway.envoyproxy.io/owning-gateway-*` labels) and its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<envoy-gateway-LB-IP>/` |
 | `make gateway-kgateway` | Opt-in. Installs kgateway (CNCF, formerly Gloo OSS, `v2.3.3`, GatewayClass `kgateway`) + a `Gateway` (`kgw`) + `HTTPRoute`s for the **same** demo apps. Its CRD chart ships only `gateway.kgateway.dev` CRDs (never touches the shared GW API CRDs). Provisions a per-Gateway `kgw` Envoy Service with its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<kgateway-LB-IP>/` |
+| `make gateway-kong` | Opt-in. Installs Kong Ingress Controller (umbrella chart `kong/ingress` `0.24.0`, DB-less, GatewayClass `kong`) + a `Gateway` (`kong`) + `HTTPRoute`s for the **same** demo apps. **Unmanaged-Gateway model**: rather than a per-Gateway data plane, the GatewayClass is bound (via `konghq.com/gatewayclass-unmanaged: "true"`) to the chart's single Kong proxy `LoadBalancer` Service — so Kong's Gateway API listeners AND its classic Ingress (`ingressClassName: kong`) share one LB IP. KIC vendors Gateway API v1.3.0 (≥ the v1.2.0 floor) | `curl -H 'Host: helloweb.localdev.me' http://<kong-proxy-LB-IP>/` |
 
 All `gateway-*` targets are idempotent on the shared Gateway API CRDs
 (install-if-absent), require **cloud-provider-kind** to be running (for LB IPs),
