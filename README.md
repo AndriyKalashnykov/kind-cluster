@@ -167,6 +167,59 @@ done
 
 📖 **Full comparison (Traefik vs Istio vs Cilium/Calico), coexistence mechanics, and "is it advisable to run all of them?" — see [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md).**
 
+## Ingress vs CNI vs Gateway API
+
+These three are often confused but live at **different layers** and **coexist** in every cluster. Analogy — the cluster is an office building:
+
+- **CNI** is the building's wiring and corridors: it gives every desk (pod) a phone number (IP) and decides which desks may call which (NetworkPolicy). Without it nobody can talk. **One** wiring system per building, installed when the building opens.
+- **Ingress / Gateway API** is the **reception desk**: it takes visitors arriving at the public address (external HTTP/gRPC/TCP) and routes them to the right department (Service). It never wires the desks — it only handles arrivals from outside (and, for Gateway API's mesh mode, desk-to-desk calls).
+- **Ingress** is the *old, simple* reception (HTTP host/path only; the API is [frozen](https://kubernetes.io/docs/concepts/services-networking/ingress/)). **Gateway API** is the *modern* reception — more protocols, role separation, and mesh — and is the [recommended successor](https://gateway-api.sigs.k8s.io/).
+
+```mermaid
+flowchart LR
+  client([External client]) --> edge["Ingress / Gateway controller<br/>Traefik · Istio · Envoy Gateway · ..."]
+  edge --> svc[Service]
+  subgraph cni["CNI — pod networking + NetworkPolicy (one per cluster)"]
+    svc --> pods[Pods]
+  end
+```
+
+| | **CNI** | **Ingress** | **Gateway API** |
+|---|---|---|---|
+| **Layer / scope** | L3/L4 pod networking (whole-cluster plumbing) | L7 HTTP(S) north-south edge | L4–L7 north-south edge **+** east-west mesh (GAMMA) |
+| **Answers** | "what IP does a pod get, and who may it talk to?" | "which Service serves `foo.example.com/bar`?" | same as Ingress, plus gRPC/TCP/TLS/UDP + per-route roles |
+| **API group** | `networking.k8s.io` NetworkPolicy (+ the CNI's own CRDs) | `networking.k8s.io/v1` `Ingress` (frozen) | `gateway.networking.k8s.io` (`GatewayClass`/`Gateway`/`HTTPRoute`/…) |
+| **Implemented by** | a CNI plugin (Cilium, Calico, kindnet, …) | an ingress controller (Traefik, …) | a Gateway controller (Traefik, Istio, NGF, Envoy Gateway, kgateway, Kong, …) |
+| **How many per cluster** | exactly **one** primary (chosen at cluster creation) | any number (by `ingressClassName`) | any number (by GatewayClass `controllerName`) |
+| **In this repo** | kindnet (KinD's default) | Traefik | Traefik · Istio · NGF · Contour · Envoy Gateway · kgateway · Kong |
+
+**The overlap:** a few CNIs (**Cilium**, **Calico**) *also* implement Gateway API — but that's an optional add-on to their networking role and requires that CNI to *be* the cluster's CNI. That's exactly why Cilium's Gateway API can't be an add-on here (it would replace kindnet) — see the deferred-Cilium note in the doc.
+
+### CNI landscape (feature matrix)
+
+Active general-purpose CNIs, fact-checked against vendor docs + the CNCF project pages (June 2026). `✅` = supported, `⚠️` = partial/conditional (see notes), `❌` = no. This is a comparison axis, **not** a recommendation — kindnet (the KinD default) is intentionally minimal and right for this lab.
+
+| Feature | Cilium | Calico¹ | Antrea | Kube-OVN | Kube-router | Flannel | kindnet |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Pod networking / IPAM | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| NetworkPolicy (L3/L4) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| L7 / FQDN-egress policy | ✅ | ⚠️ ent | ⚠️ L7² | ⚠️ FQDN | ❌ | ❌ | ❌ |
+| eBPF dataplane | ✅ | ✅ opt | ❌ OVS | ❌ OVS/OVN | ❌ | ❌ | ❌ |
+| kube-proxy replacement | ✅ | ✅ eBPF | ✅ | ✅ | ✅ IPVS | ❌ | ❌ |
+| Encryption (WireGuard / IPsec) | ✅ both | ⚠️ WG | ✅ both | ⚠️ IPsec | ❌ | ⚠️ WG³ | ❌ |
+| BGP / native routing | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ host-gw | ❌ |
+| Overlay (VXLAN / Geneve) | ✅ | ✅ | ✅ | ✅ Geneve | ⚠️ IP-in-IP | ✅ VXLAN | ❌ |
+| **Gateway API** (implements it) | ✅ | ✅⁴ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Built-in LoadBalancer / LB-IPAM | ✅ | ⚠️ BGP | ✅ | ✅ | ⚠️ BGP | ❌ | ❌ |
+| Observability (flow logs) | ✅ Hubble | ✅⁵ | ✅ Theia | ✅ | ⚠️ metrics | ❌ | ❌ |
+| Multi-cluster | ✅ | ❌ ent | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Windows nodes | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| CNCF status | **Graduated** | not CNCF¹ | Sandbox | Sandbox | not CNCF | not CNCF | KinD default |
+
+¹ **Calico** here = Calico **Open Source** (v3.32). It's a Tigera-governed project (a CNCF *member*, **not** a CNCF-hosted/graduated project). Several axes (L7/FQDN policy, multi-cluster federation) are **Calico Enterprise/Cloud** only — marked `ent`.
+² Antrea L7 NetworkPolicy is Suricata-based (OSS). ³ Flannel encryption is an optional WireGuard backend. ⁴ Calico via the **Calico Ingress Gateway** (a hardened Envoy Gateway distribution, OSS since v3.30). ⁵ Calico flow logs are OSS since v3.30 (Goldmane/Whisker).
+**Also:** **Weave Net** is archived/EOL (Weaveworks shut down, 2024) — avoid for new clusters. **Canal** = Flannel networking + Calico policy (no standalone project). **Multus** is a *meta*-CNI for attaching multiple networks, not a primary dataplane. Only **Cilium** and **Calico** appear on the [Gateway API implementations registry](https://gateway-api.sigs.k8s.io/implementations/) among CNIs; **Antrea is a CNI, not a Gateway API controller** (its `antrea-gw0` is an OVS dataplane interface, unrelated to `gateway.networking.k8s.io`).
+
 ## Headlamp install
 
 Pinned to Helm chart [`headlamp`](https://github.com/kubernetes-sigs/headlamp) **0.42.0**. Headlamp is the SIG-UI-endorsed successor to the [archived](https://github.com/kubernetes/dashboard) kubernetes/dashboard project — a single Pod fronted by a ClusterIP Service on port 80 (HTTP), with token-based login.
