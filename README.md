@@ -7,7 +7,7 @@
 
 Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — Traefik ingress (with opt-in [Gateway API](docs/gateway-api-ingress.md)), a LoadBalancer (cloud-provider-kind, or MetalLB), Headlamp UI, RWX NFS storage, a local image registry, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
 
-<img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="700">
+<img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="450">
 
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
@@ -445,7 +445,7 @@ First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docke
 
 The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
 
-1. Installs Docker CE, KinD v0.32.0, kubectl v1.36.1, helm v4.2.0
+1. Installs Docker CE, KinD v0.32.0, kubectl v1.36.2, helm v4.2.1
 2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
 3. Clones this repo to `/home/ubuntu/kind-cluster`
 4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.
@@ -722,6 +722,8 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Add-ons | `make headlamp-forward` | Port-forward Headlamp to `http://localhost:8081` and open browser |
 | Add-ons | `make headlamp-token` | Print the admin-user token |
 | Add-ons | `make ingress-traefik` | Install Traefik ingress controller (replaces retired ingress-nginx) |
+| Add-ons | `make ingress-haproxy` | Opt-in: HAProxy (haproxytech) as an alternative classic Ingress controller (`ingressClassName: haproxy`, own LB IP, same apps) |
+| Add-ons | `make ingress-nginx` | Opt-in: NGINX Inc. (F5 OSS) as an alternative classic Ingress controller (`ingressClassName: nginx`, own LB IP, same apps) |
 | Add-ons | `make lb-cpk` | Install cloud-provider-kind (default LoadBalancer) |
 | Add-ons | `make lb-metallb` | Install MetalLB (alternative; also: `LB=metallb make install-all`) |
 | Add-ons | `make metrics-server` | metrics-server (for `kubectl top` / HPA) |
