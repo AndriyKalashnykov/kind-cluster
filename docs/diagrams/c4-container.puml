@@ -34,6 +34,13 @@ System_Boundary(host, "Host or Multipass VM") {
     ContainerDb(nfs, "NFS server + csi-driver-nfs", "in-cluster pod or host NFS", "ReadWriteMany PVCs")
     Container(prom, "kube-prometheus-stack", "Helm chart", "Prometheus + Grafana + Alertmanager")
     Container(apps, "Demo workloads", "httpd / hello-app / golang-web / http-echo", "Routed via ingress + LoadBalancer Services")
+
+    System_Boundary(gwapi, "Gateway API controllers (opt-in)") {
+      Container(gwcrds, "Gateway API CRDs", "experimental channel v1.5.1", "Shared GatewayClass/Gateway/HTTPRoute; one install for all controllers below")
+      Container(gwistio, "Istio", "Helm base + istiod 1.30.1", "gatewayClassName: istio; auto-provisions Envoy gateway on its own LoadBalancer IP")
+      Container(gwngf, "NGINX Gateway Fabric", "OCI Helm chart 2.6.3", "gatewayClassName: nginx; auto-provisions nginx data plane on its own LoadBalancer IP")
+      Container(gwcontour, "Project Contour", "Gateway provisioner v1.33.5", "gatewayClassName: contour; provisions per-Gateway Envoy on its own LoadBalancer IP")
+    }
   }
 }
 
@@ -42,6 +49,17 @@ Rel(dev, ingress, "HTTP via Host: demo.localdev.me", "127.0.0.1")
 Rel(dev, lb, "HTTP to LoadBalancer IPs (host-routable via docker bridge)")
 Rel(ingress, apps, "Routes /")
 Rel(lb, apps, "Allocates LoadBalancer IP")
+
+' Opt-in Gateway API layer: Traefik also serves Gateway API from the same pod;
+' Istio / NGF / Contour are additional controllers, each on its own LB IP,
+' all fronting the SAME demo apps. Not part of `make install-all`.
+Rel(ingress, gwcrds, "Also serves Gateway API (opt-in)", "*.gw.localdev.me")
+Rel(gwistio, gwcrds, "Watches GatewayClass/HTTPRoute")
+Rel(gwngf, gwcrds, "Watches GatewayClass/HTTPRoute")
+Rel(gwcontour, gwcrds, "Watches GatewayClass/HTTPRoute")
+Rel(gwistio, apps, "Routes by Host header (own LB IP)")
+Rel(gwngf, apps, "Routes by Host header (own LB IP)")
+Rel(gwcontour, apps, "Routes by Host header (own LB IP)")
 Rel(apps, nfs, "Mounts RWX PVCs (optional)")
 Rel(prom, apps, "Scrapes /metrics", "HTTP")
 Rel(dev, prom, "Grafana UI", "kubectl port-forward")

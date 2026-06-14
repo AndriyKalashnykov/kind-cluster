@@ -114,6 +114,14 @@ No Go modules; no package manager lockfiles.
 - **`runs-on: ubuntu-24.04`** is the explicit pin (not `ubuntu-latest`) — avoids surprise migrations when GitHub flips the alias to a new LTS.
 - **Suppression files**: `.gitleaks.toml`, `.trivyignore.yaml`, `.hadolint.yaml` — each annotates the specific rule waivers inline.
 
+## Upgrade Backlog
+
+Deferred items from `/upgrade-analysis` (2026-06-14). All version pins were current at that time (Renovate automerge healthy); these are genuinely upstream-blocked or forward-looking with a named trigger — not actionable yet.
+
+- [ ] **Re-verify all 4 Gateway API controllers together when GW API v1.6 ships.** NGF, Istio, Contour, and Traefik share the **experimental-channel** Gateway API v1.5.1 CRDs. Bumping the shared CRDs forces a joint re-verification — the oldest vendored API client gates the whole set (this is how HAProxy was dropped on v1.5.1). Trigger: `kubernetes-sigs/gateway-api` v1.6.0 release. Safety net: `gateway-test.yml` weekly cron.
+- [ ] **trivy & MetalLB are "tag-without-release" upstream-blocked, NOT stale.** `aqua:aquasecurity/trivy` is held at 0.71.0 because `v0.71.1` is tag-only (failed release workflow — PR #103 closed, commit `26eab0e`); `metallb/metallb` is held at v0.16.0 because `v0.16.1` is a tag with no release object (latest release is the `metallb-chart-*` Helm tag, which the `github-releases` datasource skips). Do NOT chase the tag or add a config workaround — wait for a real upstream release. Optional: switch the MetalLB renovate comment to `datasource=github-tags ... extractVersion=^v(?<version>.*)$` if tag-only patches should be tracked.
+- [ ] **cloud-provider-kind is pre-1.0** (0.10.0) and load-bearing for `make install-all` — watch its changelog for breaking changes on each minor bump.
+
 ## Skills
 
 Use the following skills when working on related files:

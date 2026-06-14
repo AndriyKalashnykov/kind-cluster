@@ -28,9 +28,22 @@ jobs:
       - name: Delete old workflow runs
         run: |
           CUTOFF=$(date -u -d "$RETAIN_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
+          # Retain the newest KEEP_MINIMUM runs PER WORKFLOW (group_by
+          # .workflowName), THEN delete any remaining run older than CUTOFF.
+          # A single GLOBAL minimum deregisters low-frequency workflows: on a
+          # quiet repo the newest KEEP_MINIMUM runs are all weekly-cleanup runs,
+          # so a sibling cron workflow's runs are all older-than-cutoff and get
+          # purged — `gh run delete` on a workflow's LAST run flips it to
+          # state: deleted (vanishes from the Actions tab + required-check
+          # resolution). See /ci-workflow "Retention MUST be per-workflow".
           gh run list --repo "${{ github.repository }}" \
-            --json databaseId,createdAt --limit 200 \
-            --jq "sort_by(.createdAt) | reverse | .[${KEEP_MINIMUM}:] | .[] | select(.createdAt < \"${CUTOFF}\") | .databaseId" \
+            --json databaseId,createdAt,workflowName --limit 300 \
+          | jq -r --arg cutoff "$CUTOFF" --argjson keep "$KEEP_MINIMUM" '
+              group_by(.workflowName)
+              | map(sort_by(.createdAt) | reverse | .[$keep:])
+              | add // []
+              | .[] | select(.createdAt < $cutoff) | .databaseId
+            ' \
           | xargs -r -I{} gh run delete {} --repo "${{ github.repository }}"
 
   cleanup-caches:

@@ -51,7 +51,7 @@ jobs:
 
   static-check:
     needs: [changes]
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -69,7 +69,7 @@ jobs:
 
   docker:
     needs: [changes, static-check]
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -82,7 +82,12 @@ jobs:
 
   e2e:
     needs: [changes, static-check]
-    if: needs.changes.outputs.code == 'true'
+    # Explicit `if:` strips the implicit success() check — without the
+    # !failure() && !cancelled() prefix, a failed `changes`/`static-check`
+    # leaks past this gate and e2e runs against broken state. Mirrors the
+    # static-check / docker gates above. (Single-line form MUST be ${{ }}-
+    # wrapped: a bare leading `!` is invalid YAML.)
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
