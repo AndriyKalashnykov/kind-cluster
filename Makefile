@@ -300,6 +300,14 @@ gateway-nginx: deps
 gateway-contour: deps
 	@./scripts/kind-add-gateway-contour.sh
 
+#gateway-envoy: @ Opt-in: install Envoy Gateway (CNCF) as another Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
+gateway-envoy: deps
+	@./scripts/kind-add-gateway-envoy.sh
+
+#gateway-kgateway: @ Opt-in: install kgateway (CNCF, formerly Gloo OSS) as another Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
+gateway-kgateway: deps
+	@./scripts/kind-add-gateway-kgateway.sh
+
 #lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
 lb-metallb: deps
 	@./scripts/kind-add-metallb.sh
@@ -405,7 +413,7 @@ clean:
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
-	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour \
+	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour gateway-envoy gateway-kgateway \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-ingress-localhost deploy-app-helloweb \

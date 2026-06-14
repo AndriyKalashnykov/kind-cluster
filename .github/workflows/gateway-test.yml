@@ -12,6 +12,8 @@ on:
       - 'scripts/kind-add-gateway-istio.sh'
       - 'scripts/kind-add-gateway-nginx.sh'
       - 'scripts/kind-add-gateway-contour.sh'
+      - 'scripts/kind-add-gateway-envoy.sh'
+      - 'scripts/kind-add-gateway-kgateway.sh'
       - 'scripts/kind-add-traefik.sh'
       - 'k8s/gateway/**'
       # Shared smoke chain: the TEST_GATEWAY_API assertions live in e2e-smoke.sh,
@@ -83,10 +85,16 @@ jobs:
       - name: Install Contour Gateway API controller
         run: make gateway-contour
 
+      - name: Install Envoy Gateway controller
+        run: make gateway-envoy
+
+      - name: Install kgateway controller
+        run: make gateway-kgateway
+
       # Asserts all Gateway API controllers (Traefik provider + Istio + NGINX
-      # Gateway Fabric + Contour) front the same demo backends, on top of the
-      # standard smoke checks. Quoted so YAML keeps the literal string "yes"
-      # the smoke script compares to.
+      # Gateway Fabric + Contour + Envoy Gateway + kgateway) front the same demo
+      # backends, on top of the standard smoke checks. Quoted so YAML keeps the
+      # literal string "yes" the smoke script compares to.
       - name: Smoke test
         env:
           TEST_GATEWAY_API: "yes"

@@ -1,0 +1,73 @@
+# kgateway demo — a Gateway bound to kgateway's built-in `kgateway` GatewayClass
+# (controllerName kgateway.dev/kgateway). Applying this Gateway auto-provisions an
+# Envoy Deployment+Service named after the Gateway ("kgw") in the default
+# namespace; that Service is type LoadBalancer (the chart default), so
+# cloud-provider-kind hands it its OWN external IP — a distinct front door from
+# Traefik / Istio / NGF / Contour / Envoy Gateway.
+#
+# The HTTPRoutes front the SAME backend Services as the classic Ingress and the
+# other Gateways, on the original *.localdev.me hostnames (no collision — kgateway
+# answers on a different IP). The single listener has no hostname (matches any),
+# so the per-route hostnames do the virtual-host routing.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kgw
+  namespace: default
+spec:
+  gatewayClassName: kgateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kgateway-helloweb
+  namespace: default
+spec:
+  parentRefs:
+    - name: kgw
+  hostnames: ["helloweb.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: helloweb
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kgateway-golang
+  namespace: default
+spec:
+  parentRefs:
+    - name: kgw
+  hostnames: ["golang.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: golang-hello-world-web-service
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kgateway-foo
+  namespace: default
+spec:
+  parentRefs:
+    - name: kgw
+  hostnames: ["foo.localdev.me"]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: foo-service
+          port: 5678
