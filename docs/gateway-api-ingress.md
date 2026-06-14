@@ -273,6 +273,8 @@ own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 | Target | What it does | Reach it at |
 |--------|--------------|-------------|
 | `make ingress-traefik` | **Default.** Traefik as a classic Ingress controller (`ingressClassName: traefik`), hostPort 80/443 | `http://<app>.localdev.me/` via `localhost` |
+| `make ingress-haproxy` | Opt-in. HAProxy (haproxytech `kubernetes-ingress`, chart `1.52.0`) as an alternative classic Ingress controller (`ingressClassName: haproxy`) on its own LB IP, fronting the same demo apps. Immune to the GW API floor (a classic Ingress controller never watches `GatewayClass`). | `curl -H 'Host: helloweb.localdev.me' http://<haproxy-LB-IP>/` |
+| `make ingress-nginx` | Opt-in. NGINX Inc. (`nginxinc/kubernetes-ingress`, F5 OSS, chart `2.6.0` — distinct from the retired community `ingress-nginx`) as an alternative classic Ingress controller (`ingressClassName: nginx`) on its own LB IP. `IngressClass nginx` ≠ NGF's `GatewayClass nginx` (different API objects). | `curl -H 'Host: helloweb.localdev.me' http://<nginx-LB-IP>/` |
 | `make gateway-traefik` | Opt-in. Installs Gateway API CRDs (pinned), enables Traefik's Gateway API provider, applies a `Gateway` + `HTTPRoute`s for the demo apps on `*.gw.localdev.me` | `curl -H 'Host: helloweb.gw.localdev.me' http://localhost/` (same Traefik hostPort, now also via Gateway API) |
 | `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts | `curl -H 'Host: helloweb.localdev.me' http://<istio-gateway-LB-IP>/` |
 | `make gateway-nginx` | Opt-in. Installs Gateway API CRDs + NGINX Gateway Fabric (OSS, chart `2.6.3`, GatewayClass `nginx`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts. Provisions a per-Gateway `ngf-nginx` data-plane Service with its own LB IP | `curl -H 'Host: helloweb.localdev.me' http://<ngf-gateway-LB-IP>/` |
@@ -315,10 +317,12 @@ Smoke coverage for the Gateway API paths is gated behind `TEST_GATEWAY_API=yes`
 > informer fails to unmarshal and the controller crash-loops (never becomes
 > ready). This is independent of channel (the field is structured in standard
 > too). Compatibility only returns in the `v0.17.0-alpha` prerelease line; pinning
-> a demo lab to an alpha was not worth it, so HAProxy is not wired here. (Note:
-> this is the *Gateway API mode* of `jcmoraisjr/haproxy-ingress`; the official
-> `haproxytech/kubernetes-ingress` as a **classic Ingress** controller is immune —
-> it never watches `GatewayClass` — and is a separate candidate.)
+> a demo lab to an alpha was not worth it, so HAProxy is not wired as a Gateway
+> API controller here. (Note: this is the *Gateway API mode* of
+> `jcmoraisjr/haproxy-ingress`. The official `haproxytech/kubernetes-ingress` as a
+> **classic Ingress** controller is immune — it never watches `GatewayClass`, just
+> logs one warning about the unrecognised GW API CRD version and serves Ingress
+> normally — and **is** wired here, via `make ingress-haproxy`.)
 
 ---
 

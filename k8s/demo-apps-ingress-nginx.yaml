@@ -1,0 +1,47 @@
+# Opt-in: the SAME demo apps fronted by the NGINX Inc. Ingress controller
+# (nginxinc/kubernetes-ingress — the F5/NGINX OSS edition, distinct from the
+# retired community ingress-nginx) via ingressClassName: nginx. It coexists with
+# the default Traefik Ingress (each controller reconciles only its own class)
+# and answers on its OWN cloud-provider-kind LoadBalancer IP, on the same
+# *.localdev.me hostnames.
+#
+# Note: IngressClass `nginx` here (networking.k8s.io) is a DIFFERENT API object
+# from GatewayClass `nginx` used by NGINX Gateway Fabric (gateway.networking.k8s.io,
+# `make gateway-nginx`) — they do not collide.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-apps-nginx
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: helloweb.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: helloweb
+                port:
+                  number: 80
+    - host: golang.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: golang-hello-world-web-service
+                port:
+                  number: 8080
+    - host: foo.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: foo-service
+                port:
+                  number: 5678
