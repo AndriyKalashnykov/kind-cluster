@@ -49,6 +49,11 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
       Container(gwkgateway, "kgateway", "CNCF v2.3.3 (ex-Gloo) in kgateway-system; Gateway gatewayClassName=kgateway auto-provisions Envoy Deployment+Service 'kgw' (type=LoadBalancer) in default")
       Container(gwkong, "Kong (KIC)", "umbrella chart 0.24.0 (DB-less) in kong; unmanaged GatewayClass=kong binds to the single kong proxy Service (type=LoadBalancer); also serves classic Ingress")
     }
+
+    Deployment_Node(ingalt, "Classic Ingress alternatives (opt-in; not in install-all)") {
+      Container(inghaproxy, "HAProxy", "haproxytech chart 1.52.0 in haproxy-controller; ingressClassName=haproxy; Service type=LoadBalancer")
+      Container(ingnginx, "NGINX Inc.", "F5 OSS chart 2.6.0 in nginx-ingress; ingressClassName=nginx; Service type=LoadBalancer")
+    }
   }
 }
 
@@ -71,6 +76,10 @@ Rel(cpk, gwcontour, "Allocates LB IP per provisioned gateway Service")
 Rel(cpk, gwenvoy, "Allocates LB IP per provisioned gateway Service")
 Rel(cpk, gwkgateway, "Allocates LB IP per provisioned gateway Service")
 Rel(cpk, gwkong, "Allocates LB IP for the kong proxy Service")
+Rel(cpk, inghaproxy, "Allocates LB IP for the HAProxy controller Service")
+Rel(cpk, ingnginx, "Allocates LB IP for the NGINX Inc. controller Service")
+Rel(inghaproxy, apps, "Routes by Host header (own LB IP)")
+Rel(ingnginx, apps, "Routes by Host header (own LB IP)")
 Rel(gwistio, apps, "Routes by Host header (own LB IP)")
 Rel(gwngf, apps, "Routes by Host header (own LB IP)")
 Rel(gwcontour, apps, "Routes by Host header (own LB IP)")

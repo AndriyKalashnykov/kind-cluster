@@ -25,7 +25,7 @@ docs/diagrams/        # PlantUML C4 sources (.puml) + rendered PNGs (out/)
 docs/                 # gateway-api-ingress.md (Gateway API / ingress comparison)
 vm/                   # Multipass cloud-init playbook
 .github/workflows/    # CI: ci.yml, e2e-metallb.yml, monitoring-test.yml,
-                      #   registry-test.yml, gateway-test.yml, cleanup-runs.yml
+                      #   registry-test.yml, gateway-test.yml, ingress-test.yml, cleanup-runs.yml
 ```
 
 ## Common Commands
@@ -80,6 +80,11 @@ make gateway-envoy                     # Install Envoy Gateway (CNCF) as another
 make gateway-kgateway                  # Install kgateway (CNCF, formerly Gloo OSS) as another Gateway API controller (own LB IP, same apps)
 make gateway-kong                      # Install Kong (KIC, unmanaged Gateway) as another Gateway API controller (own LB IP, same apps; also serves classic Ingress)
 TEST_GATEWAY_API=yes make e2e-smoke    # Smoke-assert all Gateway API controllers (after the targets above)
+
+# Alternative classic Ingress controllers (opt-in, alongside the default Traefik Ingress)
+make ingress-haproxy                   # Install HAProxy (haproxytech) as an alternative classic Ingress controller (ingressClassName: haproxy, own LB IP, same apps)
+make ingress-nginx                     # Install NGINX Inc. (F5 OSS) as an alternative classic Ingress controller (ingressClassName: nginx, own LB IP, same apps)
+TEST_INGRESS_ALT=yes make e2e-smoke    # Smoke-assert the alternative classic Ingress controllers (after the targets above)
 ```
 
 `make ci-run` only iterates `static-check` + `docker` jobs under `act`. The `e2e` and `e2e-metallb` jobs are skipped because KinD's Docker-in-Docker requirement is unstable under `act push`. Push to a feature branch and watch the real workflow when changing anything in the e2e path (deploy scripts, ingress wiring, K8s manifests).
@@ -91,6 +96,7 @@ TEST_GATEWAY_API=yes make e2e-smoke    # Smoke-assert all Gateway API controller
 - **monitoring-test.yml** — weekly cron (Sunday 05:00 UTC) + `workflow_dispatch` + push on `scripts/kind-add-kube-prometheus-stack.sh` plus the shared smoke chain (`scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file — the `TEST_MONITORING` assertions live in `e2e-smoke.sh`, which `ci.yml` never runs with `TEST_MONITORING=yes`). Brings up the full stack via `make install-all` (cloud-provider-kind), installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. Off the default install-all path — kept on its own cron to keep PR feedback fast.
 - **registry-test.yml** — weekly cron (Sunday 06:00 UTC) + `workflow_dispatch` + push on registry-related files (`scripts/kind-with-registry.sh`, `scripts/test-registry.sh`, `scripts/lib.sh`, `k8s/helloweb-deployment-local.yaml`, the workflow file). Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` (pull → retag → push → deploy → curl). Distinct from the install-all flow; separate workflow rather than another job.
 - **gateway-test.yml** — weekly cron (Sunday 07:00 UTC) + `workflow_dispatch` + push on the gateway scripts/manifests + the shared smoke chain (`scripts/kind-add-gateway-*.sh`, `k8s/gateway/**`, `scripts/kind-add-traefik.sh`, `scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file). Brings up `make install-all`, then `make gateway-traefik` (Traefik's Gateway API provider) + `make gateway-istio` (Istio) + `make gateway-nginx` (NGINX Gateway Fabric) + `make gateway-contour` (Project Contour) + `make gateway-envoy` (Envoy Gateway) + `make gateway-kgateway` (kgateway) + `make gateway-kong` (Kong/KIC), then `TEST_GATEWAY_API=yes make e2e-smoke` to assert all controllers front the same demo apps. The shared Gateway API CRDs are the **experimental** channel (Contour requires `TLSRoute@v1alpha2`); HAProxy Ingress was evaluated but dropped (v0.16.1 vendored a pre-Gateway-API-v1.2.0 client whose `GatewayClass.status.supportedFeatures` was `[]string` and crash-loops on the v1.5.1 `[]object` form — Envoy Gateway/kgateway vendor v1.5.1 exactly, Kong/KIC v1.3.0, all ≥ the v1.2.0 floor — see `docs/gateway-api-ingress.md`). Off the default install-all path — Gateway API is opt-in.
+- **ingress-test.yml** — weekly cron (Sunday 08:00 UTC) + `workflow_dispatch` + push on the alternative-ingress scripts/manifests + the shared smoke chain (`scripts/kind-add-ingress-haproxy.sh`, `scripts/kind-add-ingress-nginx.sh`, `k8s/demo-apps-ingress-{haproxy,nginx}.yaml`, `scripts/e2e-smoke.sh`, `scripts/lib.sh`, the workflow file). Brings up `make install-all`, then `make ingress-haproxy` (HAProxy/haproxytech) + `make ingress-nginx` (NGINX Inc. F5 OSS) as alternative **classic** Ingress controllers, then `TEST_INGRESS_ALT=yes make e2e-smoke` to assert each fronts the same demo apps on its own LB IP via a distinct `ingressClassName`. Classic Ingress controllers never watch `GatewayClass`, so they're immune to the GW API v1.5.1 `supportedFeatures` crash. Off the default install-all path — opt-in.
 - **cleanup-runs.yml** — weekly cron (Sunday midnight). Two jobs: `cleanup-runs` (prunes old runs, keeps latest 5) and `cleanup-caches` (deletes caches from closed PR branches).
 
 ### Paths that CI does NOT exercise

@@ -280,6 +280,14 @@ headlamp-token: deps
 ingress-traefik: deps
 	@./scripts/kind-add-traefik.sh
 
+#ingress-haproxy: @ Opt-in: install HAProxy (haproxytech) as an alternative classic Ingress controller (own LB IP, same apps via ingressClassName: haproxy)
+ingress-haproxy: deps
+	@./scripts/kind-add-ingress-haproxy.sh
+
+#ingress-nginx: @ Opt-in: install NGINX Inc. (F5 OSS) as an alternative classic Ingress controller (own LB IP, same apps via ingressClassName: nginx)
+ingress-nginx: deps
+	@./scripts/kind-add-ingress-nginx.sh
+
 #gateway-api-crds: @ Install Kubernetes Gateway API CRDs (experimental channel, pinned)
 gateway-api-crds: deps
 	@./scripts/kind-add-gateway-api-crds.sh
@@ -418,6 +426,7 @@ clean:
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
 	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour gateway-envoy gateway-kgateway gateway-kong \
+	ingress-haproxy ingress-nginx \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-ingress-localhost deploy-app-helloweb \

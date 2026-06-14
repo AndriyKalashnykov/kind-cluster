@@ -44,6 +44,11 @@ System_Boundary(host, "Host or Multipass VM") {
       Container(gwkgateway, "kgateway", "CNCF (ex-Gloo), Helm v2.3.3", "gatewayClassName: kgateway; auto-provisions Envoy data plane on its own LoadBalancer IP")
       Container(gwkong, "Kong (KIC)", "umbrella chart 0.24.0, DB-less", "gatewayClassName: kong (unmanaged); binds to the single kong proxy LoadBalancer Service; also serves classic Ingress")
     }
+
+    System_Boundary(ingalt, "Classic Ingress alternatives (opt-in)") {
+      Container(inghaproxy, "HAProxy", "haproxytech chart 1.52.0", "ingressClassName: haproxy; own LoadBalancer IP, same demo apps")
+      Container(ingnginx, "NGINX Inc.", "F5 OSS chart 2.6.0", "ingressClassName: nginx (distinct from NGF's GatewayClass); own LoadBalancer IP, same demo apps")
+    }
   }
 }
 
@@ -52,6 +57,11 @@ Rel(dev, ingress, "HTTP via Host: demo.localdev.me", "127.0.0.1")
 Rel(dev, lb, "HTTP to LoadBalancer IPs (host-routable via docker bridge)")
 Rel(ingress, apps, "Routes /")
 Rel(lb, apps, "Allocates LoadBalancer IP")
+
+' Opt-in classic Ingress alternatives: distinct ingressClassName, each on its
+' own LB IP, all fronting the SAME demo apps. Not part of `make install-all`.
+Rel(inghaproxy, apps, "Routes by Host header (ingressClassName: haproxy, own LB IP)")
+Rel(ingnginx, apps, "Routes by Host header (ingressClassName: nginx, own LB IP)")
 
 ' Opt-in Gateway API layer: Traefik also serves Gateway API from the same pod;
 ' Istio / NGF / Contour / Envoy Gateway / kgateway are additional controllers,

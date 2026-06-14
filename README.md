@@ -165,33 +165,83 @@ done
 
 `TEST_GATEWAY_API=yes make e2e-smoke` runs exactly these assertions across all seven controllers.
 
+### Alternative classic Ingress controllers (opt-in)
+
+The default classic-Ingress path is **Traefik** (`ingressClassName: traefik`). Two more classic Ingress controllers can be enabled side-by-side as opt-in alternatives — each registers a **distinct `ingressClassName`**, reconciles only its own `Ingress` objects, and gets its **own** cloud-provider-kind LB IP, fronting the **same** demo apps:
+
+```bash
+make ingress-haproxy   # HAProxy (haproxytech) — ingressClassName: haproxy, its own LB IP
+make ingress-nginx     # NGINX Inc. (F5 OSS, ≠ the retired community ingress-nginx) — ingressClassName: nginx
+```
+
+These are **immune** to the Gateway API v1.5.1 `supportedFeatures` crash that dropped HAProxy from *Gateway API* mode — a classic Ingress controller never watches `GatewayClass`. (`IngressClass nginx` here ≠ `GatewayClass nginx` from `make gateway-nginx` — different API objects, no collision.)
+
+**Reaching each — same model as the gateways: the LB IP is the differentiator, the workloads are shared.** Each controller has its own IP; the demo apps (`helloweb`/`golang`/`foo`) keep the same names and `*.localdev.me` hostnames, so target each controller by its IP with a `Host:` header:
+
+```bash
+# Traefik holds hostPort 80 (reach at http://<app>.localdev.me/ via localhost).
+# HAProxy and NGINX each have their OWN LB IP — list them, then hit by IP:
+for ns in haproxy-controller nginx-ingress; do
+  SVC=$(kubectl -n "$ns" get svc -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{end}')
+  IP=$(kubectl -n "$ns" get svc "$SVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo "== $ns @ $IP =="
+  curl -H "Host: helloweb.localdev.me" "http://$IP/"        # same backend, different front door
+  curl -sI -H "Host: helloweb.localdev.me" "http://$IP/" | grep -i '^server:'   # which proxy served it
+done
+```
+
+The `curl -sI … | grep server` line is how you confirm *which* proxy answered when the body is identical — the workload name never changes; the proxy's own `Server:`/`Via:` headers and the IP tell you the path. `TEST_INGRESS_ALT=yes make e2e-smoke` runs these assertions for both controllers.
+
+> **Why aren't the demo apps renamed per controller?** Because the lab demonstrates "**one set of apps, many front doors**" — every Ingress/Gateway controller routing to the *identical* backend is the point. You differentiate the **routing path** (controller) by its **IP / class**, not by the **app** (name). And a **CNI** is not a front door at all — you reach a workload the same way whatever CNI is installed; the CNI only governs pod-to-pod networking + NetworkPolicy underneath (see [Ingress vs CNI vs Gateway API](#ingress-vs-cni-vs-gateway-api)).
+
 📖 **Full comparison (Traefik vs Istio vs Cilium/Calico), coexistence mechanics, and "is it advisable to run all of them?" — see [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md).**
 
 ## Ingress vs CNI vs Gateway API
 
-These three are often confused but live at **different layers** and **coexist** in every cluster. Analogy — the cluster is an office building:
+These are often confused but live at **different layers** and **coexist** in every cluster — and there's a fourth, **DNS**, that ties them together. Analogy — the cluster is an office building:
 
 - **CNI** is the building's wiring and corridors: it gives every desk (pod) a phone number (IP) and decides which desks may call which (NetworkPolicy). Without it nobody can talk. **One** wiring system per building, installed when the building opens.
+- **DNS (CoreDNS)** is the building's **phone directory**: it turns a *name* (`helloweb`) into a *number* (the Service's ClusterIP) so desks can call each other by name instead of memorising numbers. It doesn't move packets (the CNI does) or admit outside visitors (reception does) — it only answers "what's the number for X?". One directory per cluster.
 - **Ingress / Gateway API** is the **reception desk**: it takes visitors arriving at the public address (external HTTP/gRPC/TCP) and routes them to the right department (Service). It never wires the desks — it only handles arrivals from outside (and, for Gateway API's mesh mode, desk-to-desk calls).
 - **Ingress** is the *old, simple* reception (HTTP host/path only; the API is [frozen](https://kubernetes.io/docs/concepts/services-networking/ingress/)). **Gateway API** is the *modern* reception — more protocols, role separation, and mesh — and is the [recommended successor](https://gateway-api.sigs.k8s.io/).
 
+**How one request reaches a workload — each layer hands off to the next:**
+
 ```mermaid
-flowchart LR
-  client([External client]) --> edge["Ingress / Gateway controller<br/>Traefik · Istio · Envoy Gateway · ..."]
-  edge --> svc[Service]
-  subgraph cni["CNI — pod networking + NetworkPolicy (one per cluster)"]
-    svc --> pods[Pods]
-  end
+sequenceDiagram
+  autonumber
+  actor U as You (laptop)
+  participant DNS as DNS
+  participant GW as Ingress / Gateway
+  participant SVC as Service
+  participant CNI as CNI
+  participant POD as Pod (helloweb)
+  U->>DNS: resolve helloweb.localdev.me
+  DNS-->>U: controller's LoadBalancer IP
+  U->>GW: HTTP GET, Host helloweb.localdev.me
+  GW->>SVC: match Host rule, pick the Service
+  SVC->>CNI: forward to one backing pod
+  CNI->>POD: deliver — if NetworkPolicy allows
+  POD-->>U: 200 "Hello, world!"
 ```
 
-| | **CNI** | **Ingress** | **Gateway API** |
-|---|---|---|---|
-| **Layer / scope** | L3/L4 pod networking (whole-cluster plumbing) | L7 HTTP(S) north-south edge | L4–L7 north-south edge **+** east-west mesh (GAMMA) |
-| **Answers** | "what IP does a pod get, and who may it talk to?" | "which Service serves `foo.example.com/bar`?" | same as Ingress, plus gRPC/TCP/TLS/UDP + per-route roles |
-| **API group** | `networking.k8s.io` NetworkPolicy (+ the CNI's own CRDs) | `networking.k8s.io/v1` `Ingress` (frozen) | `gateway.networking.k8s.io` (`GatewayClass`/`Gateway`/`HTTPRoute`/…) |
-| **Implemented by** | a CNI plugin (Cilium, Calico, kindnet, …) | an ingress controller (Traefik, …) | a Gateway controller (Traefik, Istio, NGF, Envoy Gateway, kgateway, Kong, …) |
-| **How many per cluster** | exactly **one** primary (chosen at cluster creation) | any number (by `ingressClassName`) | any number (by GatewayClass `controllerName`) |
-| **In this repo** | kindnet (KinD's default) | Traefik | Traefik · Istio · NGF · Contour · Envoy Gateway · kgateway · Kong |
+1. **DNS** turns the *name* into an *address* — here `/etc/hosts` resolves `helloweb.localdev.me` to the controller's LB IP (inside the cluster, **CoreDNS** does the same for Service names like `helloweb.default.svc`).
+2. The **Ingress / Gateway controller** is the only door from outside: it reads the `Host` header and decides which **Service** the request is for.
+3. The **Service** is a stable name for an ever-changing set of pods; it (or the controller, reading endpoints directly) picks one pod.
+4. The **CNI** is the road the packet actually travels to that pod — and it enforces **NetworkPolicy** (who may talk to whom) on the way.
+
+Remove any layer and the chain breaks in a specific way: **no CNI** → packets can't move at all; **no DNS** → you must use raw IPs; **no Ingress/Gateway** → no way in from outside (internal Service+CNI traffic still works); **a denying NetworkPolicy** → the CNI drops the packet at the last hop.
+
+| | **CNI** | **DNS (CoreDNS)** | **Ingress** | **Gateway API** |
+|---|---|---|---|---|
+| **Layer / scope** | L3/L4 pod networking (whole-cluster plumbing) | name → IP resolution (DNS protocol), cluster-internal | L7 HTTP(S) north-south edge | L4–L7 north-south edge **+** east-west mesh (GAMMA) |
+| **Answers** | "what IP does a pod get, and who may it talk to?" | "what ClusterIP is `helloweb.default.svc.cluster.local`?" | "which Service serves `foo.example.com/bar`?" | same as Ingress, plus gRPC/TCP/TLS/UDP + per-route roles |
+| **API / config** | `networking.k8s.io` NetworkPolicy (+ the CNI's own CRDs) | Corefile `ConfigMap`; watches `Service`/`EndpointSlice` | `networking.k8s.io/v1` `Ingress` (frozen) | `gateway.networking.k8s.io` (`GatewayClass`/`Gateway`/`HTTPRoute`/…) |
+| **Implemented by** | a CNI plugin (Cilium, Calico, kindnet, …) | CoreDNS (the default cluster-DNS addon) | an ingress controller (Traefik, …) | a Gateway controller (Traefik, Istio, NGF, Envoy Gateway, kgateway, Kong, …) |
+| **How many per cluster** | exactly **one** primary (chosen at cluster creation) | **one** cluster DNS | any number (by `ingressClassName`) | any number (by GatewayClass `controllerName`) |
+| **In this repo** | kindnet (KinD's default) | CoreDNS (KinD default) | Traefik · HAProxy · NGINX Inc. | Traefik · Istio · NGF · Contour · Envoy Gateway · kgateway · Kong |
+
+**Two DNS scopes — don't confuse them:** **in-cluster** DNS is CoreDNS resolving Service/Pod names to ClusterIPs (how a pod finds `helloweb` by name — service discovery). **External** DNS is how a client *outside* resolves the Ingress/Gateway hostname (`helloweb.localdev.me`) to the controller's LB IP — in this lab that's `/etc/hosts` (or the public `*.localdev.me` wildcard → `127.0.0.1`); in production it's real DNS, often automated by the [ExternalDNS](https://github.com/kubernetes-sigs/external-dns) controller syncing `Ingress`/`Gateway` hostnames to a DNS provider.
 
 **The overlap:** a few CNIs (**Cilium**, **Calico**) *also* implement Gateway API — but that's an optional add-on to their networking role and requires that CNI to *be* the cluster's CNI. That's exactly why Cilium's Gateway API can't be an add-on here (it would replace kindnet) — see the deferred-Cilium note in the doc.
 
@@ -203,7 +253,8 @@ Active general-purpose CNIs, fact-checked against vendor docs + the CNCF project
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Pod networking / IPAM | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | NetworkPolicy (L3/L4) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| L7 / FQDN-egress policy | ✅ | ⚠️ ent | ⚠️ L7² | ⚠️ FQDN | ❌ | ❌ | ❌ |
+| L7 / HTTP-aware policy | ✅ | ⚠️ ent | ⚠️ ² | ❌ | ❌ | ❌ | ❌ |
+| DNS interactions (FQDN policy / proxy / cache)⁶ | ✅ | ⚠️ ent | ⚠️ | ⚠️ | ❌ | ❌ | ⚠️ |
 | eBPF dataplane | ✅ | ✅ opt | ❌ OVS | ❌ OVS/OVN | ❌ | ❌ | ❌ |
 | kube-proxy replacement | ✅ | ✅ eBPF | ✅ | ✅ | ✅ IPVS | ❌ | ❌ |
 | Encryption (WireGuard / IPsec) | ✅ both | ⚠️ WG | ✅ both | ⚠️ IPsec | ❌ | ⚠️ WG³ | ❌ |
@@ -217,8 +268,52 @@ Active general-purpose CNIs, fact-checked against vendor docs + the CNCF project
 | CNCF status | **Graduated** | not CNCF¹ | Sandbox | Sandbox | not CNCF | not CNCF | KinD default |
 
 ¹ **Calico** here = Calico **Open Source** (v3.32). It's a Tigera-governed project (a CNCF *member*, **not** a CNCF-hosted/graduated project). Several axes (L7/FQDN policy, multi-cluster federation) are **Calico Enterprise/Cloud** only — marked `ent`.
-² Antrea L7 NetworkPolicy is Suricata-based (OSS). ³ Flannel encryption is an optional WireGuard backend. ⁴ Calico via the **Calico Ingress Gateway** (a hardened Envoy Gateway distribution, OSS since v3.30). ⁵ Calico flow logs are OSS since v3.30 (Goldmane/Whisker).
+² Antrea L7 NetworkPolicy is Suricata-based (OSS, Alpha). ³ Flannel encryption is an optional WireGuard backend. ⁴ Calico via the **Calico Ingress Gateway** (a hardened Envoy Gateway distribution, OSS since v3.30). ⁵ Calico flow logs are OSS since v3.30 (Goldmane/Whisker).
+⁶ **DNS interactions — extent per CNI:** **Cilium** = built-in DNS proxy enforcing `toFQDNs` domain-based egress policy; **Antrea** = FQDN egress in Antrea-native policy (Alpha, Linux); **Kube-OVN** = domain-based egress via the DNSNameResolver/CoreDNS plugin + EgressFirewall; **Calico** = FQDN/domain policy is **Enterprise-only**; **kindnet** = DNS *caching* + NAT64/DNS64 (no DNS-based policy); **Flannel / Kube-router** = none. Note: *all* CNIs rely on **CoreDNS** for ordinary Service-name resolution — that's the cluster DNS addon, not a CNI feature, so it isn't a differentiator here.
 **Also:** **Weave Net** is archived/EOL (Weaveworks shut down, 2024) — avoid for new clusters. **Canal** = Flannel networking + Calico policy (no standalone project). **Multus** is a *meta*-CNI for attaching multiple networks, not a primary dataplane. Only **Cilium** and **Calico** appear on the [Gateway API implementations registry](https://gateway-api.sigs.k8s.io/implementations/) among CNIs; **Antrea is a CNI, not a Gateway API controller** (its `antrea-gw0` is an OVS dataplane interface, unrelated to `gateway.networking.k8s.io`).
+
+### Classic Ingress controllers (feature matrix)
+
+The four classic Ingress controllers in this lab's orbit (Traefik = default; HAProxy, NGINX Inc., Kong = opt-in). Fact-checked against vendor docs (June 2026). All four support TLS termination, HTTP/2, WebSocket, and host+path routing — the rows below are the differentiators. `✅`/`⚠️`/`❌` as above; `Ent`/`Plus`/`Hub` = paid-tier-gated.
+
+| Feature | Traefik | HAProxy¹ | NGINX Inc.² | Kong (KIC) |
+|---|:---:|:---:|:---:|:---:|
+| Backing engine | Traefik | HAProxy 3.2 | NGINX (OSS) | Kong/OpenResty |
+| ACME / auto-certs built-in | ✅ native | ⚠️ cert-mgr³ | ⚠️ cert-mgr³ | ✅ plugin |
+| gRPC | ✅ | ✅ | ✅ | ✅ |
+| TCP/UDP (L4) | ⚠️ CRD⁴ | ⚠️ ConfigMap⁴ | ⚠️ CRD⁴ | ✅ |
+| Rate limiting | ✅ | ✅ | ✅ | ✅ |
+| Auth: OIDC / JWT | ⚠️ Hub | ❌ basic-only | ⚠️ Plus | ⚠️ OIDC=Ent⁵ |
+| Canary / traffic split | ⚠️ CRD | ⚠️ ACL | ✅ CRD | ✅ |
+| mTLS to backends | ✅ | ✅ | ✅ | ⚠️ Ent |
+| WAF | ⚠️ Coraza⁶ | ❌ (Ent) | ⚠️ Plus | ⚠️ plugin |
+| Also implements Gateway API | ✅ | ⚠️ TCPRoute¹ | ❌ (→ NGF²) | ✅ |
+| Dashboard / UI | ✅ | ⚠️ stats only | ❌ | ❌ (Ent) |
+| Prometheus metrics | ✅ | ✅ | ✅ | ✅ |
+| Latest stable | v3.7.5 / chart 40.x | ctrl v3.2.x / chart 1.52.0 | v5.5.0 / chart 2.6.0 | KIC v3.5.9 / chart 0.24.0 |
+| CNCF | ❌ Traefik Labs | ❌ HAProxy Tech | ❌ F5/NGINX | ❌ Kong Inc. |
+
+¹ "HAProxy" = the official **haproxytech/kubernetes-ingress**. ⚠️ Its Gateway API support is **`TCPRoute`-only** — and the conformance registry's "HAProxy Ingress" entry is the *separate community* `jcmoraisjr` project, **not** haproxytech. ² **NGINX Inc.** = `nginxinc/kubernetes-ingress` (F5 OSS) — its Gateway API lives in a **separate product, NGF** (`make gateway-nginx`), not this controller. Distinct from the **retired** community `kubernetes/ingress-nginx` (archived March 2026). ³ HAProxy/NGINX-Inc get ACME via **cert-manager**, not a built-in client. ⁴ TCP/UDP via controller-specific CRDs/ConfigMaps, not the plain `Ingress` object (Kong handles L4 natively). ⁵ Kong OSS has basic/key/jwt/oauth2/acl/ldap auth free; **OIDC + mtls-auth are Enterprise**. ⁶ Traefik WAF = OWASP **Coraza** WASM plugin (OSS); native WAF is Hub-only.
+
+### Gateway API controllers (feature matrix)
+
+The seven Gateway API controllers wired in this repo. Conformance badges are from the [implementations registry](https://gateway-api.sigs.k8s.io/implementations/); the gateway-api Go-module floor is verified from each project's `go.mod` (all ≥ v1.2.0, so they coexist on the shared experimental v1.5.1 CRDs). All support HTTPRoute + TLS termination + cert-manager.
+
+| Feature | Traefik | Istio | NGF | Contour | Envoy GW | kgateway | Kong |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Engine | Traefik | Envoy | NGINX | Envoy | Envoy | Envoy | Kong |
+| Conformance (registry) | ✅ v1.5.1 | ✅ v1.5.1 | ✅ v1.4.1 | ⚠️ v1.3.0 | ⚠️ v1.4.0 | ✅ v1.4.0 | ⚠️ v1.2.1¹ |
+| GRPCRoute | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| TCP / TLSRoute (exp) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| UDPRoute (exp) | ❌ | ✅ | ✅ | ❌ | ✅ | ⚠️² | ✅ |
+| Data-plane model | in-process | per-Gateway | per-Gateway | per-Gateway | per-Gateway | per-Gateway | shared³ |
+| Mesh / GAMMA (east-west) | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Also serves classic Ingress | ✅ | ❌ | ❌ | ⚠️⁴ | ❌ | ❌ | ✅ |
+| Rate-limit / auth CRDs | ✅ | ✅ | ⚠️ ext | ⚠️ | ✅ | ✅ | ⚠️ OSS/Ent |
+| Vendored gateway-api (≥ v1.2 floor) | ✅ | ✅ | ✅ | ✅ v1.3 | ✅ v1.5.1 | ✅ v1.5.1 | ✅ v1.3 |
+| CNCF | ❌ | **Graduated** | ❌ | **Incubating** | Envoy subproj⁵ | **Sandbox** | ❌ |
+
+¹ Kong's conformance is **split**: the registry lists KIC as *stale* v1.2.1, but the newer **Kong Operator** is *partial* v1.5.1; KIC's `go.mod` actually vendors gateway-api v1.3.0, so it clears the floor. ² kgateway UDPRoute not confirmed in docs (flagged, not assumed). ³ Kong's **unmanaged** Gateway binds to one shared proxy Service (not per-Gateway). ⁴ Contour serves classic Ingress in its *primary* mode; the Gateway-provisioner mode used here is Gateway-API-focused. ⁵ Envoy Gateway is a subproject of **Envoy** (CNCF **Graduated**); the registry lists it *partially* conformant. Versions: Istio 1.30.1 · NGF 2.6.3 · Contour v1.33.5 · Envoy GW v1.8.1 · kgateway v2.3.3 · Kong `kong/ingress` 0.24.0.
 
 ## Headlamp install
 
@@ -675,34 +770,6 @@ Suppressions (intentional, justified inline):
 - `.gitleaks.toml` — allowlist for the local `headlamp-admin-token.txt`.
 - `.trivyignore.yaml` — demo workloads use default securityContext, the in-cluster NFS pod needs privileged mode.
 - `.hadolint.yaml` — `kubectl-test` is a throwaway debug image; alpine-package pinning is overkill.
-
-## CI/CD
-
-`ci.yml` runs on every push to `main`, tags `v*`, and pull requests. Four sibling workflows run on weekly crons (plus `workflow_dispatch` and targeted `paths:` triggers): `e2e-metallb.yml`, `monitoring-test.yml`, `registry-test.yml`, `gateway-test.yml`. The CI workflow short-circuits on doc-only changes via the `changes` paths-filter detector job — heavy jobs only run when source code or workflow YAML changed.
-
-### `ci.yml`
-
-| Job | Needs | Steps |
-|-----|-------|-------|
-| **changes** | — | `dorny/paths-filter` outputs `code=true` if anything outside docs/markdown/images changed; downstream jobs gate on it |
-| **static-check** | changes | `make static-check` (lint + test + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check) |
-| **docker** | changes, static-check | `make image-test` — build and runtime-verify the `kubectl-test` image |
-| **e2e** | changes, static-check | `jdx/mise-action` + `make deps` + `make kind-create`, install ingress + cloud-provider-kind + Headlamp, deploy all demo workloads, K1.5 route-readiness poll, run `make e2e-smoke` for body-asserting smoke tests via `docker exec` (~4 min end-to-end) |
-| **ci-pass** | changes, static-check, docker, e2e | Aggregate gate — fails if any upstream job failed or was cancelled |
-
-### Sibling workflows
-
-| Workflow | Schedule | Triggers also on push to | What it covers |
-|----------|----------|--------------------------|----------------|
-| `e2e-metallb.yml` | Sun 04:00 UTC | `scripts/kind-add-metallb.sh`, `scripts/migrate-from-metallb.sh`, `scripts/e2e-migrate-smoke.sh`, the workflow itself | Mirrors `ci.yml`'s e2e job but installs MetalLB instead of cloud-provider-kind. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the MetalLB → cloud-provider-kind migration path. |
-| `monitoring-test.yml` | Sun 05:00 UTC | `scripts/kind-add-kube-prometheus-stack.sh`, the workflow itself | Brings up the full stack via the granular install scripts, installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. |
-| `registry-test.yml` | Sun 06:00 UTC | `scripts/kind-with-registry.sh`, `scripts/test-registry.sh`, `k8s/helloweb-deployment-local.yaml`, the workflow itself | Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` — pull → retag → push → deploy → curl. |
-| `gateway-test.yml` | Sun 07:00 UTC | `scripts/kind-add-gateway-*.sh`, `k8s/gateway/**`, `scripts/kind-add-traefik.sh`, the shared smoke chain (`scripts/e2e-smoke.sh`, `scripts/lib.sh`), the workflow itself | Brings up `make install-all`, then enables all seven Gateway API controllers (`make gateway-traefik` + `gateway-istio` + `gateway-nginx` + `gateway-contour` + `gateway-envoy` + `gateway-kgateway` + `gateway-kong`), then runs `TEST_GATEWAY_API=yes make e2e-smoke` to assert each controller fronts the same demo apps on its own LB IP. Shared GW API CRDs are the experimental channel (Contour requires `TLSRoute@v1alpha2`). |
-| `cleanup-runs.yml` | Sun 00:00 UTC | n/a | Prunes old workflow runs (keeps latest 5) and caches from closed PR branches. |
-
-No repo secrets or variables are required by any workflow — only the default `GITHUB_TOKEN`.
-
-[Renovate](https://docs.renovatebot.com/) keeps action digests, container images, `.mise.toml` pins (via the native `mise` manager), and Makefile / `scripts/*.sh` constants (via `# renovate:` inline comments) up to date with automerge enabled (Renovate merges via its own logic, gated on the required `ci-pass` check — `platformAutomerge` is intentionally off to avoid the native-auto-merge registration race).
 
 ## Contributing
 

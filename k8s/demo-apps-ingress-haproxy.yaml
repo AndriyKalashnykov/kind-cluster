@@ -1,0 +1,43 @@
+# Opt-in: the SAME demo apps fronted by the HAProxy (haproxytech) Ingress
+# controller via ingressClassName: haproxy. HAProxy ignores Ingresses whose
+# class is `traefik` (and vice versa), so this coexists with the default
+# Traefik Ingress — HAProxy answers on its OWN cloud-provider-kind LoadBalancer
+# IP, a distinct front door, on the same *.localdev.me hostnames. "Same app,
+# more front doors" — the classic-Ingress analogue of the Gateway API demo.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-apps-haproxy
+spec:
+  ingressClassName: haproxy
+  rules:
+    - host: helloweb.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: helloweb
+                port:
+                  number: 80
+    - host: golang.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: golang-hello-world-web-service
+                port:
+                  number: 8080
+    - host: foo.localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: foo-service
+                port:
+                  number: 5678

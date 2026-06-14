@@ -1,0 +1,84 @@
+name: Ingress (alternatives) E2E
+
+on:
+  schedule:
+    - cron: '0 8 * * 0'  # Sunday 08:00 UTC (after gateway at 07:00)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/kind-add-ingress-haproxy.sh'
+      - 'scripts/kind-add-ingress-nginx.sh'
+      - 'k8s/demo-apps-ingress-haproxy.yaml'
+      - 'k8s/demo-apps-ingress-nginx.yaml'
+      # Shared smoke chain: the TEST_INGRESS_ALT assertions live in e2e-smoke.sh,
+      # which ci.yml never runs with TEST_INGRESS_ALT=yes — so a regression there
+      # is only caught here.
+      - 'scripts/e2e-smoke.sh'
+      - 'scripts/lib.sh'
+      - '.github/workflows/ingress-test.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingress-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ingress-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        with:
+          install: true
+          cache: true
+
+      - name: Install dependencies
+        run: make deps
+
+      # Full default stack (cluster + cloud-provider-kind + Traefik + Headlamp +
+      # demo apps + ingress). The alternative classic Ingress controllers are
+      # layered on top via the opt-in targets.
+      - name: Install stack
+        run: make install-all
+
+      - name: Wait for ingress route readiness
+        # K1.5 — an assigned LB IP is not the same as a routable one; poll the
+        # demo routes through the control-plane node before layering controllers.
+        run: |
+          INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          probe() {
+            docker exec kind-control-plane curl -sf --max-time 3 \
+              -H "Host: $1" "http://${INGRESS_IP}/" 2>/dev/null | grep -q "$2"
+          }
+          for i in $(seq 1 60); do
+            if probe helloweb.localdev.me 'Hello, world!'; then
+              echo "ingress routes ready after $((i*2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "ERROR: ingress routes did not become reachable within 120s"
+          kubectl -n traefik get pods -o wide
+          exit 1
+
+      - name: Install HAProxy Ingress controller
+        run: make ingress-haproxy
+
+      - name: Install NGINX Inc. Ingress controller
+        run: make ingress-nginx
+
+      # Asserts both alternative classic Ingress controllers (HAProxy + NGINX Inc.)
+      # front the same demo backends on their own LB IPs, on top of the standard
+      # smoke checks. Quoted so YAML keeps the literal string "yes".
+      - name: Smoke test
+        env:
+          TEST_INGRESS_ALT: "yes"
+        run: make e2e-smoke

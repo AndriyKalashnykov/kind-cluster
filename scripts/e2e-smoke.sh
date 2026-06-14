@@ -641,6 +641,58 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
   fi
 fi
 
+# --- Alternative classic Ingress controllers (opt-in via TEST_INGRESS_ALT=yes) ---
+# Off by default because install-all wires only Traefik. Run `make ingress-haproxy`
+# and/or `make ingress-nginx` first, then TEST_INGRESS_ALT=yes make e2e-smoke.
+# Each alternative controller registers a distinct ingressClassName and gets its
+# OWN LoadBalancer IP, fronting the SAME demo apps as Traefik.
+if [ "${TEST_INGRESS_ALT:-}" = "yes" ]; then
+  echo ""
+  echo "=== Alternative classic Ingress controllers (TEST_INGRESS_ALT=yes) ==="
+  # name|namespace|ingressClassName — discover each controller's LB Service by type.
+  for spec in "HAProxy|haproxy-controller|haproxy" "NGINX Inc.|nginx-ingress|nginx"; do
+    NAME="${spec%%|*}"; rest="${spec#*|}"; NS="${rest%%|*}"; CLASS="${rest##*|}"
+    if "${KUBECTL[@]}" get ingressclass "$CLASS" >/dev/null 2>&1; then
+      pass "$NAME IngressClass '$CLASS' exists"
+    else
+      fail "$NAME IngressClass '$CLASS' missing — run its make target first"
+    fi
+    SVC=""
+    for _ in $(seq 1 30); do
+      SVC=$("${KUBECTL[@]}" -n "$NS" get svc \
+        -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1 || echo "")
+      [ -n "$SVC" ] && break
+      sleep 2
+    done
+    IP=""
+    if [ -n "$SVC" ]; then
+      for _ in $(seq 1 30); do
+        IP=$("${KUBECTL[@]}" -n "$NS" get svc "$SVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        [ -n "$IP" ] && break
+        sleep 2
+      done
+    fi
+    if [ -n "$IP" ]; then
+      pass "$NAME controller Service ($SVC) has its own LoadBalancer IP ($IP)"
+      OK=""
+      for _ in $(seq 1 30); do
+        if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+          OK=yes; break
+        fi
+        sleep 2
+      done
+      if [ -n "$OK" ]; then
+        pass "helloweb reachable via $NAME at ${IP} (same backend as Traefik)"
+      else
+        fail "$NAME at ${IP} did not route to helloweb within 60s"
+      fi
+      check_curl "golang /healthz via $NAME" "http://${IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+    else
+      fail "$NAME controller Service got no LoadBalancer IP within 60s"
+    fi
+  done
+fi
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]
