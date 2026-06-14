@@ -63,7 +63,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | [act](https://github.com/nektos/act) | 0.2.89 |
 | [bats](https://github.com/bats-core/bats-core) | 1.13.0 |
 
-Renovate's native `mise` manager keeps `.mise.toml` up to date (platform automerge enabled).
+Renovate's native `mise` manager keeps `.mise.toml` up to date (automerge enabled).
 
 ## Architecture
 
@@ -123,6 +123,39 @@ make gateway-contour   # add Project Contour (Gateway provisioner), its own LB I
 ```
 
 They coexist because each GatewayClass has a distinct `controllerName` and cloud-provider-kind gives each gateway its own LoadBalancer IP. **Antrea is *not* in this comparison** — it's a CNI, not a Gateway API controller (its "gateway" is the `antrea-gw0` dataplane interface); the real CNI-integrated gateways are **Cilium** / **Calico**.
+
+### Reaching each gateway
+
+Every controller's `Gateway` gets its **own** LoadBalancer IP from cloud-provider-kind. List them (all four live in the `default` namespace):
+
+```bash
+kubectl get gateway
+# NAME              CLASS     ADDRESS      PROGRAMMED
+# traefik-gateway   traefik   172.18.0.4   True
+# demo              istio     172.18.0.6   True
+# ngf               nginx     172.18.0.7   True
+# contour           contour   172.18.0.8   True
+```
+
+**Traefik**'s Gateway API provider shares Traefik's ingress IP, so its HTTPRoutes use `*.gw.localdev.me` (to avoid colliding with the classic Ingress `*.localdev.me` on the same pod):
+
+```bash
+GW=$(kubectl get gateway traefik-gateway -o jsonpath='{.status.addresses[0].value}')
+curl -H "Host: helloweb.gw.localdev.me" "http://$GW/"        # Hello, world!
+curl -H "Host: golang.gw.localdev.me"  "http://$GW/healthz"  # {"health":"ok"}
+```
+
+**Istio** (`demo`), **NGINX Gateway Fabric** (`ngf`), and **Contour** (`contour`) each have their own IP and reuse the plain `*.localdev.me` hostnames — so target each by its IP. The same hostname can't point at three IPs in `/etc/hosts`, so pass it as a `Host:` header (or use `curl --resolve helloweb.localdev.me:80:<ip>`):
+
+```bash
+for gw in demo ngf contour; do
+  IP=$(kubectl get gateway "$gw" -o jsonpath='{.status.addresses[0].value}')
+  echo "== $gw @ $IP =="
+  curl -H "Host: helloweb.localdev.me" "http://$IP/"          # same backend, different front door
+done
+```
+
+`TEST_GATEWAY_API=yes make e2e-smoke` runs exactly these assertions across all four controllers.
 
 📖 **Full comparison (Traefik vs Istio vs Cilium/Calico), coexistence mechanics, and "is it advisable to run all of them?" — see [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md).**
 
@@ -537,6 +570,11 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Add-ons | `make lb-metallb` | Install MetalLB (alternative; also: `LB=metallb make install-all`) |
 | Add-ons | `make metrics-server` | metrics-server (for `kubectl top` / HPA) |
 | Add-ons | `make kube-prometheus-stack` | Prometheus + Grafana + Alertmanager |
+| Gateway API | `make gateway-api-crds` | Install the Gateway API CRDs (experimental channel, pinned) — prerequisite for the controllers below |
+| Gateway API | `make gateway-traefik` | Enable Traefik's Gateway API provider + demo HTTPRoutes (`*.gw.localdev.me`) |
+| Gateway API | `make gateway-istio` | Add Istio as a 2nd Gateway API controller (own LB IP, same apps) |
+| Gateway API | `make gateway-nginx` | Add NGINX Gateway Fabric as another Gateway API controller (own LB IP, same apps) |
+| Gateway API | `make gateway-contour` | Add Project Contour (Gateway provisioner) as another Gateway API controller (own LB IP, same apps) |
 | NFS | `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
 | NFS | `make nfs-host-setup` | Option 2, step 1 — configure host as NFS server (sudo; Ubuntu/Debian) |
 | NFS | `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install csi-driver-nfs pointing at the host export |
@@ -576,7 +614,7 @@ Suppressions (intentional, justified inline):
 
 ## CI/CD
 
-`ci.yml` runs on every push to `main`, tags `v*`, and pull requests. Three sibling workflows run on weekly crons (plus `workflow_dispatch` and targeted `paths:` triggers): `e2e-metallb.yml`, `monitoring-test.yml`, `registry-test.yml`. The CI workflow short-circuits on doc-only changes via the `changes` paths-filter detector job — heavy jobs only run when source code or workflow YAML changed.
+`ci.yml` runs on every push to `main`, tags `v*`, and pull requests. Four sibling workflows run on weekly crons (plus `workflow_dispatch` and targeted `paths:` triggers): `e2e-metallb.yml`, `monitoring-test.yml`, `registry-test.yml`, `gateway-test.yml`. The CI workflow short-circuits on doc-only changes via the `changes` paths-filter detector job — heavy jobs only run when source code or workflow YAML changed.
 
 ### `ci.yml`
 
@@ -595,11 +633,12 @@ Suppressions (intentional, justified inline):
 | `e2e-metallb.yml` | Sun 04:00 UTC | `scripts/kind-add-metallb.sh`, `scripts/migrate-from-metallb.sh`, `scripts/e2e-migrate-smoke.sh`, the workflow itself | Mirrors `ci.yml`'s e2e job but installs MetalLB instead of cloud-provider-kind. Final step runs `scripts/e2e-migrate-smoke.sh` to exercise the MetalLB → cloud-provider-kind migration path. |
 | `monitoring-test.yml` | Sun 05:00 UTC | `scripts/kind-add-kube-prometheus-stack.sh`, the workflow itself | Brings up the full stack via the granular install scripts, installs `kube-prometheus-stack`, then runs `TEST_MONITORING=yes make e2e-smoke` to assert Grafana gets a LoadBalancer IP and the admin secret is mintable. |
 | `registry-test.yml` | Sun 06:00 UTC | `scripts/kind-with-registry.sh`, `scripts/test-registry.sh`, `k8s/helloweb-deployment-local.yaml`, the workflow itself | Exercises the alternative `make registry` cluster (containerd-mirrored local registry at `localhost:5001`) via `make registry-test` — pull → retag → push → deploy → curl. |
+| `gateway-test.yml` | Sun 07:00 UTC | `scripts/kind-add-gateway-*.sh`, `k8s/gateway/**`, `scripts/kind-add-traefik.sh`, the shared smoke chain (`scripts/e2e-smoke.sh`, `scripts/lib.sh`), the workflow itself | Brings up `make install-all`, then enables all four Gateway API controllers (`make gateway-traefik` + `gateway-istio` + `gateway-nginx` + `gateway-contour`), then runs `TEST_GATEWAY_API=yes make e2e-smoke` to assert each controller fronts the same demo apps on its own LB IP. Shared GW API CRDs are the experimental channel (Contour requires `TLSRoute@v1alpha2`). |
 | `cleanup-runs.yml` | Sun 00:00 UTC | n/a | Prunes old workflow runs (keeps latest 5) and caches from closed PR branches. |
 
 No repo secrets or variables are required by any workflow — only the default `GITHUB_TOKEN`.
 
-[Renovate](https://docs.renovatebot.com/) keeps action digests, container images, `.mise.toml` pins (via the native `mise` manager), and Makefile / `scripts/*.sh` constants (via `# renovate:` inline comments) up to date with platform automerge enabled.
+[Renovate](https://docs.renovatebot.com/) keeps action digests, container images, `.mise.toml` pins (via the native `mise` manager), and Makefile / `scripts/*.sh` constants (via `# renovate:` inline comments) up to date with automerge enabled (Renovate merges via its own logic, gated on the required `ci-pass` check — `platformAutomerge` is intentionally off to avoid the native-auto-merge registration race).
 
 ## Contributing
 

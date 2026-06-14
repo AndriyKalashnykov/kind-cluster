@@ -40,6 +40,12 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
     }
     Container(cpk, "cloud-provider-kind", "Host docker container; watches Service: LoadBalancer; allocates IPs from kind subnet")
     Container(cpk_sidecars, "kindccm-<hash>", "Per-Service Envoy sidecar; routes LB IP -> backend pods")
+
+    Deployment_Node(gwapi, "Gateway API controllers (opt-in; not in install-all)", "experimental-channel CRDs v1.5.1, cluster-scoped") {
+      Container(gwistio, "Istio", "istiod 1.30.1 in istio-system; Gateway gatewayClassName=istio auto-provisions Envoy Deployment+Service 'demo-istio' (type=LoadBalancer) in default")
+      Container(gwngf, "NGINX Gateway Fabric", "control plane 2.6.3 in nginx-gateway; Gateway gatewayClassName=nginx auto-provisions nginx Deployment+Service 'ngf-nginx' (type=LoadBalancer) in default")
+      Container(gwcontour, "Project Contour", "provisioner v1.33.5 in projectcontour; Gateway gatewayClassName=contour provisions Envoy DaemonSet+Service 'envoy-contour' (type=LoadBalancer) in default")
+    }
   }
 }
 
@@ -52,6 +58,17 @@ Rel(api, ingress, "Schedules + tracks rollout")
 Rel(cpk, cpk_sidecars, "Spawns one per LoadBalancer Service")
 Rel(cpk_sidecars, apps, "Routes LB IP -> backend pods")
 Rel(ingress, apps, "Routes by Host header")
+
+' Opt-in Gateway API controllers: each provisions its own data plane whose
+' type=LoadBalancer Service gets its own LB IP from cloud-provider-kind, all
+' fronting the SAME demo apps by Host header. Enabled via make gateway-*.
+Rel(cpk, gwistio, "Allocates LB IP per provisioned gateway Service")
+Rel(cpk, gwngf, "Allocates LB IP per provisioned gateway Service")
+Rel(cpk, gwcontour, "Allocates LB IP per provisioned gateway Service")
+Rel(gwistio, apps, "Routes by Host header (own LB IP)")
+Rel(gwngf, apps, "Routes by Host header (own LB IP)")
+Rel(gwcontour, apps, "Routes by Host header (own LB IP)")
+
 Rel(prom, apps, "Scrapes /metrics", "HTTP")
 Rel(apps, nfs, "Mounts RWX PVCs (optional)", "NFSv4")
 Rel(api, charts, "helm install/upgrade pulls charts")

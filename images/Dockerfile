@@ -33,7 +33,8 @@ ARG APK_PACKAGES="bash \
                   wget"
 
 
-RUN apk --no-cache add --update $APK_PACKAGES && \
+RUN apk --no-cache upgrade && \
+    apk --no-cache add --update $APK_PACKAGES && \
     addgroup -g ${APP_GID} -S app && \
     adduser -u ${APP_UID} -G app -S -h /home/app app && \
     curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
