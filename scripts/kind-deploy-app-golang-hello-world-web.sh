@@ -26,11 +26,12 @@ fi
 GOLANG_WEB_VERSION=0.0.3
 IMAGE=ghcr.io/andriykalashnykov/golang-web:${GOLANG_WEB_VERSION}
 
-# Force single-platform pull — avoids kind#3795 where a multi-arch manifest list
-# in docker's content store breaks `kind load docker-image` (ctr: content digest not found).
-PLATFORM="linux/$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-docker pull --platform="$PLATFORM" "$IMAGE"
-kind load docker-image "$IMAGE"
+# Load the image as a single-platform archive — avoids kind#3795 where a
+# multi-arch manifest list in Docker's containerd image store breaks
+# `kind load docker-image` (ctr: content digest not found). See lib.sh.
+# shellcheck source=scripts/lib.sh
+. "$SCRIPT_DIR/lib.sh"
+kind_load_image "$IMAGE" "$KIND_CLUSTER_NAME"
 
 echo "deploying golang-hello-world-web"
 "${KUBECTL[@]}" apply -f ./k8s/golang-hello-world-web.yaml

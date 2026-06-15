@@ -296,7 +296,7 @@ gateway-api-crds: deps
 gateway-traefik: deps
 	@./scripts/kind-add-gateway-traefik.sh
 
-#gateway-istio: @ Opt-in: install Istio as a 2nd Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
+#gateway-istio: @ Opt-in: install Istio as another Gateway API controller routing to the same apps (see docs/gateway-api-ingress.md)
 gateway-istio: deps
 	@./scripts/kind-add-gateway-istio.sh
 

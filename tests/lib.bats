@@ -81,3 +81,32 @@ Forwarding from 127.0.0.1:2222 -> 80"
     run flag_enabled
     [ "$status" -ne 0 ]
 }
+
+# --- normalize_arch ----------------------------------------------------------
+
+@test "normalize_arch: x86_64 maps to amd64" {
+    run normalize_arch x86_64
+    [ "$output" = "amd64" ]
+}
+
+@test "normalize_arch: aarch64 maps to arm64" {
+    run normalize_arch aarch64
+    [ "$output" = "arm64" ]
+}
+
+@test "normalize_arch: arm64 passes through as arm64" {
+    run normalize_arch arm64
+    [ "$output" = "arm64" ]
+}
+
+@test "normalize_arch: an unknown machine passes through unchanged" {
+    run normalize_arch riscv64
+    [ "$output" = "riscv64" ]
+}
+
+@test "normalize_arch: empty/unset yields empty" {
+    run normalize_arch ""
+    [ "$output" = "" ]
+    run normalize_arch
+    [ "$output" = "" ]
+}
