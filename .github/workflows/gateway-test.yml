@@ -16,6 +16,10 @@ on:
       - 'scripts/kind-add-gateway-kgateway.sh'
       - 'scripts/kind-add-gateway-kong.sh'
       - 'scripts/kind-add-traefik.sh'
+      # CPK installer: this job is the only one that exercises CPK coexisting
+      # with the Gateway API CRDs + safe-upgrades VAP (and the restart guard
+      # below), so a change to how CPK is started must re-trigger it.
+      - 'scripts/kind-add-cloud-provider-kind.sh'
       - 'k8s/gateway/**'
       # Local-CA TLS (cert-manager + sslip.io) is layered on the gateways and
       # asserted via TEST_TLS=yes in the same smoke run.
@@ -122,3 +126,31 @@ jobs:
           TEST_GATEWAY_API: "yes"
           TEST_TLS: "yes"
         run: make e2e-smoke
+
+      # Standing regression guard for the cloud-provider-kind --gateway-channel
+      # disabled hardening (scripts/kind-add-cloud-provider-kind.sh). At this
+      # point the cluster carries the experimental Gateway API v1.5.1 CRDs and
+      # their `safe-upgrades` ValidatingAdmissionPolicy (installed by the gateway
+      # controllers). Restarting CPK re-runs its startup path WITH the VAP
+      # present — the exact condition the MetalLB -> CPK migration hits. With
+      # `--gateway-channel disabled` CPK skips its embedded (v1.4.0) GW API CRD
+      # reconcile and comes back healthy; WITHOUT the flag it would try to
+      # install pre-v1.5.0 CRDs, the VAP would deny it, and CPK would crash-loop
+      # logging "Failed to start cloud controller". A clean run logs that string
+      # zero times, so any occurrence after the restart is the regression.
+      # (No standing job otherwise exercises CPK-startup-with-VAP-present — CPK
+      # starts greenfield before the VAP here, and e2e-metallb's migration has
+      # no VAP — so without this step a dropped flag would stay green in CI.)
+      - name: Regression guard — CPK survives a restart with the Gateway API safe-upgrades VAP present
+        run: |
+          docker restart cloud-provider-kind
+          sleep 30   # allow several crash-loop cycles (~30s each) if it WOULD crash
+          fails=$(docker logs cloud-provider-kind 2>&1 | grep -c 'Failed to start cloud controller' || true)
+          status=$(docker ps --filter name=cloud-provider-kind --format '{{.Status}}')
+          echo "cloud-provider-kind status after restart: ${status:-<not running>} (crash-log count: ${fails:-0})"
+          if [ "${fails:-0}" -gt 0 ]; then
+            echo "::error::cloud-provider-kind crash-looped after restart (Failed to start cloud controller x${fails}) — the --gateway-channel disabled hardening in kind-add-cloud-provider-kind.sh has regressed; the safe-upgrades VAP is denying CPK's embedded pre-v1.5.0 Gateway API CRD install."
+            docker logs cloud-provider-kind 2>&1 | tail -40
+            exit 1
+          fi
+          echo "cloud-provider-kind survived a restart with the safe-upgrades VAP present (--gateway-channel disabled holding)."
