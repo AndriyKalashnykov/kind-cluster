@@ -722,6 +722,22 @@ if flag_enabled "${TEST_TLS:-}"; then
     fail "STATIC: trusted HTTPS on helloweb.localdev.me failed (run 'make tls')"
   fi
 
+  # LB-IP Traefik path: same *.localdev.me cert, but routed through the Traefik
+  # Service's LoadBalancer IP instead of the 127.0.0.1 hostPort. This is the
+  # LB-provider-RELEVANT TLS path — the hostPort path above bypasses the LB
+  # entirely, so it proves nothing about the IP allocator. Here $INGRESS_IP is
+  # assigned by cloud-provider-kind OR MetalLB depending on the cluster, so this
+  # one assertion verifies trusted HTTPS terminates correctly via whichever LB
+  # provider handed out the IP. (e2e-metallb relies on this to exercise TLS
+  # through a MetalLB-assigned IP; gateway-test/ingress-test get it for cpk.)
+  if [ -n "${INGRESS_IP:-}" ] && curl -sf --cacert "$CA" \
+       --resolve helloweb.localdev.me:443:"$INGRESS_IP" \
+       https://helloweb.localdev.me/ 2>/dev/null | grep -qF "Hello, world!"; then
+    pass "LB-IP: https://helloweb.localdev.me/ via Traefik LB IP ${INGRESS_IP} trusted (no -k) -> Hello, world!"
+  else
+    fail "LB-IP: trusted HTTPS via Traefik LB IP (${INGRESS_IP:-unset}) failed"
+  fi
+
   # Traefik Gateway-API provider HTTPS (*.gw.localdev.me) — only if installed
   # (make gateway-traefik). Shares the SAME Traefik pod / hostPort 443 as the
   # classic path above and coexists on the websecure entrypoint (port 8443) via

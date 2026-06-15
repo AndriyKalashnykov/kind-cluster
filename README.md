@@ -360,7 +360,7 @@ IP=$(kubectl -n default get svc istio-istio -o jsonpath='{.status.loadBalancer.i
 curl --cacert lab-ca.crt "https://helloweb.$(echo "$IP" | tr . -).sslip.io/"   # -> Hello, world!
 ```
 
-Smoke-assert the whole thing (trusted, no `-k`) with `TEST_TLS=yes make e2e-smoke`. Verified live: the static `*.localdev.me` path plus the per-LB-IP `*.sslip.io` paths on Istio, NGF, Contour, and kgateway. See [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md#https-with-a-locally-trusted-ca) for the full wiring.
+Smoke-assert the whole thing (trusted, no `-k`) with `TEST_TLS=yes make e2e-smoke`. Verified live: the static `*.localdev.me` path, the Traefik LoadBalancer-IP path (under **both** cloud-provider-kind and MetalLB), the Traefik Gateway `*.gw.localdev.me` path, and the per-LB-IP `*.sslip.io` paths on Istio, NGF, Contour, and kgateway. See [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md#https-with-a-locally-trusted-ca) for the full wiring.
 
 ## Headlamp install
 
