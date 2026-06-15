@@ -16,9 +16,11 @@ on:
       - 'scripts/kind-add-cloud-provider-kind.sh'
       - 'scripts/e2e-smoke.sh'
       - 'scripts/lib.sh'
-      # Trusted-HTTPS chain (TEST_TLS asserts the MetalLB-LB-IP path).
-      # gateway-api-crds is required before cert-manager (enableGatewayAPI=true).
-      - 'scripts/kind-add-gateway-api-crds.sh'
+      # Trusted-HTTPS chain (TEST_TLS asserts the MetalLB-LB-IP path). Classic
+      # Ingress only here, so cert-manager runs with ENABLE_GATEWAY_API=false and
+      # no Gateway API CRDs are installed (the CRDs' safe-upgrades VAP would
+      # otherwise block the migration step's cloud-provider-kind startup — see
+      # the cert-manager install step's comment).
       - 'scripts/kind-add-cert-manager.sh'
       - 'scripts/kind-add-tls.sh'
       - 'k8s/tls/**'
@@ -139,18 +141,6 @@ jobs:
           kubectl -n metallb-system get pods,ipaddresspool,l2advertisement -o wide || true
           exit 1
 
-      # Gateway API CRDs must exist BEFORE cert-manager: `make cert-manager` sets
-      # config.enableGatewayAPI=true (the lab's uniform cert-manager config,
-      # required by the gateway-* TLS paths), and the cert-manager *controller*
-      # HARD-FAILS at startup when the CRDs are absent — it crash-loops with
-      # "the Gateway API CRDs do not seem to be present, but
-      # ExperimentalGatewayAPISupport is set to true. Please install the
-      # gateway-api CRDs." The gateway-test/ingress-test paths have these CRDs
-      # already (their controllers install them); e2e-metallb installs no
-      # gateway controller, so install the CRDs explicitly here.
-      - name: Install Gateway API CRDs
-        run: ./scripts/kind-add-gateway-api-crds.sh
-
       # Trusted HTTPS via a local CA (cert-manager + sslip.io). Closes the
       # MetalLB-TLS coverage gap: the TEST_TLS LB-IP assertion in e2e-smoke.sh
       # exercises trusted HTTPS terminating through the Traefik Service's
@@ -159,7 +149,21 @@ jobs:
       # as well as cloud-provider-kind. No gateway/alt-ingress installed here,
       # so `make tls` (the classic Traefik Ingress cert) is sufficient — no
       # tls-all.
-      - name: Install cert-manager + local-CA TLS
+      #
+      # ENABLE_GATEWAY_API=false is LOAD-BEARING here, not just an optimisation:
+      # this job's TLS path is classic Ingress only (no Gateway resources), so
+      # cert-manager needs no Gateway API support — AND installing the Gateway
+      # API CRDs would deploy the `safe-upgrades` ValidatingAdmissionPolicy,
+      # which the later migration step's cloud-provider-kind startup trips over.
+      # CPK v0.10.0 force-reconciles its own embedded (standard-channel,
+      # pre-v1.5.0) Gateway API CRDs at startup; the VAP denies that install and
+      # CPK crash-loops without ever assigning a LoadBalancer IP, so the
+      # migration smoke's CPK re-allocation never completes. Keeping Gateway API
+      # out of this job entirely avoids the VAP and lets CPK start cleanly.
+      # See scripts/kind-add-cert-manager.sh header.
+      - name: Install cert-manager + local-CA TLS (classic Ingress, no Gateway API)
+        env:
+          ENABLE_GATEWAY_API: "false"
         run: |
           make cert-manager
           make tls
