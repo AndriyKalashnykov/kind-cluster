@@ -646,7 +646,7 @@ fi
 # and/or `make ingress-nginx` first, then TEST_INGRESS_ALT=yes make e2e-smoke.
 # Each alternative controller registers a distinct ingressClassName and gets its
 # OWN LoadBalancer IP, fronting the SAME demo apps as Traefik.
-if [ "${TEST_INGRESS_ALT:-}" = "yes" ]; then
+if flag_enabled "${TEST_INGRESS_ALT:-}"; then
   echo ""
   echo "=== Alternative classic Ingress controllers (TEST_INGRESS_ALT=yes) ==="
   # name|namespace|ingressClassName — discover each controller's LB Service by type.
