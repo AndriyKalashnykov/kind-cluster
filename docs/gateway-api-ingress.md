@@ -334,12 +334,13 @@ Smoke coverage for the Gateway API paths is gated behind `TEST_GATEWAY_API=yes`
 
 ## HTTPS with a locally-trusted CA
 
-Nearly every front door — the Traefik classic Ingress, all 6 opt-in Gateway API
-controllers, and both alternative classic ingresses (9 of 10) — can serve
-**trusted** HTTPS, validated with no `-k`, **fully offline**: no Let's Encrypt,
-no public domain, no secrets. Opt-in via `make cert-manager` then `make tls` /
-`make tls-all`. (The one exception — Traefik's own Gateway-API provider on
-`*.gw.localdev.me` — is covered in the scope note below.)
+Every front door — the Traefik classic Ingress **and** its Gateway-API provider,
+all 6 opt-in Gateway API controllers, and both alternative classic ingresses
+(all 10) — can serve **trusted** HTTPS, validated with no `-k`, **fully
+offline**: no Let's Encrypt, no public domain, no secrets. Opt-in via
+`make cert-manager` then `make tls` / `make tls-all`. (Both of Traefik's paths
+share the one pod's `:443` and are wired together by `make tls` — see the
+entrypoint-port detail in the scope note below.)
 
 **Why not the usual ACME path.** A local cluster's LoadBalancer IPs are on the
 `kind` Docker bridge (`172.18.0.0/16`) — not routable from the internet — so
@@ -377,34 +378,40 @@ no per-controller special-casing. The runtime LB IP is the only twist:
 
 | Target | Mechanism | Command |
 |--------|-----------|---------|
-| Default Traefik (classic Ingress) | static `*.localdev.me` wildcard cert → `Ingress.spec.tls` | `make tls` |
+| Default Traefik — classic Ingress (`*.localdev.me`) **and** Gateway-API provider (`*.gw.localdev.me`) | one `*.localdev.me` + `*.gw.localdev.me` wildcard cert → `Ingress.spec.tls` **and** a Gateway `HTTPS` listener on the `websecure` entrypoint (container port **8443**, `tls.mode: Terminate`, `certificateRefs`). Both terminate on the one shared pod's `:443` and coexist via per-SNI cert resolution. | `make tls` |
 | Each Gateway API controller (Istio, NGF, Contour, Envoy Gateway, kgateway, Kong) | read the LB IP → `*.<dashed-ip>.sslip.io` cert (+ IP-SAN) → `HTTPS` listener (`tls.mode: Terminate`, `certificateRefs`) → per-app `helloweb.<ip>.sslip.io` HTTPRoutes | `make tls-all` |
 | Each alternative classic Ingress controller (HAProxy, NGINX-Inc) | read the LB IP → `*.<dashed-ip>.sslip.io` cert (+ IP-SAN) → a per-class `Ingress` with `spec.tls` + per-app `helloweb.<ip>.sslip.io` host rules | `make tls-all` |
 
-Certificate fields used: `dnsNames` (wildcard sslip.io / `*.localdev.me`) and
-`ipAddresses` (the LB IP as an IP-SAN). Both are signed by `local-ca` with no
-ACME wildcard limit (it's a private CA). Smoke coverage:
-`TEST_TLS=yes make e2e-smoke` asserts the static path + each gateway's sslip.io
-path with `--cacert` (no `-k`).
+Certificate fields used: `dnsNames` (wildcard sslip.io / `*.localdev.me` /
+`*.gw.localdev.me`) and `ipAddresses` (the LB IP as an IP-SAN). Both are signed
+by `local-ca` with no ACME wildcard limit (it's a private CA). Smoke coverage:
+`TEST_TLS=yes make e2e-smoke` asserts the static `*.localdev.me` path, the
+Traefik Gateway `*.gw.localdev.me` path, and each gateway's sslip.io path with
+`--cacert` (no `-k`).
 
-> **Scope note — the one front door without HTTPS (evidence-backed).** `make tls`
-> covers Traefik's **classic Ingress** (`*.localdev.me`) — the same Traefik pod
-> that fronts every demo app. Traefik's *Gateway-API* provider keeps serving
-> **HTTP** on `*.gw.localdev.me`; its HTTPS listener is **deliberately not wired**,
-> and that's a real Traefik limitation, not an oversight. `kind-add-traefik.sh`
-> configures the `websecure` entrypoint with `--entryPoints.websecure.http.tls=true`
-> so the **classic Ingress** terminates TLS on `:443`. Traefik's `kubernetesGateway`
-> provider then cannot also claim `:443` for a Gateway HTTPS listener — adding one
-> leaves the listener `Accepted=False` and Traefik logs
-> `Gateway Not Accepted: Cannot find entryPoint for Gateway: no matching entryPoint
-> for port 443 and protocol "HTTPS"` (verified live, 2026-06-15). Two TLS terminators
-> can't share one entrypoint, and the classic Ingress already gives **this same
-> Traefik pod** trusted HTTPS — so the Gateway-API HTTPS would be redundant, and
-> wiring it would mean either a non-`:443` port or tearing TLS off the working
-> classic-Ingress path. Hence: **9 of the 10 front doors** get trusted HTTPS — the
-> 6 other Gateway API controllers **and** both alternative classic ingresses
-> (HAProxy, NGINX-Inc) via `make tls-all`, plus the Traefik classic Ingress via
-> `make tls`. The Traefik Gateway-API `*.gw.localdev.me` path stays HTTP.
+> **Scope note — both Traefik front doors share one entrypoint (the
+> entrypoint-port detail).** `make tls` wires trusted HTTPS onto **both** of
+> Traefik's paths on the single shared pod: the **classic Ingress**
+> (`*.localdev.me`, via `Ingress.spec.tls`) **and** the **Gateway-API provider**
+> (`*.gw.localdev.me`, via a Gateway `HTTPS` listener). The one non-obvious
+> detail is the **listener port**: Traefik's `kubernetesGateway` provider matches
+> a listener to an entrypoint by the entrypoint's **container** port, not the
+> host port. `kind-add-traefik.sh` exposes `web` on container port **8000**
+> (hostPort 80) and `websecure` on container port **8443** (hostPort 443) — so
+> the HTTP listener uses `port: 8000` and the HTTPS listener must use
+> `port: 8443` (not `443`). Using `443` is what produces
+> `Gateway Not Accepted: … no matching entryPoint for port 443` — there simply is
+> no entrypoint on container port 443. The entrypoint's
+> `--entryPoints.websecure.http.tls=true` is a **per-router-overridable default**
+> (Traefik docs: *"The TLS options can be overridden per router"*), so the
+> classic-Ingress TLS routers and the Gateway HTTPS listener coexist on the one
+> `websecure` entrypoint, each presenting its own cert by SNI (`*.localdev.me`
+> vs `*.gw.localdev.me`, both SANs on the single `lab-localdev-tls` cert).
+> Verified live 2026-06-15 — `port: 8443` against chart 40.3.0 / Traefik v3.7.4,
+> with both `https://helloweb.localdev.me/` and `https://helloweb.gw.localdev.me/`
+> trusted (no `-k`) simultaneously. Hence **all 10 front doors** get trusted
+> HTTPS: both Traefik paths via `make tls`, the other 6 Gateway API controllers
+> and both alternative classic ingresses (HAProxy, NGINX-Inc) via `make tls-all`.
 
 cert-manager / sslip.io references:
 - cert-manager Gateway API usage — <https://cert-manager.io/docs/usage/gateway/>
