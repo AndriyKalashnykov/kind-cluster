@@ -820,6 +820,22 @@ Suppressions (intentional, justified inline):
 - `.trivyignore.yaml` — demo workloads use default securityContext, the in-cluster NFS pod needs privileged mode.
 - `.hadolint.yaml` — `kubectl-test` is a throwaway debug image; alpine-package pinning is overkill.
 
+## CI/CD
+
+GitHub Actions (`runs-on: ubuntu-24.04`, pinned). `ci.yml` runs on every push to `main`, `v*` tags, and pull requests; the heavier end-to-end suites run weekly (and on `workflow_dispatch` + a `paths:`-filtered push of the scripts they exercise) to keep PR feedback fast.
+
+| Workflow | Triggers | What it validates |
+|----------|----------|-------------------|
+| `ci.yml` | push `main` / `v*` / PR | `changes` → `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. Greenfield **cloud-provider-kind** e2e: install scripts + route-readiness poll + `make e2e-smoke` |
+| `e2e-metallb.yml` | weekly + dispatch + paths | **MetalLB** LB path + local-CA TLS (LB-IP assertion) + the **MetalLB → cloud-provider-kind migration** smoke |
+| `gateway-test.yml` | weekly + dispatch + paths | All **7 Gateway API controllers** coexisting + trusted HTTPS (`make tls` / `tls-all`) + a CPK-restart regression guard |
+| `ingress-test.yml` | weekly + dispatch + paths | The 2 **alternative classic Ingress** controllers (HAProxy, NGINX-Inc) on distinct `ingressClassName`s |
+| `monitoring-test.yml` | weekly + dispatch + paths | `kube-prometheus-stack` — Grafana LB IP + admin secret |
+| `registry-test.yml` | weekly + dispatch + paths | The `make registry` local-registry cluster (push → deploy → curl) |
+| `cleanup-runs.yml` | weekly | Prune old runs (keep latest 5) + caches from closed PR branches |
+
+No repository secrets or variables are required beyond the built-in `GITHUB_TOKEN` — the lab runs entirely on local KinD, with no registry push or external API. `static-check` and `e2e` install the pinned toolchain from [`.mise.toml`](./.mise.toml) via `jdx/mise-action`. [Renovate](https://docs.renovatebot.com/) keeps `.mise.toml`, Makefile pins, and GitHub Actions up to date with automerge on green CI. Run `make ci` (or `make ci-run` via [act](https://github.com/nektos/act)) to mirror the pipeline locally.
+
 ## Contributing
 
 Contributions welcome — open a PR. Run `make ci` locally before submitting.

@@ -242,17 +242,9 @@ identical pods.
 So you reach **Traefik** at `http://localhost/` (hostPort) and **Istio** at its
 own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 
-```
-                         ┌─────────────────────── same backend Services ───────────────────────┐
-                         │            helloweb         golang-web         foo-service           │
-                         └───────▲───────────────────────▲──────────────────────▲──────────────┘
-        HTTPRoute(parent=traefik)│                        │ HTTPRoute(parent=istio)
-                ┌────────────────┴───────┐        ┌───────┴──────────────────┐
-   host :80 ───▶│ Traefik  (class traefik)│        │ Istio gw (class istio)   │◀── LB IP (cloud-provider-kind)
-   (hostPort)   │ controllerName:          │        │ controllerName:          │
-                │ traefik.io/gw-controller │        │ istio.io/gw-controller   │
-                └──────────────────────────┘        └──────────────────────────┘
-```
+<img src="diagrams/out/gateway-coexistence.png" alt="Two Gateway API controllers (Traefik + Istio) with distinct GatewayClasses and entry addresses routing to the same backend Services" width="640">
+
+_Source: [`docs/diagrams/gateway-coexistence.puml`](diagrams/gateway-coexistence.puml) — rendered by `make diagrams`._
 
 ### Is it advisable to install all of them?
 
