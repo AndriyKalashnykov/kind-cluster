@@ -6,9 +6,16 @@
 # exported CA cert to get HTTPS with no `-k`. See the README "HTTPS with a
 # locally-trusted CA" section and docs/gateway-api-ingress.md.
 #
-# Requires `make install-all` first (cluster up) and the Gateway API CRDs
-# present — cert-manager's Gateway support (config.enableGatewayAPI=true) needs
-# them at startup. `make tls-all` installs the CRDs if absent.
+# Gateway API support (ENABLE_GATEWAY_API=true, the default) lets cert-manager
+# sign Gateway listener certs — `make tls-all`'s per-gateway *.sslip.io path.
+# The cert-manager CONTROLLER hard-fails at startup when enableGatewayAPI=true
+# but the Gateway API CRDs are absent, so that path requires the CRDs present
+# (`make tls-all` installs them if absent). For a CLASSIC-Ingress-only TLS path
+# (e.g. the MetalLB e2e, which has no Gateway resources), set
+# ENABLE_GATEWAY_API=false: cert-manager then needs no Gateway API CRDs, which
+# also avoids installing the Gateway API `safe-upgrades` ValidatingAdmissionPolicy
+# that would block a later cloud-provider-kind startup from reconciling its own
+# (older, standard-channel) embedded Gateway API CRDs.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,21 +27,27 @@ HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 # Where to write the CA cert for `curl --cacert` (repo root, gitignored).
 CA_CERT_FILE="${CA_CERT_FILE:-lab-ca.crt}"
+# Enable cert-manager's Gateway API support. Default true (the `make tls-all`
+# per-gateway path needs it AND the Gateway API CRDs present). Set false for a
+# classic-Ingress-only TLS path that has no Gateway resources (MetalLB e2e) —
+# avoids the Gateway API CRD requirement and its safe-upgrades VAP. See header.
+ENABLE_GATEWAY_API="${ENABLE_GATEWAY_API:-true}"
 
 # renovate: datasource=docker depName=quay.io/jetstack/charts/cert-manager
 CERT_MANAGER_VERSION=v1.20.2
 CERT_MANAGER_CHART="oci://quay.io/jetstack/charts/cert-manager"
 
-echo "=== Installing cert-manager ${CERT_MANAGER_VERSION} (Gateway API support enabled) ==="
-# config.enableGatewayAPI=true is the CURRENT flag (cert-manager >= 1.15); the
-# old --feature-gates=ExperimentalGatewayAPISupport was removed. crds.enabled
-# installs cert-manager's own CRDs. Gateway support also needs the Gateway API
-# CRDs already present in the cluster.
+echo "=== Installing cert-manager ${CERT_MANAGER_VERSION} (Gateway API support: ${ENABLE_GATEWAY_API}) ==="
+# config.enableGatewayAPI is the CURRENT flag (cert-manager >= 1.15); the old
+# --feature-gates=ExperimentalGatewayAPISupport was removed. crds.enabled
+# installs cert-manager's own CRDs. When enableGatewayAPI=true the controller
+# ALSO needs the Gateway API CRDs already present in the cluster (it crash-loops
+# at startup otherwise); enableGatewayAPI=false drops that requirement entirely.
 "${HELM[@]}" upgrade --install cert-manager "$CERT_MANAGER_CHART" \
     --version "${CERT_MANAGER_VERSION}" \
     --namespace cert-manager --create-namespace \
     --set crds.enabled=true \
-    --set config.enableGatewayAPI=true \
+    --set config.enableGatewayAPI="${ENABLE_GATEWAY_API}" \
     --wait --timeout "${TIMEOUT}"
 "${KUBECTL[@]}" -n cert-manager rollout status deploy/cert-manager-webhook --timeout="${TIMEOUT}"
 

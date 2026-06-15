@@ -16,6 +16,14 @@ on:
       - 'scripts/kind-add-cloud-provider-kind.sh'
       - 'scripts/e2e-smoke.sh'
       - 'scripts/lib.sh'
+      # Trusted-HTTPS chain (TEST_TLS asserts the MetalLB-LB-IP path). Classic
+      # Ingress only here, so cert-manager runs with ENABLE_GATEWAY_API=false and
+      # no Gateway API CRDs are installed (the CRDs' safe-upgrades VAP would
+      # otherwise block the migration step's cloud-provider-kind startup — see
+      # the cert-manager install step's comment).
+      - 'scripts/kind-add-cert-manager.sh'
+      - 'scripts/kind-add-tls.sh'
+      - 'k8s/tls/**'
       - '.github/workflows/e2e-metallb.yml'
 
 permissions:
@@ -28,7 +36,7 @@ concurrency:
 jobs:
   e2e-metallb:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -133,14 +141,43 @@ jobs:
           kubectl -n metallb-system get pods,ipaddresspool,l2advertisement -o wide || true
           exit 1
 
+      # Trusted HTTPS via a local CA (cert-manager + sslip.io). Closes the
+      # MetalLB-TLS coverage gap: the TEST_TLS LB-IP assertion in e2e-smoke.sh
+      # exercises trusted HTTPS terminating through the Traefik Service's
+      # MetalLB-assigned LoadBalancer IP (not just the 127.0.0.1 hostPort), so
+      # the "trusted HTTPS for all front doors" claim is verified under MetalLB
+      # as well as cloud-provider-kind. No gateway/alt-ingress installed here,
+      # so `make tls` (the classic Traefik Ingress cert) is sufficient — no
+      # tls-all.
+      #
+      # ENABLE_GATEWAY_API=false is LOAD-BEARING here, not just an optimisation:
+      # this job's TLS path is classic Ingress only (no Gateway resources), so
+      # cert-manager needs no Gateway API support — AND installing the Gateway
+      # API CRDs would deploy the `safe-upgrades` ValidatingAdmissionPolicy,
+      # which the later migration step's cloud-provider-kind startup trips over.
+      # CPK v0.10.0 force-reconciles its own embedded (standard-channel,
+      # pre-v1.5.0) Gateway API CRDs at startup; the VAP denies that install and
+      # CPK crash-loops without ever assigning a LoadBalancer IP, so the
+      # migration smoke's CPK re-allocation never completes. Keeping Gateway API
+      # out of this job entirely avoids the VAP and lets CPK start cleanly.
+      # See scripts/kind-add-cert-manager.sh header.
+      - name: Install cert-manager + local-CA TLS (classic Ingress, no Gateway API)
+        env:
+          ENABLE_GATEWAY_API: "false"
+        run: |
+          make cert-manager
+          make tls
+
       - name: Smoke test
         # metrics-server + in-cluster NFS are installed above — opt their
-        # assertions in (off by default; install-all omits both). Quoted so
-        # YAML keeps them the literal string "yes" the smoke script compares to.
+        # assertions in (off by default; install-all omits both). TEST_TLS opts
+        # in the trusted-HTTPS assertions (incl. the MetalLB-LB-IP path). Quoted
+        # so YAML keeps them the literal string "yes" the smoke script compares to.
         env:
           LB: metallb
           TEST_METRICS_SERVER: "yes"
           TEST_NFS: "yes"
+          TEST_TLS: "yes"
         run: make e2e-smoke
 
       - name: Verify deploy idempotency
