@@ -722,6 +722,19 @@ if flag_enabled "${TEST_TLS:-}"; then
     fail "STATIC: trusted HTTPS on helloweb.localdev.me failed (run 'make tls')"
   fi
 
+  # Traefik Gateway-API provider HTTPS (*.gw.localdev.me) — only if installed
+  # (make gateway-traefik). Shares the SAME Traefik pod / hostPort 443 as the
+  # classic path above and coexists on the websecure entrypoint (port 8443) via
+  # per-SNI cert resolution. Proves both Traefik TLS paths work simultaneously.
+  if "${KUBECTL[@]}" get gateway traefik-gateway -n default >/dev/null 2>&1; then
+    if curl -sf --cacert "$CA" --resolve helloweb.gw.localdev.me:443:127.0.0.1 \
+         https://helloweb.gw.localdev.me/ 2>/dev/null | grep -qF "Hello, world!"; then
+      pass "GW: https://helloweb.gw.localdev.me/ trusted (no -k) -> Hello, world! (Traefik Gateway, websecure/8443)"
+    else
+      fail "GW: trusted HTTPS on helloweb.gw.localdev.me failed (run 'make tls' after 'make gateway-traefik')"
+    fi
+  fi
+
   # Per-gateway sslip.io paths: each installed Gateway API controller terminates
   # https://helloweb.<lb-ip>.sslip.io/ with its own CA-trusted cert.
   for spec in "istio|default|istio-istio" "ngf|default|ngf-nginx" \
