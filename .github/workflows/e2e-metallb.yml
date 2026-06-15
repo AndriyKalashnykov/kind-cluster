@@ -17,6 +17,8 @@ on:
       - 'scripts/e2e-smoke.sh'
       - 'scripts/lib.sh'
       # Trusted-HTTPS chain (TEST_TLS asserts the MetalLB-LB-IP path).
+      # gateway-api-crds is required before cert-manager (enableGatewayAPI=true).
+      - 'scripts/kind-add-gateway-api-crds.sh'
       - 'scripts/kind-add-cert-manager.sh'
       - 'scripts/kind-add-tls.sh'
       - 'k8s/tls/**'
@@ -136,6 +138,18 @@ jobs:
           kubectl -n traefik logs deploy/traefik --tail=80 || true
           kubectl -n metallb-system get pods,ipaddresspool,l2advertisement -o wide || true
           exit 1
+
+      # Gateway API CRDs must exist BEFORE cert-manager: `make cert-manager` sets
+      # config.enableGatewayAPI=true (the lab's uniform cert-manager config,
+      # required by the gateway-* TLS paths), and the cert-manager *controller*
+      # HARD-FAILS at startup when the CRDs are absent — it crash-loops with
+      # "the Gateway API CRDs do not seem to be present, but
+      # ExperimentalGatewayAPISupport is set to true. Please install the
+      # gateway-api CRDs." The gateway-test/ingress-test paths have these CRDs
+      # already (their controllers install them); e2e-metallb installs no
+      # gateway controller, so install the CRDs explicitly here.
+      - name: Install Gateway API CRDs
+        run: ./scripts/kind-add-gateway-api-crds.sh
 
       # Trusted HTTPS via a local CA (cert-manager + sslip.io). Closes the
       # MetalLB-TLS coverage gap: the TEST_TLS LB-IP assertion in e2e-smoke.sh
