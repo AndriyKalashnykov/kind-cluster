@@ -5,7 +5,7 @@
 
 # Local Kubernetes Lab on KinD
 
-Local Kubernetes lab that runs in Docker via [KinD](https://kind.sigs.k8s.io/) — Traefik ingress with opt-in [Gateway API](docs/gateway-api-ingress.md) (seven coexisting controllers), a software LoadBalancer (cloud-provider-kind or MetalLB), the Headlamp dashboard, RWX (ReadWriteMany) NFS storage, a local image registry, and Prometheus/Grafana monitoring — all preconfigured. Run it on your host, or inside a throwaway Multipass VM.
+Spin up a Kubernetes cluster in Docker ([KinD](https://kind.sigs.k8s.io/)) and compare 3 classic Ingress and 7 [Gateway API](docs/gateway-api-ingress.md) controllers coexisting on it — each on its own LoadBalancer IP, all routing the same demo apps. The LoadBalancer (cloud-provider-kind or MetalLB), Headlamp dashboard, Prometheus/Grafana, ReadWriteMany NFS, and local registry are opt-in; run on your host or a throwaway Multipass VM.
 
 <img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="450">
 
@@ -137,7 +137,7 @@ Every controller's `Gateway` gets its **own** LoadBalancer IP from cloud-provide
 kubectl get gateway
 # NAME              CLASS      ADDRESS      PROGRAMMED
 # traefik-gateway   traefik    172.18.0.4   True
-# demo              istio      172.18.0.6   True
+# istio             istio      172.18.0.6   True
 # ngf               nginx      172.18.0.7   True
 # contour           contour    172.18.0.8   True
 # eg                envoy      172.18.0.9   True
