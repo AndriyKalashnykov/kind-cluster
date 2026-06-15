@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://app.renovatebot.com/dashboard#github/AndriyKalashnykov/kind-cluster)
 
-# kind-cluster — Local Kubernetes Lab on KinD
+# Local Kubernetes Lab on KinD
 
-Local Kubernetes lab on Docker via [KinD](https://kind.sigs.k8s.io/) — Traefik ingress (with opt-in [Gateway API](docs/gateway-api-ingress.md)), a LoadBalancer (cloud-provider-kind, or MetalLB), Headlamp UI, RWX NFS storage, a local image registry, and Prometheus wired up out of the box. Run on your host, or inside a throwaway Multipass VM.
+Local Kubernetes lab that runs in Docker via [KinD](https://kind.sigs.k8s.io/) — Traefik ingress with opt-in [Gateway API](docs/gateway-api-ingress.md) (seven coexisting controllers), a software LoadBalancer (cloud-provider-kind or MetalLB), the Headlamp dashboard, RWX (ReadWriteMany) NFS storage, a local image registry, and Prometheus/Grafana monitoring — all preconfigured. Run it on your host, or inside a throwaway Multipass VM.
 
 <img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="450">
 

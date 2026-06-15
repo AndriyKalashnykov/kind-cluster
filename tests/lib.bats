@@ -52,6 +52,12 @@ Forwarding from 127.0.0.1:2222 -> 80"
     [ "$output" = "foo-control-plane" ]
 }
 
+@test "kube_node_name: defaults to 'kind' when called with no argument" {
+    run kube_node_name
+    [ "$status" -eq 0 ]
+    [ "$output" = "kind-control-plane" ]
+}
+
 # --- flag_enabled ------------------------------------------------------------
 
 @test "flag_enabled: succeeds for exactly 'yes'" {
