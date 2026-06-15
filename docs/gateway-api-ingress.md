@@ -377,6 +377,7 @@ no per-controller special-casing. The runtime LB IP is the only twist:
 |--------|-----------|---------|
 | Default Traefik (classic Ingress) | static `*.localdev.me` wildcard cert → `Ingress.spec.tls` | `make tls` |
 | Each Gateway API controller (Istio, NGF, Contour, Envoy Gateway, kgateway, Kong) | read the LB IP → `*.<dashed-ip>.sslip.io` cert (+ IP-SAN) → `HTTPS` listener (`tls.mode: Terminate`, `certificateRefs`) → per-app `helloweb.<ip>.sslip.io` HTTPRoutes | `make tls-all` |
+| Each alternative classic Ingress controller (HAProxy, NGINX-Inc) | read the LB IP → `*.<dashed-ip>.sslip.io` cert (+ IP-SAN) → a per-class `Ingress` with `spec.tls` + per-app `helloweb.<ip>.sslip.io` host rules | `make tls-all` |
 
 Certificate fields used: `dnsNames` (wildcard sslip.io / `*.localdev.me`) and
 `ipAddresses` (the LB IP as an IP-SAN). Both are signed by `local-ca` with no
@@ -388,7 +389,9 @@ path with `--cacert` (no `-k`).
 > — the same Traefik pod that fronts every demo app. Traefik's *Gateway API*
 > provider keeps serving HTTP on `*.gw.localdev.me`; its dedicated HTTPS-listener
 > wiring is not included (the classic Ingress already gives Traefik trusted
-> HTTPS). The six other Gateway API controllers get HTTPS via `make tls-all`.
+> HTTPS). The six other Gateway API controllers **and** the two alternative
+> classic ingresses (HAProxy, NGINX-Inc) get HTTPS via `make tls-all` — so all
+> nine non-default-Traefik front doors are covered.
 
 cert-manager / sslip.io references:
 - cert-manager Gateway API usage — <https://cert-manager.io/docs/usage/gateway/>
