@@ -194,6 +194,14 @@ The `curl -sI … | grep server` line is how you confirm *which* proxy answered 
 
 > **Why aren't the demo apps renamed per controller?** Because the lab demonstrates "**one set of apps, many front doors**" — every Ingress/Gateway controller routing to the *identical* backend is the point. You differentiate the **routing path** (controller) by its **IP / class**, not by the **app** (name). And a **CNI** is not a front door at all — you reach a workload the same way whatever CNI is installed; the CNI only governs pod-to-pod networking + NetworkPolicy underneath (see [Ingress vs CNI vs Gateway API](#ingress-vs-cni-vs-gateway-api)).
 
+### Verified coexistence notes
+
+All **7 Gateway API controllers + 3 classic Ingress controllers** were validated together on **one** live KinD cluster (`TEST_GATEWAY_API=yes TEST_INGRESS_ALT=yes make e2e-smoke` → 55/55), each `Accepted`, each on its own cloud-provider-kind LoadBalancer IP, all routing the same demo apps. Three facts that surface from running them side by side:
+
+1. **Kong serves *both* APIs from one install.** `make gateway-kong` registers a `GatewayClass` **and** an `IngressClass` (both named `kong`, controller `…konghq.com/kong`). So the single Kong proxy answers Gateway API `HTTPRoute`s *and* classic `Ingress` objects with `ingressClassName: kong` on the same LB IP. The other controllers do one or the other; Traefik also does both (its Gateway API provider runs in the same pod as its classic-Ingress controller).
+2. **`IngressClass nginx` (NGINX Inc.) and `GatewayClass nginx` (NGINX Gateway Fabric) coexist — they are different API objects.** `IngressClass` is `networking.k8s.io`; `GatewayClass` is `gateway.networking.k8s.io`. Same name, different kind, zero collision — verified routing simultaneously on separate LB IPs (`make ingress-nginx` and `make gateway-nginx` can both be enabled).
+3. **Benign: two IngressClasses carry the `is-default-class` annotation** — `traefik` (from `install-all`) and `cloud-provider-kind` (the kind LoadBalancer provider's class). Kubernetes only applies a default to `Ingress` objects that **omit** `ingressClassName`; **every** `Ingress` in this repo sets it explicitly, so the duplicate default is inert (the 55/55 smoke confirms it). If you add your own `Ingress` without a class, set `ingressClassName` explicitly to avoid ambiguity.
+
 📖 **Full comparison (Traefik vs Istio vs Cilium/Calico), coexistence mechanics, and "is it advisable to run all of them?" — see [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md).**
 
 ## Ingress vs CNI vs Gateway API
