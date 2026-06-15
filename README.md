@@ -58,7 +58,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | 8.30.1 |
-| [trivy](https://github.com/aquasecurity/trivy) | 0.71.0 |
+| [trivy](https://github.com/aquasecurity/trivy) | 0.71.1 |
 | [hadolint](https://github.com/hadolint/hadolint) | 2.14.0 |
 | [act](https://github.com/nektos/act) | 0.2.89 |
 | [bats](https://github.com/bats-core/bats-core) | 1.13.0 |
