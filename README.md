@@ -325,7 +325,7 @@ The seven Gateway API controllers wired in this repo. Conformance badges are fro
 
 ## HTTPS with a locally-trusted CA
 
-Every front door above can serve **trusted HTTPS** — real certificates, validated with **no `-k`** — **entirely offline**: no Let's Encrypt, no public domain, no secrets. [cert-manager](https://cert-manager.io/) issues the certs from a **local self-signed CA**, and [sslip.io](https://sslip.io) provides resolvable hostnames for the dynamic LoadBalancer IPs. Opt-in: `make cert-manager` then `make tls` / `make tls-all`.
+The front doors above serve **trusted HTTPS** — real certificates, validated with **no `-k`** — **entirely offline**: no Let's Encrypt, no public domain, no secrets. [cert-manager](https://cert-manager.io/) issues the certs from a **local self-signed CA**, and [sslip.io](https://sslip.io) provides resolvable hostnames for the dynamic LoadBalancer IPs. Opt-in: `make cert-manager` then `make tls` / `make tls-all`. This covers **9 of the 10** front doors — the Traefik classic Ingress plus all 6 Gateway API controllers and both alternative classic ingresses; the one exception (Traefik's *Gateway-API* provider on `*.gw.localdev.me`) is a deliberate, documented limitation, not a gap — see the scope note in [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md#https-with-a-locally-trusted-ca) (the same Traefik pod already serves trusted HTTPS via its classic Ingress).
 
 <img src="docs/diagrams/out/tls-flow.png" alt="HTTPS with a locally-trusted CA — cert-manager → CA → Certificate → Secret → HTTPS listener → trusted curl" width="820">
 
