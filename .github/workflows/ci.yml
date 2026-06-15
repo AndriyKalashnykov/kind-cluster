@@ -72,6 +72,10 @@ jobs:
     if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # No jdx/mise-action here (unlike static-check/e2e): `make image-test` ->
+    # image-build -> deps-docker is a `command -v docker` check + `docker build`
+    # / `docker run`. It installs NO .mise.toml tool, so `mise install` never
+    # runs and the anonymous-API rate-limit concern does not apply. Docker-only.
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
