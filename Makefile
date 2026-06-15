@@ -324,7 +324,7 @@ gateway-kong: deps
 cert-manager: deps
 	@./scripts/kind-add-cert-manager.sh
 
-#tls: @ Opt-in: trusted HTTPS on the default Traefik front door (*.localdev.me / *.gw.localdev.me, local-CA cert). Run 'make cert-manager' first
+#tls: @ Opt-in: trusted HTTPS on the default Traefik classic Ingress (*.localdev.me, local-CA cert). Run 'make cert-manager' first
 tls: deps
 	@./scripts/kind-add-tls.sh
 

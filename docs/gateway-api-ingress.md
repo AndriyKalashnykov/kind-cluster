@@ -332,6 +332,72 @@ Smoke coverage for the Gateway API paths is gated behind `TEST_GATEWAY_API=yes`
 
 ---
 
+## HTTPS with a locally-trusted CA
+
+Every front door (classic Ingress and all Gateway API controllers) can serve
+**trusted** HTTPS — validated with no `-k` — **fully offline**: no Let's Encrypt,
+no public domain, no secrets. Opt-in via `make cert-manager` then `make tls` /
+`make tls-all`.
+
+**Why not the usual ACME path.** A local cluster's LoadBalancer IPs are on the
+`kind` Docker bridge (`172.18.0.0/16`) — not routable from the internet — so
+Let's Encrypt **HTTP-01** can't reach them, and **DNS-01** needs a real owned
+domain + provider token. So this lab uses a **local self-signed CA** instead:
+offline, no secrets, and you trust the CA cert yourself.
+
+**The chain (`make cert-manager`).** cert-manager **v1.20.2** is installed via
+its OCI Helm chart with **`config.enableGatewayAPI=true`** — the current flag
+(*"since cert-manager 1.15, Gateway API support is no longer gated behind a
+feature flag"*; the old `--feature-gates=ExperimentalGatewayAPISupport` is
+removed). It then applies `k8s/tls/ca-bootstrap.yaml`:
+
+```
+selfsigned-issuer (selfSigned ClusterIssuer)
+   └─> lab-root-ca (Certificate, isCA) -> Secret lab-root-ca (cert-manager ns)
+          └─> local-ca (CA ClusterIssuer) — signs every leaf cert
+```
+
+The CA cert is exported to `lab-ca.crt` (gitignored). Trust it per-request
+(`curl --cacert lab-ca.crt …`) or system-wide
+(`sudo cp lab-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates`).
+
+**DNS via sslip.io.** `sslip.io` returns the IP embedded in a hostname:
+`helloweb.172-18-0-6.sslip.io` → `172.18.0.6`, and the wildcard
+`*.172-18-0-6.sslip.io` matches every single-label prefix — so each gateway's
+runtime LoadBalancer IP gets resolvable HTTPS names with **zero record
+management**. The default Traefik path keeps the existing `*.localdev.me` →
+`127.0.0.1`.
+
+**Wiring, and the one constraint.** The leaf cert's Secret **must live in the
+same namespace as the Ingress/Gateway** that references it (the Gateway API
+spec default, and cert-manager's shim limit) — uniform across all controllers,
+no per-controller special-casing. The runtime LB IP is the only twist:
+
+| Target | Mechanism | Command |
+|--------|-----------|---------|
+| Default Traefik (classic Ingress) | static `*.localdev.me` wildcard cert → `Ingress.spec.tls` | `make tls` |
+| Each Gateway API controller (Istio, NGF, Contour, Envoy Gateway, kgateway, Kong) | read the LB IP → `*.<dashed-ip>.sslip.io` cert (+ IP-SAN) → `HTTPS` listener (`tls.mode: Terminate`, `certificateRefs`) → per-app `helloweb.<ip>.sslip.io` HTTPRoutes | `make tls-all` |
+
+Certificate fields used: `dnsNames` (wildcard sslip.io / `*.localdev.me`) and
+`ipAddresses` (the LB IP as an IP-SAN). Both are signed by `local-ca` with no
+ACME wildcard limit (it's a private CA). Smoke coverage:
+`TEST_TLS=yes make e2e-smoke` asserts the static path + each gateway's sslip.io
+path with `--cacert` (no `-k`).
+
+> **Scope note.** `make tls` covers Traefik's **classic Ingress** (`*.localdev.me`)
+> — the same Traefik pod that fronts every demo app. Traefik's *Gateway API*
+> provider keeps serving HTTP on `*.gw.localdev.me`; its dedicated HTTPS-listener
+> wiring is not included (the classic Ingress already gives Traefik trusted
+> HTTPS). The six other Gateway API controllers get HTTPS via `make tls-all`.
+
+cert-manager / sslip.io references:
+- cert-manager Gateway API usage — <https://cert-manager.io/docs/usage/gateway/>
+- cert-manager self-signed / CA issuers — <https://cert-manager.io/docs/configuration/selfsigned/> · <https://cert-manager.io/docs/configuration/ca/>
+- Gateway API TLS guide — <https://gateway-api.sigs.k8s.io/guides/tls/>
+- sslip.io — <https://sslip.io>
+
+---
+
 ## References
 
 Gateway API

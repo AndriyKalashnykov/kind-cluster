@@ -323,6 +323,41 @@ The seven Gateway API controllers wired in this repo. Conformance badges are fro
 
 ¹ Kong's conformance is **split**: the registry lists KIC as *stale* v1.2.1, but the newer **Kong Operator** is *partial* v1.5.1; KIC's `go.mod` actually vendors gateway-api v1.3.0, so it clears the floor. ² kgateway UDPRoute not confirmed in docs (flagged, not assumed). ³ Kong's **unmanaged** Gateway binds to one shared proxy Service (not per-Gateway). ⁴ Contour serves classic Ingress in its *primary* mode; the Gateway-provisioner mode used here is Gateway-API-focused. ⁵ Envoy Gateway is a subproject of **Envoy** (CNCF **Graduated**); the registry lists it *partially* conformant. Versions: Istio 1.30.1 · NGF 2.6.3 · Contour v1.33.5 · Envoy GW v1.8.1 · kgateway v2.3.3 · Kong `kong/ingress` 0.24.0.
 
+## HTTPS with a locally-trusted CA
+
+Every front door above can serve **trusted HTTPS** — real certificates, validated with **no `-k`** — **entirely offline**: no Let's Encrypt, no public domain, no secrets. [cert-manager](https://cert-manager.io/) issues the certs from a **local self-signed CA**, and [sslip.io](https://sslip.io) provides resolvable hostnames for the dynamic LoadBalancer IPs. Opt-in: `make cert-manager` then `make tls` / `make tls-all`.
+
+<img src="docs/diagrams/out/tls-flow.png" alt="HTTPS with a locally-trusted CA — cert-manager → CA → Certificate → Secret → HTTPS listener → trusted curl" width="820">
+
+**The mechanism (all local, no public DNS, no secrets):**
+
+- **Local CA.** `make cert-manager` installs cert-manager (`config.enableGatewayAPI=true`) and bootstraps a chain: a **selfSigned** `ClusterIssuer` signs a root **CA** certificate (`isCA`), and the **`local-ca`** CA `ClusterIssuer` then mints a leaf cert for **any** hostname/IP you ask for. It exports the CA to **`lab-ca.crt`** — trust that (`curl --cacert lab-ca.crt …`, or system-wide via `update-ca-certificates`) and the `-k` disappears.
+- **DNS via sslip.io.** Each gateway's cloud-provider-kind LoadBalancer IP gets a free resolvable name — `helloweb.172-18-0-6.sslip.io` → `172.18.0.6` — and a wildcard `*.172-18-0-6.sslip.io` covers all apps on that IP. **No record management.** (The default Traefik path keeps using the existing `*.localdev.me` → `127.0.0.1`.)
+- **HTTPS listeners.** Each front door references the cert Secret — classic Ingress via `spec.tls`, Gateway API via an `HTTPS` listener (`tls.mode: Terminate` + `certificateRefs`). The one rule, uniform across all controllers: the **TLS Secret lives in the same namespace as the Ingress/Gateway** that references it.
+
+**The one constraint — runtime LoadBalancer IPs — handled two ways:**
+
+| Target | How | Command |
+|--------|-----|---------|
+| **Default Traefik** (classic Ingress) | Static `localhost` via `*.localdev.me` → one wildcard cert, wired once | `make tls` |
+| **Per-gateway** (Istio, NGF, Contour, Envoy Gateway, kgateway, Kong) | Each LB IP is assigned at runtime, so the script reads it, mints a `*.<dashed-ip>.sslip.io` cert (+ the IP as an IP-SAN), adds the HTTPS listener, and templates per-app `helloweb.<ip>.sslip.io` HTTPRoutes | `make tls-all` |
+
+```bash
+make install-all                 # cluster + Traefik + demo apps
+make cert-manager                # cert-manager + local-ca ClusterIssuer; writes lab-ca.crt
+make tls                         # trusted HTTPS on the Traefik classic Ingress (*.localdev.me)
+
+# Trusted — note the absence of -k:
+curl --cacert lab-ca.crt --resolve helloweb.localdev.me:443:127.0.0.1 https://helloweb.localdev.me/
+
+# Per Gateway API controller (after enabling them with make gateway-*):
+make gateway-istio && make tls-all
+IP=$(kubectl -n default get svc istio-istio -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+curl --cacert lab-ca.crt "https://helloweb.$(echo "$IP" | tr . -).sslip.io/"   # -> Hello, world!
+```
+
+Smoke-assert the whole thing (trusted, no `-k`) with `TEST_TLS=yes make e2e-smoke`. Verified live: the static `*.localdev.me` path plus the per-LB-IP `*.sslip.io` paths on Istio, NGF, Contour, and kgateway. See [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md#https-with-a-locally-trusted-ca) for the full wiring.
+
 ## Headlamp install
 
 Pinned to Helm chart [`headlamp`](https://github.com/kubernetes-sigs/headlamp) **0.42.0**. Headlamp is the SIG-UI-endorsed successor to the [archived](https://github.com/kubernetes/dashboard) kubernetes/dashboard project — a single Pod fronted by a ClusterIP Service on port 80 (HTTP), with token-based login.
