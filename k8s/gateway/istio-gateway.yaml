@@ -1,6 +1,6 @@
 # Istio Gateway API demo — a Gateway bound to Istio's built-in `istio`
 # GatewayClass (controllerName istio.io/gateway-controller). Applying this Gateway
-# auto-provisions an Envoy Deployment+Service named "demo-istio" (<gateway>-<class>)
+# auto-provisions an Envoy Deployment+Service named "istio-istio" (<gateway>-<class>)
 # in the default namespace; that Service is type LoadBalancer, so cloud-provider-kind
 # hands it its OWN external IP — a distinct front door from Traefik's hostPort 80.
 #
@@ -10,7 +10,7 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: demo
+  name: istio
   namespace: default
 spec:
   gatewayClassName: istio
@@ -29,7 +29,7 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-    - name: demo
+    - name: istio
   hostnames: ["helloweb.localdev.me"]
   rules:
     - matches:
@@ -45,7 +45,7 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-    - name: demo
+    - name: istio
   hostnames: ["golang.localdev.me"]
   rules:
     - matches:
@@ -61,7 +61,7 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-    - name: demo
+    - name: istio
   hostnames: ["foo.localdev.me"]
   rules:
     - matches:

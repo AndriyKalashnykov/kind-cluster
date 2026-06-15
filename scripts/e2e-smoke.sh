@@ -432,7 +432,7 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
   fi
   ISTIO_GW_IP=""
   for _ in $(seq 1 30); do
-    ISTIO_GW_IP=$("${KUBECTL[@]}" -n default get svc demo-istio -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    ISTIO_GW_IP=$("${KUBECTL[@]}" -n default get svc istio-istio -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
     [ -n "$ISTIO_GW_IP" ] && break
     sleep 2
   done
@@ -453,7 +453,7 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
     fi
     check_curl "golang /healthz via Istio Gateway" "http://${ISTIO_GW_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
   else
-    fail "Istio gateway Service demo-istio got no LoadBalancer IP within 60s"
+    fail "Istio gateway Service istio-istio got no LoadBalancer IP within 60s"
   fi
 
   # NGINX Gateway Fabric: coexists with Traefik+Istio (distinct controllerName),

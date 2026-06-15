@@ -74,7 +74,7 @@ jobs:
           kubectl -n traefik get pods -o wide
           exit 1
 
-      - name: Enable Traefik Gateway API
+      - name: Enable Traefik Gateway API provider
         run: make gateway-traefik
 
       - name: Install Istio Gateway API controller
@@ -92,7 +92,7 @@ jobs:
       - name: Install kgateway controller
         run: make gateway-kgateway
 
-      - name: Install Kong controller
+      - name: Install Kong Gateway API controller
         run: make gateway-kong
 
       # Asserts all Gateway API controllers (Traefik provider + Istio + NGINX

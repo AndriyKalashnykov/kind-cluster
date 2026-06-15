@@ -39,13 +39,13 @@ helm repo update istio >/dev/null
 echo "=== Applying Istio Gateway + HTTPRoutes (auto-provisions an Envoy gateway) ==="
 "${KUBECTL[@]}" apply -f k8s/gateway/istio-gateway.yaml
 # Applying the Gateway (gatewayClassName: istio) auto-creates Deployment+Service
-# named "<gateway>-<class>" = "demo-istio" in the default namespace.
-"${KUBECTL[@]}" -n default rollout status deployment/demo-istio --timeout="${TIMEOUT}"
+# named "<gateway>-<class>" = "istio-istio" in the default namespace.
+"${KUBECTL[@]}" -n default rollout status deployment/istio-istio --timeout="${TIMEOUT}"
 
 echo "Istio Gateway API installed. Its gateway Service gets its own LoadBalancer IP:"
-"${KUBECTL[@]}" -n default get svc demo-istio \
+"${KUBECTL[@]}" -n default get svc istio-istio \
   -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true
 echo ""
 echo "Reach the same demo apps via Istio, e.g.:"
-echo "  IP=\$(kubectl -n default get svc demo-istio -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
+echo "  IP=\$(kubectl -n default get svc istio-istio -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
 echo "  curl -H 'Host: helloweb.localdev.me' http://\$IP/"
