@@ -85,6 +85,12 @@ TEST_GATEWAY_API=yes make e2e-smoke    # Smoke-assert all Gateway API controller
 make ingress-haproxy                   # Install HAProxy (haproxytech) as an alternative classic Ingress controller (ingressClassName: haproxy, own LB IP, same apps)
 make ingress-nginx                     # Install NGINX Inc. (F5 OSS) as an alternative classic Ingress controller (ingressClassName: nginx, own LB IP, same apps)
 TEST_INGRESS_ALT=yes make e2e-smoke    # Smoke-assert the alternative classic Ingress controllers (after the targets above)
+
+# Trusted HTTPS via a local CA (opt-in; cert-manager + sslip.io, fully offline)
+make cert-manager                      # Install cert-manager + a local self-signed CA (local-ca ClusterIssuer); exports lab-ca.crt
+make tls                               # Trusted HTTPS on the Traefik classic Ingress (*.localdev.me, local-CA cert)
+make tls-all                           # Trusted HTTPS on every installed Gateway API controller via per-LB-IP *.sslip.io certs
+TEST_TLS=yes make e2e-smoke            # Smoke-assert trusted HTTPS (--cacert, no -k): static *.localdev.me + each gateway's *.sslip.io
 ```
 
 `make ci-run` only iterates `static-check` + `docker` jobs under `act`. The `e2e` and `e2e-metallb` jobs are skipped because KinD's Docker-in-Docker requirement is unstable under `act push`. Push to a feature branch and watch the real workflow when changing anything in the e2e path (deploy scripts, ingress wiring, K8s manifests).
@@ -103,6 +109,7 @@ TEST_INGRESS_ALT=yes make e2e-smoke    # Smoke-assert the alternative classic In
 
 The following paths require resources GitHub-hosted runners can't reliably provide; they are verified manually before each release:
 
+- **`make cert-manager` / `make tls` / `make tls-all` (local-CA HTTPS)** — opt-in, off the default install-all path (like the monitoring/gateway/ingress add-ons). The `TEST_TLS=yes make e2e-smoke` block asserts trusted HTTPS (`--cacert`, no `-k`) on the static `*.localdev.me` path and each installed gateway's `*.<lb-ip>.sslip.io` path. Validated live (cert-manager v1.20.2 + a local CA + sslip.io: static + Istio/NGF/Contour/kgateway all trusted) before merge; not yet wired into a weekly cron. Verify with `make install-all && make gateway-* && make cert-manager && make tls && make tls-all && TEST_TLS=yes make e2e-smoke`.
 - **`make vm-up` / `make vm-install-all` (Multipass)** — nested virtualization isn't reliably supported on `ubuntu-24.04` GitHub-hosted runners; cloud-init bootstrap takes 3–5 minutes; CI cost outweighs catch rate. Verify locally before tagging a release.
 - **`make nfs-host-setup`** — modifies `/etc/exports`, opens the firewall, requires interactive `sudo`. Out of scope for unattended CI. Verify locally on Ubuntu/Debian before tagging. The host-NFS provisioner has an opt-in smoke assertion gated behind `TEST_NFS_HOST=yes` (asserts the `nfs-host` StorageClass exists and `k8s/nfs/pvc.yaml`'s `demo-claim` PVC binds); it stays manual-only for the same reason — run `make nfs-host-setup && make nfs-host-provisioner NFS_SERVER=<ip>` then `TEST_NFS_HOST=yes make e2e-smoke`.
 

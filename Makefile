@@ -320,6 +320,18 @@ gateway-kgateway: deps
 gateway-kong: deps
 	@./scripts/kind-add-gateway-kong.sh
 
+#cert-manager: @ Opt-in: install cert-manager + a local self-signed CA (local-ca ClusterIssuer); exports lab-ca.crt for trusted HTTPS (no -k). See README "HTTPS with a locally-trusted CA"
+cert-manager: deps
+	@./scripts/kind-add-cert-manager.sh
+
+#tls: @ Opt-in: trusted HTTPS on the default Traefik classic Ingress (*.localdev.me, local-CA cert). Run 'make cert-manager' first
+tls: deps
+	@./scripts/kind-add-tls.sh
+
+#tls-all: @ Opt-in: trusted HTTPS on every installed Gateway API controller via per-LB-IP *.sslip.io certs. Run 'make cert-manager' (+ gateway-* targets) first
+tls-all: deps
+	@./scripts/kind-add-tls-all.sh
+
 #lb-metallb: @ Install MetalLB load balancer (alternative to 'make lb-cpk'; use LB=metallb with install-all)
 lb-metallb: deps
 	@./scripts/kind-add-metallb.sh
@@ -427,6 +439,7 @@ clean:
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
 	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour gateway-envoy gateway-kgateway gateway-kong \
 	ingress-haproxy ingress-nginx \
+	cert-manager tls tls-all \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
 	deploy-app-ingress-localhost deploy-app-helloweb \

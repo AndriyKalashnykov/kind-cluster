@@ -693,6 +693,57 @@ if flag_enabled "${TEST_INGRESS_ALT:-}"; then
   done
 fi
 
+# --- Trusted HTTPS via cert-manager local CA (opt-in via TEST_TLS=yes) ---
+# Off by default because install-all does NOT install cert-manager. Run
+# `make cert-manager && make tls` (and `make tls-all` after any gateway-*),
+# then TEST_TLS=yes make e2e-smoke. Asserts trusted HTTPS (--cacert, NO -k):
+# the static Traefik *.localdev.me path and each installed gateway's
+# *.<lb-ip>.sslip.io path. See README "HTTPS with a locally-trusted CA".
+if flag_enabled "${TEST_TLS:-}"; then
+  echo ""
+  echo "=== Trusted HTTPS (TEST_TLS=yes) ==="
+  CA="${CA_CERT_FILE:-$REPO_ROOT/lab-ca.crt}"
+  # Re-export the CA if the file is absent (e.g. fresh checkout on the runner).
+  if [ ! -s "$CA" ]; then
+    "${KUBECTL[@]}" get secret lab-root-ca -n cert-manager -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d > "$CA" || true
+  fi
+  if "${KUBECTL[@]}" get clusterissuer local-ca -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q '^True$'; then
+    pass "local-ca ClusterIssuer is Ready"
+  else
+    fail "local-ca ClusterIssuer not Ready — run 'make cert-manager'"
+  fi
+  if [ -s "$CA" ]; then pass "CA cert present ($(wc -c <"$CA" | tr -d ' ') bytes)"; else fail "CA cert ($CA) missing"; fi
+
+  # Static Traefik path: *.localdev.me over the hostPort 443, trusted (no -k).
+  if curl -sf --cacert "$CA" --resolve helloweb.localdev.me:443:127.0.0.1 \
+       https://helloweb.localdev.me/ 2>/dev/null | grep -qF "Hello, world!"; then
+    pass "STATIC: https://helloweb.localdev.me/ trusted (no -k) -> Hello, world!"
+  else
+    fail "STATIC: trusted HTTPS on helloweb.localdev.me failed (run 'make tls')"
+  fi
+
+  # Per-gateway sslip.io paths: each installed Gateway API controller terminates
+  # https://helloweb.<lb-ip>.sslip.io/ with its own CA-trusted cert.
+  for spec in "istio|default|istio-istio" "ngf|default|ngf-nginx" \
+              "contour|default|envoy-contour" "kgw|default|kgw"; do
+    GW="${spec%%|*}"; rest="${spec#*|}"; GNS="${rest%%|*}"; GSVC="${rest##*|}"
+    "${KUBECTL[@]}" get gateway "$GW" -n default >/dev/null 2>&1 || continue
+    GIP=$("${KUBECTL[@]}" -n "$GNS" get svc "$GSVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [ -n "$GIP" ] || { fail "TLS $GW: no LB IP"; continue; }
+    HOST=$(sslip_host helloweb "$GIP")
+    OK=""
+    for _ in $(seq 1 20); do
+      curl -sf --cacert "$CA" "https://${HOST}/" 2>/dev/null | grep -qF "Hello, world!" && { OK=yes; break; }
+      sleep 2
+    done
+    if [ -n "$OK" ]; then
+      pass "SSLIP $GW: https://${HOST}/ trusted (no -k) -> Hello, world!"
+    else
+      fail "SSLIP $GW: trusted HTTPS on ${HOST} failed (run 'make tls-all')"
+    fi
+  done
+fi
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]

@@ -70,3 +70,20 @@ kind_load_image() {
     kind load image-archive "$archive" --name "$cluster"
     rm -f "$archive"
 }
+
+# dash_ip <dotted-ipv4>
+#   Convert a dotted IPv4 (172.18.0.6) to the dash form sslip.io accepts in a
+#   hostname label (172-18-0-6). Pure; unit-tested in tests/lib.bats.
+dash_ip() {
+    printf '%s' "${1:-}" | tr '.' '-'
+}
+
+# sslip_host <label> <dotted-ipv4>
+#   Build the sslip.io hostname that resolves to <ip> for a given app <label>,
+#   e.g. sslip_host helloweb 172.18.0.6 -> helloweb.172-18-0-6.sslip.io. sslip.io
+#   returns the embedded IP regardless of the leading label, so this is how each
+#   per-LB-IP gateway exposes the demo apps over real (resolvable) HTTPS names.
+#   Pure; unit-tested in tests/lib.bats.
+sslip_host() {
+    printf '%s.%s.sslip.io' "${1:-}" "$(dash_ip "${2:-}")"
+}

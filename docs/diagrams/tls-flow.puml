@@ -1,0 +1,47 @@
+@startuml tls-flow
+' HTTPS with a locally-trusted CA — how cert-manager + a local self-signed CA
+' issue workload certs and how a trusted request flows. Rendered by `make diagrams`.
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundCorner 6
+skinparam defaultFontName "Inter, Helvetica, Arial, sans-serif"
+skinparam defaultFontSize 13
+skinparam sequenceArrowThickness 1.2
+skinparam ParticipantBorderColor #1E3A8A
+skinparam ParticipantBackgroundColor #2563EB
+skinparam ParticipantFontColor #FFFFFF
+skinparam ActorBorderColor #134E4A
+skinparam ActorBackgroundColor #0F766E
+skinparam ActorFontColor #FFFFFF
+skinparam NoteBackgroundColor #F1F5F9
+skinparam NoteBorderColor #94A3B8
+
+title HTTPS with a locally-trusted CA (cert-manager + sslip.io, fully offline)
+
+actor "curl / browser\n(trusts lab-ca.crt)" as cli
+participant "cert-manager" as cm
+participant "local-ca\nClusterIssuer" as ca
+participant "Certificate\n*.localdev.me /\n*.<lb-ip>.sslip.io" as cert
+participant "Secret\ntls.crt + tls.key" as sec
+participant "HTTPS listener\nIngress.spec.tls /\nGateway certificateRefs" as fd
+participant "demo app\n(helloweb / golang / foo)" as app
+
+== make cert-manager ==
+cm -> ca : selfSigned Issuer -> CA cert (isCA)\n-> local-ca CA ClusterIssuer
+cm -> cli : export CA -> lab-ca.crt\n(trust it: no more -k)
+
+== make tls  /  make tls-all ==
+ca -> cert : sign leaf cert\n(dnsNames + IP SAN)
+cert -> sec : cert-manager writes\ntls.crt / tls.key
+sec -> fd : referenced by\nthe front door
+
+== request (trusted, no -k) ==
+cli -> fd : TLS handshake, SNI =\nhelloweb.localdev.me  or\nhelloweb.<lb-ip>.sslip.io
+note right of fd
+  DNS: *.localdev.me -> 127.0.0.1 (hostPort)
+  sslip.io: helloweb.<lb-ip>.sslip.io -> the gateway's LB IP
+  cert validates against lab-ca.crt -> no -k
+end note
+fd -> app : terminate TLS, route by Host
+app -> cli : 200  "Hello, world!"
+@enduml
