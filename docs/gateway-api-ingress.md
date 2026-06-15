@@ -4,14 +4,15 @@
 > the strategic successor to classic **Ingress**, and a fact-checked comparison of
 > the headline Gateway API implementations — **Traefik**, **Istio**, and a
 > CNI-integrated option (**Cilium** / **Calico**) — plus additional opt-in
-> conformant controllers (**NGINX Gateway Fabric**, **Contour**) wired as extra
-> GatewayClasses, including how to run more than one of them in the same cluster.
+> conformant controllers (**NGINX Gateway Fabric**, **Contour**, **Envoy Gateway**,
+> **kgateway**, **Kong**) wired as extra GatewayClasses, including how to run more
+> than one of them in the same cluster.
 >
 > Every version, conformance status, and behaviour below is cited to a primary
-> source (see [References](#references)). Verified 2026-06-06 against Gateway API
-> **v1.5.1**, Traefik chart **40.2.0** (appVersion **v3.7.1**), Istio **1.30.1**,
-> NGINX Gateway Fabric **2.6.3**, Contour **v1.33.5**,
-> Cilium **v1.19.4**, Calico **v3.32.0**.
+> source (see [References](#references)). Verified 2026-06-15 against Gateway API
+> **v1.5.1**, Traefik chart **40.3.0** (appVersion **v3.7.4**), Istio **1.30.1**,
+> NGINX Gateway Fabric **2.6.3**, Contour **v1.33.5**, Envoy Gateway **v1.8.1**,
+> kgateway **v2.3.3**, Kong/KIC chart **0.24.0**, Cilium **v1.19.4**, Calico **v3.32.0**.
 
 ## TL;DR
 
@@ -37,6 +38,11 @@
   - `make gateway-contour` — installs **Project Contour** via its **Gateway
     provisioner**; each Gateway gets its own Envoy data plane + LoadBalancer IP,
     fronting the **same** demo apps.
+  - `make gateway-envoy` / `make gateway-kgateway` / `make gateway-kong` — three
+    more conformant controllers (**Envoy Gateway** and **kgateway** are CNCF;
+    **Kong**/KIC binds its GatewayClass to one shared proxy in unmanaged mode),
+    each fronting the **same** demo apps on its own LB IP. All seven are detailed
+    in the [wiring table](#how-this-project-wires-it).
 - **Antrea is not in this comparison.** Antrea is a **CNI**, not a Gateway API
   controller — its "gateway" (`antrea-gw0`) is an Open vSwitch dataplane interface,
   unrelated to `gateway.networking.k8s.io`. If you want a **CNI-integrated**
@@ -220,9 +226,9 @@ GatewayClasses coexist and each controller ignores the other's Gateways.
 
 **2. Same app, two front doors.** An `HTTPRoute` names its Gateway in
 `parentRefs` and its Services in `backendRefs`; nothing ties a Service to one
-route. So `demo-route-traefik` (→ Traefik Gateway) and `demo-route-istio`
-(→ Istio Gateway) can both carry `backendRefs: helloweb` — both gateways front
-the identical pods.
+route. So an `HTTPRoute` parented to the Traefik Gateway and one parented to the
+Istio Gateway can both carry `backendRefs: helloweb` — both gateways front the
+identical pods.
 
 **3. The only real contention is the entry-point address:**
 
