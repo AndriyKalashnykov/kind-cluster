@@ -1,0 +1,19 @@
+# Leaf wildcard cert for the DEFAULT Traefik front door (classic Ingress on
+# *.localdev.me + the Traefik Gateway on *.gw.localdev.me), signed by the local
+# CA. Lives in `default` (same namespace as the demo-apps Ingress and the
+# traefik-gateway Gateway, so each can reference the Secret). Applied by
+# scripts/kind-add-tls.sh.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lab-localdev-tls
+  namespace: default
+spec:
+  secretName: lab-localdev-tls
+  dnsNames:
+    - "*.localdev.me"
+    - "*.gw.localdev.me"
+  issuerRef:
+    name: local-ca
+    kind: ClusterIssuer
+    group: cert-manager.io

@@ -1,0 +1,44 @@
+# Local self-signed CA for issuing workload TLS certs entirely offline — no
+# Let's Encrypt, no public DNS, no secrets. Applied by scripts/kind-add-cert-manager.sh.
+#
+#   selfsigned-issuer (selfSigned ClusterIssuer)
+#        └─> lab-root-ca (CA Certificate, isCA:true) -> Secret lab-root-ca (cert-manager ns)
+#                 └─> local-ca (CA ClusterIssuer) signs every leaf cert
+#
+# `make tls` and `make tls-all` issue leaf certs from `local-ca`; trust the
+# exported lab-ca.crt to get HTTPS with no `-k`. See the README "HTTPS with a
+# locally-trusted CA" section and docs/gateway-api-ingress.md.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lab-root-ca
+  # cert-manager reads a ClusterIssuer's CA secret from its own namespace
+  # (--cluster-resource-namespace, default `cert-manager`), so the root CA
+  # Secret must live here.
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: kind-lab-local-ca
+  secretName: lab-root-ca
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: local-ca
+spec:
+  ca:
+    secretName: lab-root-ca

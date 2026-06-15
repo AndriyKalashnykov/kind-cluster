@@ -110,3 +110,25 @@ Forwarding from 127.0.0.1:2222 -> 80"
     run normalize_arch
     [ "$output" = "" ]
 }
+
+# --- dash_ip / sslip_host ----------------------------------------------------
+
+@test "dash_ip: converts dotted IPv4 to dash form" {
+    run dash_ip 172.18.0.6
+    [ "$output" = "172-18-0-6" ]
+}
+
+@test "dash_ip: empty input yields empty" {
+    run dash_ip ""
+    [ "$output" = "" ]
+}
+
+@test "sslip_host: builds <label>.<dashed-ip>.sslip.io" {
+    run sslip_host helloweb 172.18.0.6
+    [ "$output" = "helloweb.172-18-0-6.sslip.io" ]
+}
+
+@test "sslip_host: a different IP and label" {
+    run sslip_host golang 172.18.0.10
+    [ "$output" = "golang.172-18-0-10.sslip.io" ]
+}

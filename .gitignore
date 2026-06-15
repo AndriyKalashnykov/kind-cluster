@@ -30,3 +30,4 @@ docs/diagrams/drawio/
 # PlantUML re-render trigger stamp (make diagrams) — its filename encodes
 # PLANTUML_VERSION to force a re-render on a pinned-image bump. Not an artifact.
 docs/diagrams/out/.plantuml-*.stamp
+lab-ca.crt
