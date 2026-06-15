@@ -17,9 +17,15 @@ on:
       - 'scripts/kind-add-gateway-kong.sh'
       - 'scripts/kind-add-traefik.sh'
       - 'k8s/gateway/**'
-      # Shared smoke chain: the TEST_GATEWAY_API assertions live in e2e-smoke.sh,
-      # which ci.yml never runs with TEST_GATEWAY_API=yes — so a regression there
-      # is only caught here.
+      # Local-CA TLS (cert-manager + sslip.io) is layered on the gateways and
+      # asserted via TEST_TLS=yes in the same smoke run.
+      - 'scripts/kind-add-cert-manager.sh'
+      - 'scripts/kind-add-tls.sh'
+      - 'scripts/kind-add-tls-all.sh'
+      - 'k8s/tls/**'
+      # Shared smoke chain: the TEST_GATEWAY_API / TEST_TLS assertions live in
+      # e2e-smoke.sh, which ci.yml never runs with those flags — so a regression
+      # there is only caught here.
       - 'scripts/e2e-smoke.sh'
       - 'scripts/lib.sh'
       - '.github/workflows/gateway-test.yml'
@@ -34,7 +40,7 @@ concurrency:
 jobs:
   gateway-e2e:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -95,11 +101,24 @@ jobs:
       - name: Install Kong Gateway API controller
         run: make gateway-kong
 
+      # Trusted HTTPS via a local CA (cert-manager + sslip.io). cert-manager
+      # then a static *.localdev.me cert (make tls) and per-LB-IP *.sslip.io
+      # certs + HTTPS listeners on every installed gateway (make tls-all).
+      - name: Install cert-manager + local CA
+        run: make cert-manager
+
+      - name: Wire TLS (Traefik classic Ingress + per-gateway sslip.io)
+        run: |
+          make tls
+          make tls-all
+
       # Asserts all Gateway API controllers (Traefik provider + Istio + NGINX
       # Gateway Fabric + Contour + Envoy Gateway + kgateway + Kong) front the same
-      # demo backends, on top of the standard smoke checks. Quoted so YAML keeps
-      # the literal string "yes" the smoke script compares to.
+      # demo backends, AND trusted HTTPS (TEST_TLS: --cacert, no -k) on the static
+      # *.localdev.me path + each gateway's *.sslip.io path, on top of the standard
+      # smoke checks. Quoted so YAML keeps the literal "yes" the smoke compares to.
       - name: Smoke test
         env:
           TEST_GATEWAY_API: "yes"
+          TEST_TLS: "yes"
         run: make e2e-smoke
