@@ -150,17 +150,14 @@ jobs:
       # so `make tls` (the classic Traefik Ingress cert) is sufficient — no
       # tls-all.
       #
-      # ENABLE_GATEWAY_API=false is LOAD-BEARING here, not just an optimisation:
-      # this job's TLS path is classic Ingress only (no Gateway resources), so
-      # cert-manager needs no Gateway API support — AND installing the Gateway
-      # API CRDs would deploy the `safe-upgrades` ValidatingAdmissionPolicy,
-      # which the later migration step's cloud-provider-kind startup trips over.
-      # CPK v0.10.0 force-reconciles its own embedded (standard-channel,
-      # pre-v1.5.0) Gateway API CRDs at startup; the VAP denies that install and
-      # CPK crash-loops without ever assigning a LoadBalancer IP, so the
-      # migration smoke's CPK re-allocation never completes. Keeping Gateway API
-      # out of this job entirely avoids the VAP and lets CPK start cleanly.
-      # See scripts/kind-add-cert-manager.sh header.
+      # ENABLE_GATEWAY_API=false here is correct minimalism: this job's TLS path
+      # is classic Ingress only (no Gateway resources), so cert-manager needs no
+      # Gateway API support and the job installs no Gateway API machinery at all.
+      # (The migration step's cloud-provider-kind is INDEPENDENTLY hardened with
+      # `--gateway-channel disabled` — see scripts/kind-add-cloud-provider-kind.sh
+      # — so even a cluster that DID carry the experimental Gateway API CRDs and
+      # their `safe-upgrades` ValidatingAdmissionPolicy would migrate to CPK
+      # cleanly; this job simply has none.) See scripts/kind-add-cert-manager.sh.
       - name: Install cert-manager + local-CA TLS (classic Ingress, no Gateway API)
         env:
           ENABLE_GATEWAY_API: "false"
