@@ -224,12 +224,17 @@ ci-run: deps-tools deps-docker
 	@docker container prune -f 2>/dev/null || true
 	@# Random artifact port + dir so concurrent ci-run invocations from other
 	@# projects don't collide on act's host-global defaults (34567, /tmp/act-artifacts).
+	@# --pull=false: act force-pulls the runner image by default; on Docker's
+	@# containerd image store (this host) re-pulling while a container references
+	@# the layers triggers the snapshotter "RWLayer ... unexpectedly nil" race
+	@# (misleading exit 137). Cached image is reused; first run still pulls.
 	@ACT_PORT=$$(shuf -i 40000-59999 -n 1); \
 	ARTIFACT_PATH=$$(mktemp -d -t act-artifacts.XXXXXX); \
 	for j in static-check docker; do \
 		echo "==== act push --job $$j ===="; \
 		act push --job $$j \
 			--container-architecture linux/amd64 \
+			--pull=false \
 			-P ubuntu-24.04=catthehacker/ubuntu:$(ACT_UBUNTU_VERSION) \
 			--artifact-server-port "$$ACT_PORT" \
 			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
