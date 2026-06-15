@@ -54,6 +54,8 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
       Container(inghaproxy, "HAProxy", "haproxytech chart 1.52.0 in haproxy-controller; ingressClassName=haproxy; Service type=LoadBalancer")
       Container(ingnginx, "NGINX Inc.", "F5 OSS chart 2.6.0 in nginx-ingress; ingressClassName=nginx; Service type=LoadBalancer")
     }
+
+    Container(certmgr, "cert-manager (opt-in)", "v1.20.2 in cert-manager ns; selfSigned -> local-ca CA ClusterIssuer signs *.localdev.me + per-LB-IP *.sslip.io leaf certs into Secrets for trusted HTTPS (make cert-manager / tls / tls-all)")
   }
 }
 
@@ -91,6 +93,12 @@ Rel(prom, apps, "Scrapes /metrics", "HTTP")
 Rel(apps, nfs, "Mounts RWX PVCs (optional)", "NFSv4")
 Rel(api, charts, "helm install/upgrade pulls charts")
 Rel(api, registries, "Pulls workload images")
+
+' Opt-in trusted HTTPS: cert-manager's local CA issues the leaf certs (as
+' Secrets) that the Traefik classic Ingress and every per-LB-IP gateway/ingress
+' reference on their TLS listeners. Two representative edges (applies to all).
+Rel(certmgr, ingress, "Issues *.localdev.me TLS cert (Secret)")
+Rel(certmgr, gwistio, "Issues per-LB-IP *.sslip.io TLS certs (all gateways + alt ingresses)")
 
 SHOW_LEGEND()
 @enduml

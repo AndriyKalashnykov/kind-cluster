@@ -112,6 +112,58 @@ EOF
   WIRED=$((WIRED + 1))
 done
 
+# Alternative CLASSIC Ingress controllers (HAProxy, NGINX Inc.). Same idea, but
+# classic Ingress terminates TLS via `spec.tls` referencing a Secret in the
+# Ingress's own namespace (default), so we apply a dedicated sslip.io Ingress
+# per class with TLS + per-app host rules. ingressClassName selects the
+# controller; each has its own cloud-provider-kind LB IP.
+# class | controller-service-namespace (Service discovered by type=LoadBalancer)
+ING_SPECS=(
+  "haproxy|haproxy-controller"
+  "nginx|nginx-ingress"
+)
+for spec in "${ING_SPECS[@]}"; do
+  CLASS="${spec%%|*}"; NS="${spec#*|}"
+  "${KUBECTL[@]}" get ingressclass "$CLASS" >/dev/null 2>&1 || { echo "skip ingress/$CLASS (not installed)"; continue; }
+
+  IP=""; for _ in $(seq 1 30); do IP=$(gw_lb_ip "$NS" "type:LoadBalancer"); [ -n "$IP" ] && break; sleep 2; done
+  if [ -z "$IP" ]; then echo "WARN ingress/$CLASS: no LoadBalancer IP yet — skipping"; continue; fi
+  DASHED=$(dash_ip "$IP")
+  echo "=== ingress/$CLASS: *.${DASHED}.sslip.io @ ${IP} ==="
+
+  cat <<EOF | "${KUBECTL[@]}" apply -f - >/dev/null
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: { name: ${CLASS}-ingress-sslip-tls, namespace: default }
+spec:
+  secretName: ${CLASS}-ingress-sslip-tls
+  dnsNames: ["*.${DASHED}.sslip.io"]
+  ipAddresses: ["${IP}"]
+  issuerRef: { name: local-ca, kind: ClusterIssuer, group: cert-manager.io }
+EOF
+  "${KUBECTL[@]}" wait certificate/"${CLASS}"-ingress-sslip-tls -n default --for=condition=Ready --timeout="${TIMEOUT}" >/dev/null
+
+  cat <<EOF | "${KUBECTL[@]}" apply -f - >/dev/null
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: demo-sslip-${CLASS}, namespace: default }
+spec:
+  ingressClassName: ${CLASS}
+  tls:
+    - hosts: ["$(sslip_host helloweb "$IP")", "$(sslip_host golang "$IP")", "$(sslip_host foo "$IP")"]
+      secretName: ${CLASS}-ingress-sslip-tls
+  rules:
+    - host: "$(sslip_host helloweb "$IP")"
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: helloweb, port: { number: 80 } } } }] }
+    - host: "$(sslip_host golang "$IP")"
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: golang-hello-world-web-service, port: { number: 8080 } } } }] }
+    - host: "$(sslip_host foo "$IP")"
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: foo-service, port: { number: 5678 } } } }] }
+EOF
+  echo "  curl --cacert ${CA_CERT_FILE} https://$(sslip_host helloweb "$IP")/"
+  WIRED=$((WIRED + 1))
+done
+
 echo ""
-echo "Wired trusted HTTPS on ${WIRED} Gateway API controller(s) via *.sslip.io."
-[ "$WIRED" -gt 0 ] || echo "  (none installed — run e.g. 'make gateway-istio' first, then re-run 'make tls-all')."
+echo "Wired trusted HTTPS on ${WIRED} front door(s) (Gateway API controllers + classic Ingress) via *.sslip.io."
+[ "$WIRED" -gt 0 ] || echo "  (none installed — run e.g. 'make gateway-istio' or 'make ingress-haproxy' first, then re-run 'make tls-all')."

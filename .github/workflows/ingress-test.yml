@@ -11,9 +11,15 @@ on:
       - 'scripts/kind-add-ingress-nginx.sh'
       - 'k8s/demo-apps-ingress-haproxy.yaml'
       - 'k8s/demo-apps-ingress-nginx.yaml'
-      # Shared smoke chain: the TEST_INGRESS_ALT assertions live in e2e-smoke.sh,
-      # which ci.yml never runs with TEST_INGRESS_ALT=yes — so a regression there
-      # is only caught here.
+      # Local-CA TLS (cert-manager + sslip.io) is layered on the alt ingresses
+      # and asserted via TEST_TLS=yes in the same smoke run.
+      - 'scripts/kind-add-cert-manager.sh'
+      - 'scripts/kind-add-tls.sh'
+      - 'scripts/kind-add-tls-all.sh'
+      - 'k8s/tls/**'
+      # Shared smoke chain: the TEST_INGRESS_ALT / TEST_TLS assertions live in
+      # e2e-smoke.sh, which ci.yml never runs with those flags — so a regression
+      # there is only caught here.
       - 'scripts/e2e-smoke.sh'
       - 'scripts/lib.sh'
       - '.github/workflows/ingress-test.yml'
@@ -28,7 +34,7 @@ concurrency:
 jobs:
   ingress-e2e:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -75,10 +81,22 @@ jobs:
       - name: Install NGINX Inc. Ingress controller
         run: make ingress-nginx
 
+      # Trusted HTTPS via a local CA (cert-manager + sslip.io): make tls-all wires
+      # a *.<lb-ip>.sslip.io cert + Ingress spec.tls onto each alt classic ingress.
+      - name: Install cert-manager + local CA
+        run: make cert-manager
+
+      - name: Wire TLS (per-ingress sslip.io)
+        run: |
+          make tls
+          make tls-all
+
       # Asserts both alternative classic Ingress controllers (HAProxy + NGINX Inc.)
-      # front the same demo backends on their own LB IPs, on top of the standard
+      # front the same demo backends on their own LB IPs, AND trusted HTTPS
+      # (TEST_TLS: --cacert, no -k) on each via *.sslip.io, on top of the standard
       # smoke checks. Quoted so YAML keeps the literal string "yes".
       - name: Smoke test
         env:
           TEST_INGRESS_ALT: "yes"
+          TEST_TLS: "yes"
         run: make e2e-smoke

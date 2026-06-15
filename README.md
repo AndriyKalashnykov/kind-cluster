@@ -340,7 +340,7 @@ Every front door above can serve **trusted HTTPS** — real certificates, valida
 | Target | How | Command |
 |--------|-----|---------|
 | **Default Traefik** (classic Ingress) | Static `localhost` via `*.localdev.me` → one wildcard cert, wired once | `make tls` |
-| **Per-gateway** (Istio, NGF, Contour, Envoy Gateway, kgateway, Kong) | Each LB IP is assigned at runtime, so the script reads it, mints a `*.<dashed-ip>.sslip.io` cert (+ the IP as an IP-SAN), adds the HTTPS listener, and templates per-app `helloweb.<ip>.sslip.io` HTTPRoutes | `make tls-all` |
+| **Per-LB-IP front doors** — the 6 Gateway API controllers (Istio, NGF, Contour, Envoy Gateway, kgateway, Kong) **and** the 2 alternative classic ingresses (HAProxy, NGINX-Inc) | Each LB IP is assigned at runtime, so the script reads it, mints a `*.<dashed-ip>.sslip.io` cert (+ the IP as an IP-SAN), then wires it onto that front door — an `HTTPS` listener + per-app `helloweb.<ip>.sslip.io` HTTPRoutes for gateways, or `Ingress.spec.tls` + sslip.io host rules for classic ingresses | `make tls-all` |
 
 ```bash
 make install-all                 # cluster + Traefik + demo apps

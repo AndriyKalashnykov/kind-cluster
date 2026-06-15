@@ -742,6 +742,26 @@ if flag_enabled "${TEST_TLS:-}"; then
       fail "SSLIP $GW: trusted HTTPS on ${HOST} failed (run 'make tls-all')"
     fi
   done
+
+  # Alternative classic Ingress controllers: same per-LB-IP sslip.io TLS, wired
+  # via Ingress spec.tls (make tls-all). class|controller-service-namespace.
+  for spec in "haproxy|haproxy-controller" "nginx|nginx-ingress"; do
+    CLASS="${spec%%|*}"; INS="${spec#*|}"
+    "${KUBECTL[@]}" get ingressclass "$CLASS" >/dev/null 2>&1 || continue
+    IIP=$("${KUBECTL[@]}" -n "$INS" get svc -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.status.loadBalancer.ingress[0].ip}{"\n"}{end}' 2>/dev/null | grep -m1 . || echo "")
+    [ -n "$IIP" ] || { fail "TLS ingress/$CLASS: no LB IP"; continue; }
+    IHOST=$(sslip_host helloweb "$IIP")
+    IOK=""
+    for _ in $(seq 1 20); do
+      curl -sf --cacert "$CA" "https://${IHOST}/" 2>/dev/null | grep -qF "Hello, world!" && { IOK=yes; break; }
+      sleep 2
+    done
+    if [ -n "$IOK" ]; then
+      pass "SSLIP ingress/$CLASS: https://${IHOST}/ trusted (no -k) -> Hello, world!"
+    else
+      fail "SSLIP ingress/$CLASS: trusted HTTPS on ${IHOST} failed (run 'make tls-all')"
+    fi
+  done
 fi
 
 echo ""
