@@ -5,7 +5,7 @@
 
 # Local Kubernetes Lab on KinD
 
-Spin up a Kubernetes cluster in Docker ([KinD](https://kind.sigs.k8s.io/)) and compare 3 classic Ingress and 7 [Gateway API](docs/gateway-api-ingress.md) controllers coexisting on it — each on its own LoadBalancer IP, all routing the same demo apps. LoadBalancer IPs come from cloud-provider-kind by default (MetalLB is a drop-in alternative). Trusted local-CA HTTPS, the Headlamp dashboard, Prometheus/Grafana, ReadWriteMany NFS, and a local registry are opt-in; run on your host or a throwaway Multipass VM.
+Spin up a Kubernetes cluster in Docker ([KinD](https://kind.sigs.k8s.io/)) and run **7 [Gateway API](docs/gateway-api-ingress.md) + 3 classic Ingress controllers side-by-side on one cluster** — each on its own LoadBalancer IP, all routing the same demo apps. LoadBalancer IPs come from cloud-provider-kind by default (MetalLB is a drop-in alternative). Trusted local-CA HTTPS (fully offline), the Headlamp dashboard, Prometheus/Grafana, ReadWriteMany NFS, and a local registry are opt-in; run on your host or a throwaway Multipass VM.
 
 <img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="450">
 
