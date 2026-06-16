@@ -325,7 +325,17 @@ The seven Gateway API controllers wired in this repo. Conformance badges are fro
 | Vendored gateway-api (≥ v1.2 floor) | ✅ | ✅ | ✅ | ✅ v1.3 | ✅ v1.5.1 | ✅ v1.5.1 | ✅ v1.3 |
 | CNCF | ❌ | **Graduated** | ❌ | **Incubating** | Envoy subproj⁵ | **Sandbox** | ❌ |
 
-¹ Kong's conformance is **split**: the registry lists KIC as *stale* v1.2.1, but the newer **Kong Operator** is *partial* v1.5.1; KIC's `go.mod` actually vendors gateway-api v1.3.0, so it clears the floor. ² kgateway UDPRoute not confirmed in docs (flagged, not assumed). ³ Kong's **unmanaged** Gateway binds to one shared proxy Service (not per-Gateway). ⁴ Contour serves classic Ingress in its *primary* mode; the Gateway-provisioner mode used here is Gateway-API-focused. ⁵ Envoy Gateway is a subproject of **Envoy** (CNCF **Graduated**); the registry lists it *partially* conformant. Versions: Istio 1.30.1 · NGF 2.6.3 · Contour v1.33.5 · Envoy GW v1.8.1 · kgateway v2.3.3 · Kong `kong/ingress` 0.24.0.
+¹ Kong's conformance is **split**: the registry lists KIC as *stale* v1.2.1, but the newer **Kong Operator** is *partial* v1.5.1; KIC's `go.mod` actually vendors gateway-api v1.3.0, so it clears the floor.
+
+² kgateway UDPRoute not confirmed in docs (flagged, not assumed).
+
+³ Kong's **unmanaged** Gateway binds to one shared proxy Service (not per-Gateway).
+
+⁴ Contour serves classic Ingress in its *primary* mode; the Gateway-provisioner mode used here is Gateway-API-focused.
+
+⁵ Envoy Gateway is a subproject of **Envoy** (CNCF **Graduated**); the registry lists it *partially* conformant.
+
+Versions: Istio 1.30.1 · NGF 2.6.3 · Contour v1.33.5 · Envoy GW v1.8.1 · kgateway v2.3.3 · Kong `kong/ingress` 0.24.0.
 
 ## HTTPS with a locally-trusted CA
 
