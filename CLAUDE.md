@@ -151,7 +151,12 @@ Use the following skills when working on related files:
 |---------|-------|
 | `Makefile` | `/makefile` |
 | `renovate.json` | `/renovate` |
-| `README.md` | `/readme` |
+| `README.md`, `docs/gateway-api-ingress.md` | `/readme` |
 | `.github/workflows/*.{yml,yaml}` | `/ci-workflow` |
 
 When spawning subagents, always pass conventions from the respective skill into the agent's prompt.
+
+**`/readme` in this repo MUST validate BOTH `README.md` AND `docs/gateway-api-ingress.md` for technical correctness of every statement and version on each invocation** (BLOCKING). Both docs carry dense version tables + feature/comparison matrices that Renovate cannot touch, so they drift silently. On every `/readme` pass, re-derive — do not trust the existing prose:
+- **Versions** — every controller/chart/tool version cell against its source of truth: `.mise.toml` (kind, kubectl, trivy, act, gitleaks, hadolint, shellcheck, actionlint, jq, bats) and the `scripts/kind-add-*.sh` pins (`ISTIO_VERSION`, `NGF_VERSION`, `CONTOUR_VERSION`, `ENVOY_GATEWAY_VERSION`, `KGATEWAY_VERSION`, `KONG_VERSION`, `TRAEFIK_CHART_VERSION`, `HAPROXY_INGRESS_VERSION`, `NGINX_INGRESS_VERSION`, `CERT_MANAGER_VERSION`, `METALLB_VERSION`, `CSI_DRIVER_NFS_VERSION`, `METRICS_SERVER_CHART_VERSION`, `HEADLAMP_CHART_VERSION`) + `CLOUD_PROVIDER_KIND_VERSION` in the Makefile.
+- **`make` targets** — every `make <x>` referenced must exist in the Makefile.
+- **Statements / external facts** — Gateway API conformance-registry entries, CNCF maturity levels (Graduated/Incubating/Sandbox), vendored `gateway-api` client versions (the ≥ v1.2.0 `supportedFeatures` floor), EOL/archival status (Weave Net, ingress-nginx), and version-compat claims (e.g. Istio ≤ 1.29 + GW API v1.5 crash-loop) against primary sources, not memory. Treat any claim that can't be confirmed against a primary source as a flagged finding, not an assumption.
