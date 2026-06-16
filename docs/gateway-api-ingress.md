@@ -102,7 +102,7 @@ kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/re
 
 All three rows below are **conformant** Gateway API controllers on the official
 [implementations registry](https://gateway-api.sigs.k8s.io/implementations/)
-(checked 2026-06): Traefik Proxy (v1.5.1), Istio (v1.4.0), Cilium (v1.5.1), Calico (v1.4.1).
+(checked 2026-06): Traefik Proxy (v1.5.1), Istio (v1.5.1), Cilium (v1.5.1), Calico (v1.4.1).
 
 | | **Traefik** (this project's default proxy) | **Istio** | **Cilium / Calico** (CNI-integrated) |
 |---|---|---|---|
