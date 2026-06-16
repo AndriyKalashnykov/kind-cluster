@@ -280,8 +280,17 @@ Active general-purpose CNIs, fact-checked against vendor docs + the CNCF project
 | CNCF status | **Graduated** | not CNCF¹ | Sandbox | Sandbox | not CNCF | not CNCF | KinD default |
 
 ¹ **Calico** here = Calico **Open Source** (v3.32). It's a Tigera-governed project (a CNCF *member*, **not** a CNCF-hosted/graduated project). Several axes (L7/FQDN policy, multi-cluster federation) are **Calico Enterprise/Cloud** only — marked `ent`.
-² Antrea L7 NetworkPolicy is Suricata-based (OSS, Alpha). ³ Flannel encryption is an optional WireGuard backend. ⁴ Calico via the **Calico Ingress Gateway** (a hardened Envoy Gateway distribution, OSS since v3.30). ⁵ Calico flow logs are OSS since v3.30 (Goldmane/Whisker).
+
+² Antrea L7 NetworkPolicy is Suricata-based (OSS, Alpha).
+
+³ Flannel encryption is an optional WireGuard backend.
+
+⁴ Calico via the **Calico Ingress Gateway** (a hardened Envoy Gateway distribution, OSS since v3.30).
+
+⁵ Calico flow logs are OSS since v3.30 (Goldmane/Whisker).
+
 ⁶ **DNS interactions — extent per CNI:** **Cilium** = built-in DNS proxy enforcing `toFQDNs` domain-based egress policy; **Antrea** = FQDN egress in Antrea-native policy (Alpha, Linux); **Kube-OVN** = domain-based egress via the DNSNameResolver/CoreDNS plugin + EgressFirewall; **Calico** = FQDN/domain policy is **Enterprise-only**; **kindnet** = DNS *caching* + NAT64/DNS64 (no DNS-based policy); **Flannel / Kube-router** = none. Note: *all* CNIs rely on **CoreDNS** for ordinary Service-name resolution — that's the cluster DNS addon, not a CNI feature, so it isn't a differentiator here.
+
 **Also:** **Weave Net** is archived/EOL (Weaveworks shut down, 2024) — avoid for new clusters. **Canal** = Flannel networking + Calico policy (no standalone project). **Multus** is a *meta*-CNI for attaching multiple networks, not a primary dataplane. Only **Cilium** and **Calico** appear on the [Gateway API implementations registry](https://gateway-api.sigs.k8s.io/implementations/) among CNIs; **Antrea is a CNI, not a Gateway API controller** (its `antrea-gw0` is an OVS dataplane interface, unrelated to `gateway.networking.k8s.io`).
 
 ### Classic Ingress controllers (feature matrix)
@@ -305,7 +314,17 @@ The four classic Ingress controllers in this lab's orbit (Traefik = default; HAP
 | Latest stable | v3.7.5 / chart 40.x | ctrl v3.2.x / chart 1.52.0 | v5.5.0 / chart 2.6.0 | KIC v3.5.9 / chart 0.24.0 |
 | CNCF | ❌ Traefik Labs | ❌ HAProxy Tech | ❌ F5/NGINX | ❌ Kong Inc. |
 
-¹ "HAProxy" = the official **haproxytech/kubernetes-ingress**. ⚠️ Its Gateway API support is **`TCPRoute`-only** — and the conformance registry's "HAProxy Ingress" entry is the *separate community* `jcmoraisjr` project, **not** haproxytech. ² **NGINX Inc.** = `nginxinc/kubernetes-ingress` (F5 OSS) — its Gateway API lives in a **separate product, NGF** (`make gateway-nginx`), not this controller. Distinct from the **retired** community `kubernetes/ingress-nginx` (archived March 2026). ³ HAProxy/NGINX-Inc get ACME via **cert-manager**, not a built-in client. ⁴ TCP/UDP via controller-specific CRDs/ConfigMaps, not the plain `Ingress` object (Kong handles L4 natively). ⁵ Kong OSS has basic/key/jwt/oauth2/acl/ldap auth free; **OIDC + mtls-auth are Enterprise**. ⁶ Traefik WAF = OWASP **Coraza** WASM plugin (OSS); native WAF is Hub-only.
+¹ "HAProxy" = the official **haproxytech/kubernetes-ingress**. ⚠️ Its Gateway API support is **`TCPRoute`-only** — and the conformance registry's "HAProxy Ingress" entry is the *separate community* `jcmoraisjr` project, **not** haproxytech.
+
+² **NGINX Inc.** = `nginxinc/kubernetes-ingress` (F5 OSS) — its Gateway API lives in a **separate product, NGF** (`make gateway-nginx`), not this controller. Distinct from the **retired** community `kubernetes/ingress-nginx` (archived March 2026).
+
+³ HAProxy/NGINX-Inc get ACME via **cert-manager**, not a built-in client.
+
+⁴ TCP/UDP via controller-specific CRDs/ConfigMaps, not the plain `Ingress` object (Kong handles L4 natively).
+
+⁵ Kong OSS has basic/key/jwt/oauth2/acl/ldap auth free; **OIDC + mtls-auth are Enterprise**.
+
+⁶ Traefik WAF = OWASP **Coraza** WASM plugin (OSS); native WAF is Hub-only.
 
 ### Gateway API controllers (feature matrix)
 
