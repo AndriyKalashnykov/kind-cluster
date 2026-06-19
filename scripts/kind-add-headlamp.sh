@@ -26,7 +26,7 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
 # renovate: datasource=helm depName=headlamp registryUrl=https://kubernetes-sigs.github.io/headlamp/
-HEADLAMP_CHART_VERSION=0.42.0
+HEADLAMP_CHART_VERSION=0.43.0
 
 VERSION=${1:-$HEADLAMP_CHART_VERSION}
 
