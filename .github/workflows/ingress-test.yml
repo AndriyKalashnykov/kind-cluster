@@ -83,7 +83,22 @@ jobs:
 
       # Trusted HTTPS via a local CA (cert-manager + sslip.io): make tls-all wires
       # a *.<lb-ip>.sslip.io cert + Ingress spec.tls onto each alt classic ingress.
+      #
+      # ENABLE_GATEWAY_API=false is REQUIRED here: this job's TLS path is classic
+      # Ingress only (HAProxy + NGINX Inc.) with NO Gateway resources, so the
+      # tls-all run wires only the classic-Ingress sslip.io certs (its Gateway
+      # specs all skip). cert-manager's controller hard-crashes at startup when
+      # enableGatewayAPI=true but the Gateway API CRDs are absent
+      # ("the Gateway API CRDs do not seem to be present, but
+      # ExperimentalGatewayAPISupport is set to true"). This job installs no
+      # Gateway API CRDs — and since cloud-provider-kind now runs with
+      # --gateway-channel disabled (commit e0824a1) it no longer side-installs
+      # the embedded GW API CRDs that previously masked this. Mirrors
+      # e2e-metallb.yml's classic-Ingress-only cert-manager step. See
+      # scripts/kind-add-cert-manager.sh.
       - name: Install cert-manager + local CA
+        env:
+          ENABLE_GATEWAY_API: "false"
         run: make cert-manager
 
       - name: Wire TLS (per-ingress sslip.io)
