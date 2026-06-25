@@ -23,7 +23,18 @@ KUBECTL_VERSION := v1.36.2
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
 # renovate: datasource=docker depName=kindest/node
 KIND_NODE_IMAGE := kindest/node:v1.36.1
-# renovate: datasource=github-releases depName=kubernetes-sigs/cloud-provider-kind extractVersion=^v(?<version>.*)$
+# CLOUD_PROVIDER_KIND_VERSION is consumed only as a CONTAINER-IMAGE tag
+# (registry.k8s.io/.../cloud-controller-manager:v$(VERSION) in
+# scripts/kind-add-cloud-provider-kind.sh), so it MUST track the registry that
+# serves the image, NOT the upstream GitHub release. The CPK image is published
+# to registry.k8s.io via a manual kpromo promotion PR to kubernetes/k8s.io that
+# lags the GitHub release by hours-to-days; a github-releases bump pins a tag the
+# registry can't yet serve (`manifest unknown`), which breaks `docker run` before
+# any LB IP is assigned. extractVersion strips the v-prefix from the docker tags
+# (and filters cosign .sig entries) so the bare-semver var keeps working with
+# v$(VERSION) at the use site. The {custom.regex + docker, pinDigests:false} rule
+# in renovate.json covers this pin (no @sha256 appended to a bare-semver var).
+# renovate: datasource=docker depName=registry.k8s.io/cloud-provider-kind/cloud-controller-manager extractVersion=^v(?<version>.*)$
 CLOUD_PROVIDER_KIND_VERSION := 0.10.0
 export CLOUD_PROVIDER_KIND_VERSION
 # catthehacker/ubuntu tags use loose `act-YY.MM` format (Ubuntu LTS cadence);
