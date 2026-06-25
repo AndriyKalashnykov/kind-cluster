@@ -34,7 +34,7 @@ CA_CERT_FILE="${CA_CERT_FILE:-lab-ca.crt}"
 ENABLE_GATEWAY_API="${ENABLE_GATEWAY_API:-true}"
 
 # renovate: datasource=docker depName=quay.io/jetstack/charts/cert-manager
-CERT_MANAGER_VERSION=v1.20.2
+CERT_MANAGER_VERSION=v1.20.3
 CERT_MANAGER_CHART="oci://quay.io/jetstack/charts/cert-manager"
 
 echo "=== Installing cert-manager ${CERT_MANAGER_VERSION} (Gateway API support: ${ENABLE_GATEWAY_API}) ==="
