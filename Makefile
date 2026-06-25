@@ -24,7 +24,7 @@ KUBECTL_VERSION := v1.36.2
 # renovate: datasource=docker depName=kindest/node
 KIND_NODE_IMAGE := kindest/node:v1.36.1
 # renovate: datasource=github-releases depName=kubernetes-sigs/cloud-provider-kind extractVersion=^v(?<version>.*)$
-CLOUD_PROVIDER_KIND_VERSION := 0.10.0
+CLOUD_PROVIDER_KIND_VERSION := 0.11.0
 export CLOUD_PROVIDER_KIND_VERSION
 # catthehacker/ubuntu tags use loose `act-YY.MM` format (Ubuntu LTS cadence);
 # bumps require also updating runs-on in .github/workflows/*.yml.
