@@ -23,7 +23,12 @@ spec:
     spec:
       containers:
         - name: nfs-server
-          image: itsthenetwork/nfs-server-alpine:12@sha256:7fa99ae65c23c5af87dd4300e543a86b119ed15ba61422444207efc7abd0ba20
+          # sharedvolume/nfs-server is a maintained (2025) fork of the
+          # itsthenetwork image with an identical SHARED_DIRECTORY/fsid=0
+          # entrypoint contract, but pinned on an IMMUTABLE semver tag so the
+          # digest can't be orphaned by an upstream re-push (the recurring
+          # failure of itsthenetwork's mutable `:12` tag — see CLAUDE.md).
+          image: sharedvolume/nfs-server:v0.1.0@sha256:299f82e2b7c0fd135d5deb5c09f111482400118c008cfd500d25a506b7455684
           ports:
             - name: nfs
               containerPort: 2049
