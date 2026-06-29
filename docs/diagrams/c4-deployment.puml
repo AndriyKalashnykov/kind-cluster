@@ -26,9 +26,9 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
     Deployment_Node(cp, "kind-control-plane", "kindest/node container") {
       Deployment_Node(kube, "kube-system + traefik + headlamp", "namespaces") {
         Container(api, "kube-apiserver, etcd, scheduler, controller-manager", "control-plane components")
-        Container(ingress, "traefik controller", "Helm release v3 (40.x); pinned to control-plane via nodeSelector ingress-ready=true")
+        Container(ingress, "traefik controller", "Helm release v3 (41.x); pinned to control-plane via nodeSelector ingress-ready=true")
         Container(metrics, "metrics-server", "manifest")
-        Container(dash, "headlamp", "Helm release 0.42.x; ClusterIP :80")
+        Container(dash, "headlamp", "Helm release 0.43.x; ClusterIP :80")
       }
     }
     Deployment_Node(worker, "kind-worker", "kindest/node container") {
@@ -42,20 +42,20 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
     Container(cpk_sidecars, "kindccm-<hash>", "Per-Service Envoy sidecar; routes LB IP -> backend pods")
 
     Deployment_Node(gwapi, "Gateway API controllers (opt-in; not in install-all)", "experimental-channel CRDs v1.5.1, cluster-scoped") {
-      Container(gwistio, "Istio", "istiod 1.30.1 in istio-system; Gateway gatewayClassName=istio auto-provisions Envoy Deployment+Service 'istio-istio' (type=LoadBalancer) in default")
-      Container(gwngf, "NGINX Gateway Fabric", "control plane 2.6.3 in nginx-gateway; Gateway gatewayClassName=nginx auto-provisions nginx Deployment+Service 'ngf-nginx' (type=LoadBalancer) in default")
+      Container(gwistio, "Istio", "istiod 1.30.2 in istio-system; Gateway gatewayClassName=istio auto-provisions Envoy Deployment+Service 'istio-istio' (type=LoadBalancer) in default")
+      Container(gwngf, "NGINX Gateway Fabric", "control plane 2.6.6 in nginx-gateway; Gateway gatewayClassName=nginx auto-provisions nginx Deployment+Service 'ngf-nginx' (type=LoadBalancer) in default")
       Container(gwcontour, "Project Contour", "provisioner v1.33.5 in projectcontour; Gateway gatewayClassName=contour provisions Envoy DaemonSet+Service 'envoy-contour' (type=LoadBalancer) in default")
       Container(gwenvoy, "Envoy Gateway", "CNCF v1.8.1 in envoy-gateway-system; Gateway gatewayClassName=envoy auto-provisions an Envoy Deployment+Service (generated name) type=LoadBalancer in envoy-gateway-system")
-      Container(gwkgateway, "kgateway", "CNCF v2.3.3 (ex-Gloo) in kgateway-system; Gateway gatewayClassName=kgateway auto-provisions Envoy Deployment+Service 'kgw' (type=LoadBalancer) in default")
+      Container(gwkgateway, "kgateway", "CNCF v2.3.5 (ex-Gloo) in kgateway-system; Gateway gatewayClassName=kgateway auto-provisions Envoy Deployment+Service 'kgw' (type=LoadBalancer) in default")
       Container(gwkong, "Kong (KIC)", "umbrella chart 0.24.0 (DB-less) in kong; unmanaged GatewayClass=kong binds to the single kong proxy Service (type=LoadBalancer); also serves classic Ingress")
     }
 
     Deployment_Node(ingalt, "Classic Ingress alternatives (opt-in; not in install-all)") {
       Container(inghaproxy, "HAProxy", "haproxytech chart 1.52.0 in haproxy-controller; ingressClassName=haproxy; Service type=LoadBalancer")
-      Container(ingnginx, "NGINX Inc.", "F5 OSS chart 2.6.0 in nginx-ingress; ingressClassName=nginx; Service type=LoadBalancer")
+      Container(ingnginx, "NGINX Inc.", "F5 OSS chart 2.6.1 in nginx-ingress; ingressClassName=nginx; Service type=LoadBalancer")
     }
 
-    Container(certmgr, "cert-manager (opt-in)", "v1.20.2 in cert-manager ns; selfSigned -> local-ca CA ClusterIssuer signs *.localdev.me + per-LB-IP *.sslip.io leaf certs into Secrets for trusted HTTPS (make cert-manager / tls / tls-all)")
+    Container(certmgr, "cert-manager (opt-in)", "v1.20.3 in cert-manager ns; selfSigned -> local-ca CA ClusterIssuer signs *.localdev.me + per-LB-IP *.sslip.io leaf certs into Secrets for trusted HTTPS (make cert-manager / tls / tls-all)")
   }
 }
 

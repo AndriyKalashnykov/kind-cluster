@@ -21,8 +21,9 @@ PUML2DRAWIO_VERSION := 1.6.1
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
 KUBECTL_VERSION := v1.36.2
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
+# Digest-pinned for reproducibility; Renovate bumps tag + @sha256 together.
 # renovate: datasource=docker depName=kindest/node
-KIND_NODE_IMAGE := kindest/node:v1.36.1
+KIND_NODE_IMAGE := kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
 # CLOUD_PROVIDER_KIND_VERSION is consumed only as a CONTAINER-IMAGE tag
 # (registry.k8s.io/.../cloud-controller-manager:v$(VERSION) in
 # scripts/kind-add-cloud-provider-kind.sh), so it MUST track the registry that
@@ -55,7 +56,9 @@ export KIND_CLUSTER_NAME
 # can flip out from under us via `kubectl config use-context` — the silent
 # multi-session race the skill warns about. Explicit context closes that gap:
 # kubectl errors out clearly if the context doesn't exist (no silent
-# wrong-cluster hits).
+# wrong-cluster hits). This var is a convention anchor — recipes here call no
+# kubectl directly (every kubectl invocation lives in scripts/, which each define
+# their own KUBECTL=(kubectl --context=...) array), so it is intentionally unused.
 KUBECTL := kubectl --context=kind-$(KIND_CLUSTER_NAME)
 
 #help: @ List available tasks
@@ -136,6 +139,13 @@ mermaid-lint: deps-tools deps-docker
 	@set -euo pipefail; \
 	MD_FILES=$$(git ls-files '*.md' 2>/dev/null | xargs -r grep -lF '```mermaid' 2>/dev/null || true); \
 	if [ -z "$$MD_FILES" ]; then echo "No Mermaid blocks found — skipping."; exit 0; fi; \
+	echo "Pulling minlag/mermaid-cli:$(MERMAID_CLI_VERSION)..."; \
+	PULL_OK=0; \
+	for attempt in 1 2 3; do \
+		if docker pull minlag/mermaid-cli:$(MERMAID_CLI_VERSION) >/dev/null 2>&1; then PULL_OK=1; break; fi; \
+		echo "  pull attempt $$attempt failed; retrying..."; sleep $$((attempt * 5)); \
+	done; \
+	[ "$$PULL_OK" -eq 1 ] || { echo "Could not pull mermaid-cli after 3 attempts (registry/network issue, not a diagram error)."; exit 1; }; \
 	FAILED=0; \
 	for md in $$MD_FILES; do \
 		echo "Validating Mermaid blocks in $$md..."; \
@@ -239,14 +249,21 @@ ci-run: deps-tools deps-docker
 	@# containerd image store (this host) re-pulling while a container references
 	@# the layers triggers the snapshotter "RWLayer ... unexpectedly nil" race
 	@# (misleading exit 137). Cached image is reused; first run still pulls.
+	@# Forward a GitHub token to act so mise's aqua: backends authenticate against
+	@# the GitHub release API (60 req/h anonymous → 403 on a cold cache). Derived
+	@# from `gh auth token` when unset and passed via the env-only `--secret KEY`
+	@# form (never `KEY=value`) so the token never lands in argv (ps/proc leak).
 	@ACT_PORT=$$(shuf -i 40000-59999 -n 1); \
 	ARTIFACT_PATH=$$(mktemp -d -t act-artifacts.XXXXXX); \
+	GITHUB_TOKEN="$${GITHUB_TOKEN:-$$(gh auth token 2>/dev/null || true)}"; export GITHUB_TOKEN; \
+	SECRET_FLAG=""; [ -n "$$GITHUB_TOKEN" ] && SECRET_FLAG="--secret GITHUB_TOKEN"; \
 	for j in static-check docker; do \
 		echo "==== act push --job $$j ===="; \
 		act push --job $$j \
 			--container-architecture linux/amd64 \
 			--pull=false \
 			-P ubuntu-24.04=catthehacker/ubuntu:$(ACT_UBUNTU_VERSION) \
+			$$SECRET_FLAG \
 			--artifact-server-port "$$ACT_PORT" \
 			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
 	done
@@ -280,7 +297,7 @@ create-cluster: kind-create
 export-cert: deps
 	@./scripts/kind-export-cert.sh
 
-#headlamp-install: @ Install Headlamp (Helm chart 0.42.x) and admin ServiceAccount — successor to the archived kubernetes/dashboard
+#headlamp-install: @ Install Headlamp (Helm chart 0.43.x) and admin ServiceAccount — successor to the archived kubernetes/dashboard
 headlamp-install: deps
 	@./scripts/kind-add-headlamp.sh
 
