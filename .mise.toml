@@ -10,6 +10,10 @@
 "aqua:hadolint/hadolint"    = "2.14.0"
 "aqua:nektos/act"           = "0.2.89"
 "aqua:bats-core/bats-core"  = "1.13.0"
-"aqua:jqlang/jq"            = "1.8.1"
+# jq bumps are MANUAL: Renovate's mise manager can't strip jq's `jq-` tag prefix
+# (its auto extractVersion is `^v?`; neither a packageRule `extractVersion` nor a
+# `.mise.toml` `version_prefix` overrides it for the aqua backend — both verified
+# 2026-06-29). It detects jq but never proposes a bump. Check `mise latest aqua:jqlang/jq`.
+"aqua:jqlang/jq"            = "1.8.2"
 "aqua:kubernetes-sigs/kind" = "0.32.0"
 "aqua:kubernetes/kubectl"   = "1.36.2"
