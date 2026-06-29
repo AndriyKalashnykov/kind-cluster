@@ -12,16 +12,16 @@ Spin up a Kubernetes cluster in Docker ([KinD](https://kind.sigs.k8s.io/)) and r
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
 | Cluster | [KinD](https://kind.sigs.k8s.io/) v0.32.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
-| Ingress | [Traefik](https://traefik.io/) v3 (chart 40.x) | Replaces the [retired](https://www.kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) ingress-nginx; supports `networking.k8s.io/v1` Ingress + Gateway API on one binary |
-| Gateway API (opt-in) | 7 controllers on [Gateway API](https://gateway-api.sigs.k8s.io/) v1.5.1 (experimental channel) | Traefik GW provider, Istio 1.30.1, NGF 2.6.3, Contour v1.33.5, Envoy Gateway v1.8.1, kgateway v2.3.3, Kong 0.24.0 — all coexist on one cluster, each its own LB IP, routing the same apps. See [Gateway API controllers](#gateway-api-controllers-feature-matrix). |
-| Alternative Ingress (opt-in) | [HAProxy](https://github.com/haproxytech/kubernetes-ingress) 1.52.0, [NGINX Inc.](https://github.com/nginx/kubernetes-ingress) (F5 OSS) 2.6.0 | Classic Ingress controllers alongside Traefik, each on its own LB IP via a distinct `ingressClassName`. See [Alternative classic Ingress](#alternative-classic-ingress-controllers-opt-in). |
-| TLS / HTTPS (opt-in) | [cert-manager](https://cert-manager.io/) v1.20.2 + local CA + [sslip.io](https://sslip.io) | Trusted HTTPS (no `-k`) for every front door — fully offline, no Let's Encrypt, no public domain. `make cert-manager` then `make tls` / `make tls-all`. See [HTTPS with a locally-trusted CA](#https-with-a-locally-trusted-ca). |
-| Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.10.0 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
+| Ingress | [Traefik](https://traefik.io/) v3 (chart 41.x) | Replaces the [retired](https://www.kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) ingress-nginx; supports `networking.k8s.io/v1` Ingress + Gateway API on one binary |
+| Gateway API (opt-in) | 7 controllers on [Gateway API](https://gateway-api.sigs.k8s.io/) v1.5.1 (experimental channel) | Traefik GW provider, Istio 1.30.2, NGF 2.6.6, Contour v1.33.5, Envoy Gateway v1.8.1, kgateway v2.3.5, Kong 0.24.0 — all coexist on one cluster, each its own LB IP, routing the same apps. See [Gateway API controllers](#gateway-api-controllers-feature-matrix). |
+| Alternative Ingress (opt-in) | [HAProxy](https://github.com/haproxytech/kubernetes-ingress) 1.52.0, [NGINX Inc.](https://github.com/nginx/kubernetes-ingress) (F5 OSS) 2.6.1 | Classic Ingress controllers alongside Traefik, each on its own LB IP via a distinct `ingressClassName`. See [Alternative classic Ingress](#alternative-classic-ingress-controllers-opt-in). |
+| TLS / HTTPS (opt-in) | [cert-manager](https://cert-manager.io/) v1.20.3 + local CA + [sslip.io](https://sslip.io) | Trusted HTTPS (no `-k`) for every front door — fully offline, no Let's Encrypt, no public domain. `make cert-manager` then `make tls` / `make tls-all`. See [HTTPS with a locally-trusted CA](#https-with-a-locally-trusted-ca). |
+| Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.11.1 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
 | Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.16.0 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
 | Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.2 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Metrics (opt-in) | [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (chart 3.13.1) | `kubectl top` + Horizontal Pod Autoscaler support. `make metrics-server`. |
-| Web UI | [Headlamp](https://github.com/kubernetes-sigs/headlamp) 0.42.x | SIG-UI-endorsed Kubernetes UI (successor to the archived `kubernetes/dashboard`); single-pod ClusterIP with token-based login |
+| Web UI | [Headlamp](https://github.com/kubernetes-sigs/headlamp) 0.43.x | SIG-UI-endorsed Kubernetes UI (successor to the archived `kubernetes/dashboard`); single-pod ClusterIP with token-based login |
 | CI | GitHub Actions | `make deps` + `make kind-create` — same Makefile path users hit locally; CI verifies install scripts on every push |
 
 ## Quick Start
@@ -62,7 +62,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | 8.30.1 |
-| [trivy](https://github.com/aquasecurity/trivy) | 0.71.1 |
+| [trivy](https://github.com/aquasecurity/trivy) | 0.71.2 |
 | [hadolint](https://github.com/hadolint/hadolint) | 2.14.0 |
 | [act](https://github.com/nektos/act) | 0.2.89 |
 | [bats](https://github.com/bats-core/bats-core) | 1.13.0 |
@@ -311,7 +311,7 @@ The four classic Ingress controllers in this lab's orbit (Traefik = default; HAP
 | Also implements Gateway API | ✅ | ⚠️ TCPRoute¹ | ❌ (→ NGF²) | ✅ |
 | Dashboard / UI | ✅ | ⚠️ stats only | ❌ | ❌ (Ent) |
 | Prometheus metrics | ✅ | ✅ | ✅ | ✅ |
-| Latest stable | v3.7.5 / chart 40.x | ctrl v3.2.x / chart 1.52.0 | v5.5.0 / chart 2.6.0 | KIC v3.5.9 / chart 0.24.0 |
+| Latest stable | v3.7.5 / chart 41.x | ctrl v3.2.x / chart 1.52.0 | v5.5.1 / chart 2.6.1 | KIC v3.5.10 / chart 0.24.0 |
 | CNCF | ❌ Traefik Labs | ❌ HAProxy Tech | ❌ F5/NGINX | ❌ Kong Inc. |
 
 ¹ "HAProxy" = the official **haproxytech/kubernetes-ingress**. ⚠️ Its Gateway API support is **`TCPRoute`-only** — and the conformance registry's "HAProxy Ingress" entry is the *separate community* `jcmoraisjr` project, **not** haproxytech.
@@ -354,7 +354,7 @@ The seven Gateway API controllers wired in this repo. Conformance badges are fro
 
 ⁵ Envoy Gateway is a subproject of **Envoy** (CNCF **Graduated**); the registry lists it *partially* conformant.
 
-Versions: Istio 1.30.1 · NGF 2.6.3 · Contour v1.33.5 · Envoy GW v1.8.1 · kgateway v2.3.3 · Kong `kong/ingress` 0.24.0.
+Versions: Istio 1.30.2 · NGF 2.6.6 · Contour v1.33.5 · Envoy GW v1.8.1 · kgateway v2.3.5 · Kong `kong/ingress` 0.24.0.
 
 ## HTTPS with a locally-trusted CA
 
@@ -393,7 +393,7 @@ Smoke-assert the whole thing (trusted, no `-k`) with `TEST_TLS=yes make e2e-smok
 
 ## Headlamp install
 
-Pinned to Helm chart [`headlamp`](https://github.com/kubernetes-sigs/headlamp) **0.42.0**. Headlamp is the SIG-UI-endorsed successor to the [archived](https://github.com/kubernetes/dashboard) kubernetes/dashboard project — a single Pod fronted by a ClusterIP Service on port 80 (HTTP), with token-based login.
+Pinned to Helm chart [`headlamp`](https://github.com/kubernetes-sigs/headlamp) **0.43.0**. Headlamp is the SIG-UI-endorsed successor to the [archived](https://github.com/kubernetes/dashboard) kubernetes/dashboard project — a single Pod fronted by a ClusterIP Service on port 80 (HTTP), with token-based login.
 
 ```mermaid
 flowchart LR
@@ -794,7 +794,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Cluster | `make e2e` | Bring up the full stack and run smoke tests (chains `install-all` + `e2e-smoke`) |
 | Cluster | `make e2e-smoke` | Smoke-test an already-running cluster (no install) |
 | Cluster | `make clean` | Tear down cluster + remove generated scratch artifacts (certs, tokens) |
-| Add-ons | `make headlamp-install` | Headlamp UI (Helm chart 0.42.0) + admin ServiceAccount — successor to the archived kubernetes/dashboard |
+| Add-ons | `make headlamp-install` | Headlamp UI (Helm chart 0.43.0) + admin ServiceAccount — successor to the archived kubernetes/dashboard |
 | Add-ons | `make headlamp-forward` | Port-forward Headlamp to `http://localhost:8081` and open browser |
 | Add-ons | `make headlamp-token` | Print the admin-user token |
 | Add-ons | `make ingress-traefik` | Install Traefik ingress controller (replaces retired ingress-nginx) |

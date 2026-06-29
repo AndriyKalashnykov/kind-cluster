@@ -9,10 +9,10 @@
 > than one of them in the same cluster.
 >
 > Every version, conformance status, and behaviour below is cited to a primary
-> source (see [References](#references)). Verified 2026-06-15 against Gateway API
-> **v1.5.1**, Traefik chart **40.3.0** (appVersion **v3.7.4**), Istio **1.30.1**,
-> NGINX Gateway Fabric **2.6.3**, Contour **v1.33.5**, Envoy Gateway **v1.8.1**,
-> kgateway **v2.3.3**, Kong/KIC chart **0.24.0**, Cilium **v1.19.4**, Calico **v3.32.0**.
+> source (see [References](#references)). Verified 2026-06-29 against Gateway API
+> **v1.5.1**, Traefik chart **41.0.0** (appVersion **v3.7.5**), Istio **1.30.2**,
+> NGINX Gateway Fabric **2.6.6**, Contour **v1.33.5**, Envoy Gateway **v1.8.1**,
+> kgateway **v2.3.5**, Kong/KIC chart **0.24.0**, Cilium **v1.19.4**, Calico **v3.32.0**.
 
 ## TL;DR
 
@@ -123,7 +123,7 @@ as a classic Ingress controller; the Gateway API provider is a second,
 independent in-process provider — enabling it does **not** disable Ingress, and
 adds **no new pod**. Enable in the Helm chart with:
 
-```
+```bash
 --set providers.kubernetesGateway.enabled=true
 # optionally: --set providers.kubernetesGateway.experimentalChannel=true   # TCPRoute/TLSRoute
 ```
@@ -151,7 +151,7 @@ GatewayClass `istio`). Key facts for a kind lab:
   gives it its own IP.
 - **CRDs must be installed first, and version-compatible** — Istio ≤ 1.29 +
   Gateway API v1.5 CRDs makes `istiod` crash-loop (analyzer check `IST0176`).
-  This project pins Istio **1.30.1**, which supports v1.5.x CRDs.
+  This project pins Istio **1.30.2**, which supports v1.5.x CRDs.
 - **GAMMA** (Gateway API for Mesh) extends the same API to **east-west** traffic
   by setting an HTTPRoute's `parentRef` to a **Service** instead of a Gateway —
   out of scope here (we only wire north-south ingress), but it's why Istio is
@@ -242,7 +242,7 @@ identical pods.
 So you reach **Traefik** at `http://localhost/` (hostPort) and **Istio** at its
 own `http://<istio-LB-IP>/` — same backends, different doors. No collision.
 
-<img src="diagrams/out/gateway-coexistence.png" alt="Two Gateway API controllers (Traefik + Istio) with distinct GatewayClasses and entry addresses routing to the same backend Services" width="640">
+<img src="diagrams/out/gateway-coexistence.png" alt="Two Gateway API controllers (Traefik + Istio) with distinct GatewayClasses and entry addresses routing to the same backend Services" width="500">
 
 _Source: [`docs/diagrams/gateway-coexistence.puml`](diagrams/gateway-coexistence.puml) — rendered by `make diagrams`._
 
@@ -272,13 +272,13 @@ _Source: [`docs/diagrams/gateway-coexistence.puml`](diagrams/gateway-coexistence
 |--------|--------------|-------------|
 | `make ingress-traefik` | **Default.** Traefik as a classic Ingress controller (`ingressClassName: traefik`), hostPort 80/443 | `http://<app>.localdev.me/` via `localhost` |
 | `make ingress-haproxy` | Opt-in. HAProxy (haproxytech `kubernetes-ingress`, chart `1.52.0`) as an alternative classic Ingress controller (`ingressClassName: haproxy`) on its own LB IP, fronting the same demo apps. Immune to the GW API floor (a classic Ingress controller never watches `GatewayClass`). | `curl -H 'Host: helloweb.localdev.me' http://<haproxy-LB-IP>/` |
-| `make ingress-nginx` | Opt-in. NGINX Inc. (`nginxinc/kubernetes-ingress`, F5 OSS, chart `2.6.0` — distinct from the retired community `ingress-nginx`) as an alternative classic Ingress controller (`ingressClassName: nginx`) on its own LB IP. `IngressClass nginx` ≠ NGF's `GatewayClass nginx` (different API objects). | `curl -H 'Host: helloweb.localdev.me' http://<nginx-LB-IP>/` |
+| `make ingress-nginx` | Opt-in. NGINX Inc. (`nginxinc/kubernetes-ingress`, F5 OSS, chart `2.6.1` — distinct from the retired community `ingress-nginx`) as an alternative classic Ingress controller (`ingressClassName: nginx`) on its own LB IP. `IngressClass nginx` ≠ NGF's `GatewayClass nginx` (different API objects). | `curl -H 'Host: helloweb.localdev.me' http://<nginx-LB-IP>/` |
 | `make gateway-traefik` | Opt-in. Installs Gateway API CRDs (pinned), enables Traefik's Gateway API provider, applies a `Gateway` + `HTTPRoute`s for the demo apps on `*.gw.localdev.me` | `curl -H 'Host: helloweb.gw.localdev.me' http://localhost/` (same Traefik hostPort, now also via Gateway API) |
 | `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts | `curl -H 'Host: helloweb.localdev.me' http://<istio-gateway-LB-IP>/` |
-| `make gateway-nginx` | Opt-in. Installs Gateway API CRDs + NGINX Gateway Fabric (OSS, chart `2.6.3`, GatewayClass `nginx`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts. Provisions a per-Gateway `ngf-nginx` data-plane Service with its own LB IP | `curl -H 'Host: helloweb.localdev.me' http://<ngf-gateway-LB-IP>/` |
+| `make gateway-nginx` | Opt-in. Installs Gateway API CRDs + NGINX Gateway Fabric (OSS, chart `2.6.6`, GatewayClass `nginx`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts. Provisions a per-Gateway `ngf-nginx` data-plane Service with its own LB IP | `curl -H 'Host: helloweb.localdev.me' http://<ngf-gateway-LB-IP>/` |
 | `make gateway-contour` | Opt-in. Installs Project Contour (Gateway provisioner, `v1.33.5`, GatewayClass `contour`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps. Provisions a per-Gateway `envoy-contour` Service with its own LB IP. The bundled Gateway API CRDs are stripped so the shared experimental-channel CRDs aren't clobbered. On the cluster's v1.5.1 CRDs the GatewayClass reports `SupportedVersion=False` but still routes correctly (best-effort reconcile — Gateway Programmed, routes Accepted) | `curl -H 'Host: helloweb.localdev.me' http://<contour-gateway-LB-IP>/` |
 | `make gateway-envoy` | Opt-in. Installs Envoy Gateway (CNCF, chart `v1.8.1`, GatewayClass `envoy`) + a `Gateway` (`eg`) + `HTTPRoute`s for the **same** demo apps. Reuses the shared GW API CRDs (`crds.gatewayAPI.enabled=false` + `--skip-crds`) and installs only its own `gateway.envoyproxy.io` CRDs. Provisions a per-Gateway Envoy Service in `envoy-gateway-system` with a **generated** name (discovered by `gateway.envoyproxy.io/owning-gateway-*` labels) and its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<envoy-gateway-LB-IP>/` |
-| `make gateway-kgateway` | Opt-in. Installs kgateway (CNCF, formerly Gloo OSS, `v2.3.3`, GatewayClass `kgateway`) + a `Gateway` (`kgw`) + `HTTPRoute`s for the **same** demo apps. Its CRD chart ships only `gateway.kgateway.dev` CRDs (never touches the shared GW API CRDs). Provisions a per-Gateway `kgw` Envoy Service with its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<kgateway-LB-IP>/` |
+| `make gateway-kgateway` | Opt-in. Installs kgateway (CNCF, formerly Gloo OSS, `v2.3.5`, GatewayClass `kgateway`) + a `Gateway` (`kgw`) + `HTTPRoute`s for the **same** demo apps. Its CRD chart ships only `gateway.kgateway.dev` CRDs (never touches the shared GW API CRDs). Provisions a per-Gateway `kgw` Envoy Service with its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<kgateway-LB-IP>/` |
 | `make gateway-kong` | Opt-in. Installs Kong Ingress Controller (umbrella chart `kong/ingress` `0.24.0`, DB-less, GatewayClass `kong`) + a `Gateway` (`kong`) + `HTTPRoute`s for the **same** demo apps. **Unmanaged-Gateway model**: rather than a per-Gateway data plane, the GatewayClass is bound (via `konghq.com/gatewayclass-unmanaged: "true"`) to the chart's single Kong proxy `LoadBalancer` Service — so Kong's Gateway API listeners AND its classic Ingress (`ingressClassName: kong`) share one LB IP. KIC vendors Gateway API v1.3.0 (≥ the v1.2.0 floor) | `curl -H 'Host: helloweb.localdev.me' http://<kong-proxy-LB-IP>/` |
 
 All `gateway-*` targets are idempotent on the shared Gateway API CRDs
@@ -340,13 +340,13 @@ Let's Encrypt **HTTP-01** can't reach them, and **DNS-01** needs a real owned
 domain + provider token. So this lab uses a **local self-signed CA** instead:
 offline, no secrets, and you trust the CA cert yourself.
 
-**The chain (`make cert-manager`).** cert-manager **v1.20.2** is installed via
+**The chain (`make cert-manager`).** cert-manager **v1.20.3** is installed via
 its OCI Helm chart with **`config.enableGatewayAPI=true`** — the current flag
 (*"since cert-manager 1.15, Gateway API support is no longer gated behind a
 feature flag"*; the old `--feature-gates=ExperimentalGatewayAPISupport` is
 removed). It then applies `k8s/tls/ca-bootstrap.yaml`:
 
-```
+```text
 selfsigned-issuer (selfSigned ClusterIssuer)
    └─> lab-root-ca (Certificate, isCA) -> Secret lab-root-ca (cert-manager ns)
           └─> local-ca (CA ClusterIssuer) — signs every leaf cert
