@@ -18,7 +18,7 @@ Spin up a Kubernetes cluster in Docker ([KinD](https://kind.sigs.k8s.io/)) and r
 | TLS / HTTPS (opt-in) | [cert-manager](https://cert-manager.io/) v1.20.3 + local CA + [sslip.io](https://sslip.io) | Trusted HTTPS (no `-k`) for every front door — fully offline, no Let's Encrypt, no public domain. `make cert-manager` then `make tls` / `make tls-all`. See [HTTPS with a locally-trusted CA](#https-with-a-locally-trusted-ca). |
 | Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.11.1 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
 | Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.16.0 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
-| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.2 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
+| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.3 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Metrics (opt-in) | [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (chart 3.13.1) | `kubectl top` + Horizontal Pod Autoscaler support. `make metrics-server`. |
 | Web UI | [Headlamp](https://github.com/kubernetes-sigs/headlamp) 0.43.x | SIG-UI-endorsed Kubernetes UI (successor to the archived `kubernetes/dashboard`); single-pod ClusterIP with token-based login |
@@ -58,7 +58,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 |------|----------------|
 | [kind](https://kind.sigs.k8s.io/) | 0.32.0 |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.2 |
-| [jq](https://github.com/jqlang/jq) | 1.8.1 |
+| [jq](https://github.com/jqlang/jq) | 1.8.2 |
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | 8.30.1 |
@@ -436,7 +436,7 @@ make nfs-incluster
 kubectl apply -f ./k8s/nfs/pvc-incluster.yaml   # sample RWX PVC
 ```
 
-Pinned versions: `csi-driver-nfs` v4.13.2. Source: `scripts/kind-add-nfs-incluster.sh`.
+Pinned versions: `csi-driver-nfs` v4.13.3. Source: `scripts/kind-add-nfs-incluster.sh`.
 
 ### Option 2 — host-side NFS (persistent across cluster recreates)
 
