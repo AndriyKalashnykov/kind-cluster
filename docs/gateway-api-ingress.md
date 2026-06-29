@@ -10,7 +10,7 @@
 >
 > Every version, conformance status, and behaviour below is cited to a primary
 > source (see [References](#references)). Verified 2026-06-29 against Gateway API
-> **v1.5.1**, Traefik chart **41.0.0** (appVersion **v3.7.5**), Istio **1.30.2**,
+> **v1.5.1**, Traefik chart **41.0.1** (appVersion **v3.7.5**), Istio **1.30.2**,
 > NGINX Gateway Fabric **2.6.6**, Contour **v1.33.5**, Envoy Gateway **v1.8.1**,
 > kgateway **v2.3.5**, Kong/KIC chart **0.24.0**, Cilium **v1.19.4**, Calico **v3.32.0**.
 
