@@ -29,7 +29,7 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
 # renovate: datasource=github-releases depName=kubernetes-csi/csi-driver-nfs
-CSI_DRIVER_NFS_VERSION=v4.13.3
+CSI_DRIVER_NFS_VERSION=v4.13.4
 
 NS_DRIVER=kube-system
 NS_SERVER=nfs-server
