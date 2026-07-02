@@ -26,7 +26,7 @@ HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
 # renovate: datasource=docker depName=docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION=v1.8.1
+ENVOY_GATEWAY_VERSION=1.8.2
 ENVOY_GATEWAY_CHART="oci://docker.io/envoyproxy/gateway-helm"
 ENVOY_GATEWAY_CRDS_CHART="oci://docker.io/envoyproxy/gateway-crds-helm"
 
