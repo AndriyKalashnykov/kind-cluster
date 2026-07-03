@@ -26,7 +26,7 @@ HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
 # renovate: datasource=helm depName=kubernetes-ingress registryUrl=https://haproxytech.github.io/helm-charts
-HAPROXY_INGRESS_VERSION=1.52.0
+HAPROXY_INGRESS_VERSION=1.52.1
 HAPROXY_INGRESS_REPO=https://haproxytech.github.io/helm-charts
 
 echo "=== Installing HAProxy Ingress controller (chart ${HAPROXY_INGRESS_VERSION}) ==="
