@@ -24,6 +24,11 @@ jobs:
       # is already on main and the path filter would compute an empty diff —
       # otherwise a release tag silently skips static-check / docker / e2e.
       code: ${{ startsWith(github.ref, 'refs/tags/') && 'true' || steps.filter.outputs.code }}
+      # `docs` = any markdown changed. Used to run the lightweight docs-lint job
+      # (mermaid-lint) on doc-ONLY changes, so a broken ```mermaid block in a
+      # *.md file is gated without paying for the full e2e. When `code` is also
+      # true, static-check already runs mermaid-lint, so docs-lint self-skips.
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -40,7 +45,6 @@ jobs:
           filters: |
             code:
               - '!(**.md|docs/**|LICENSE|.gitignore|.claudeignore|.claude/**|**.png|**.jpg|**.gif|**.svg)'
-              - 'CLAUDE.md'
               # Diagram SOURCES are code — diagrams-check (in static-check) renders
               # them and git-diffs the committed PNGs. Without this re-include, a
               # docs/diagrams/*.puml change (e.g. a Renovate C4-PlantUML !include
@@ -48,6 +52,13 @@ jobs:
               # and a stale-PNG change merges green (the rendered PNGs under out/
               # stay excluded via **.png above, so PNG-only commits still skip).
               - 'docs/diagrams/**/*.puml'
+            # Any markdown — drives docs-lint (mermaid-lint) on doc-only changes.
+            # CLAUDE.md is intentionally NOT re-included in `code` (it carries no
+            # mermaid and never affects the build/e2e), so a CLAUDE.md-only edit
+            # is docs-only and skips the ~4-min e2e; its mermaid, if ever added,
+            # is still gated here via docs-lint.
+            docs:
+              - '**.md'
 
   static-check:
     needs: [changes]
@@ -230,8 +241,29 @@ jobs:
           ./scripts/kind-deploy-app-helloweb.sh
           ./scripts/kind-deploy-app-foo-bar-service.sh
 
+  docs-lint:
+    needs: [changes]
+    # Runs ONLY on doc-only changes (docs changed, no code). When `code` is true,
+    # static-check already runs mermaid-lint, so this self-skips to avoid a
+    # redundant run. Gates a broken ```mermaid block in any *.md without the e2e.
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'false' && needs.changes.outputs.docs == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+
+      - name: Mermaid lint
+        run: make mermaid-lint
+
   ci-pass:
-    needs: [changes, static-check, docker, e2e]
+    needs: [changes, static-check, docker, e2e, docs-lint]
     if: always()
     runs-on: ubuntu-24.04
     steps:
