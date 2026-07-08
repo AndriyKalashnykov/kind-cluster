@@ -858,7 +858,7 @@ GitHub Actions (`runs-on: ubuntu-24.04`, pinned). `ci.yml` runs on every push to
 
 | Workflow | Triggers | What it validates |
 |----------|----------|-------------------|
-| `ci.yml` | push `main` / `v*` / PR | `changes` → `static-check` → (`docker` ‖ `e2e`) → `ci-pass`. Greenfield **cloud-provider-kind** e2e: install scripts + route-readiness poll + `make e2e-smoke` |
+| `ci.yml` | push `main` / `v*` / PR | `changes` → `static-check` → (`docker` ‖ `e2e`) → `ci-pass`, plus a lightweight `docs-lint` (gitleaks + mermaid-lint) that gates doc-only changes so they skip the ~4-min e2e. Greenfield **cloud-provider-kind** e2e: install scripts + route-readiness poll + `make e2e-smoke` |
 | `e2e-metallb.yml` | weekly + dispatch + paths | **MetalLB** LB path + local-CA TLS (LB-IP assertion) + the **MetalLB → cloud-provider-kind migration** smoke |
 | `gateway-test.yml` | weekly + dispatch + paths | All **7 Gateway API controllers** coexisting + trusted HTTPS (`make tls` / `tls-all`) + a CPK-restart regression guard |
 | `ingress-test.yml` | weekly + dispatch + paths | The 2 **alternative classic Ingress** controllers (HAProxy, NGINX-Inc) on distinct `ingressClassName`s |
