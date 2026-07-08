@@ -518,6 +518,7 @@ clean:
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \
 	gateway-api-crds gateway-traefik gateway-istio gateway-nginx gateway-contour gateway-envoy gateway-kgateway gateway-kong \
 	ingress-haproxy ingress-nginx \
+	cilium-cluster cilium-cluster-destroy \
 	cert-manager tls tls-all \
 	metrics-server kube-prometheus-stack \
 	nfs-incluster nfs-host-setup nfs-host-provisioner \
