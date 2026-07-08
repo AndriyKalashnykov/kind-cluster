@@ -34,6 +34,13 @@ KIND_NODE="${KIND_NODE:-$(kube_node_name "$KIND_CLUSTER_NAME")}"
 INGRESS_HTTP_PORT="${INGRESS_HTTP_PORT:-80}"
 INGRESS_HTTPS_PORT="${INGRESS_HTTPS_PORT:-443}"
 
+# NFS RWX I/O probe image — a tiny shell used by the TEST_NFS assertion to
+# write a sentinel through the NFS-backed volume in one pod and read it back in
+# another. Renovate-tracked (scripts custom manager).
+# renovate: datasource=docker depName=busybox
+NFS_PROBE_BUSYBOX_VERSION=1.37.0
+NFS_PROBE_IMAGE="busybox:${NFS_PROBE_BUSYBOX_VERSION}"
+
 INGRESS_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 PASS=0
@@ -287,6 +294,59 @@ if flag_enabled "${TEST_NFS:-}"; then
   "${KUBECTL[@]}" apply -f "$REPO_ROOT/k8s/nfs/pvc-incluster.yaml" >/dev/null
   if "${KUBECTL[@]}" wait pvc/demo-claim-incluster --for=jsonpath='{.status.phase}'=Bound --timeout=120s >/dev/null 2>&1; then
     pass "NFS PVC demo-claim-incluster bound"
+
+    # RWX I/O proof: a PVC reaching Bound only means a PV was provisioned — it
+    # does NOT prove the CSI mount + NFS server actually serve reads/writes.
+    # Write a unique sentinel through the volume in ONE pod, then read it back
+    # in a SECOND pod mounting the same claim — proving both real NFS I/O and
+    # that ReadWriteMany persists the write across pods (the reason this
+    # StorageClass exists). A stale-file false positive is avoided by the
+    # per-run sentinel.
+    nfs_sentinel="nfs-rwx-$$-${RANDOM}"
+    "${KUBECTL[@]}" apply -f - >/dev/null <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-probe-writer
+spec:
+  restartPolicy: Never
+  containers:
+    - name: writer
+      image: ${NFS_PROBE_IMAGE}
+      command: ["sh", "-c", "echo ${nfs_sentinel} > /data/nfs-probe && sync"]
+      volumeMounts:
+        - { name: vol, mountPath: /data }
+  volumes:
+    - name: vol
+      persistentVolumeClaim: { claimName: demo-claim-incluster }
+EOF
+    if "${KUBECTL[@]}" wait pod/nfs-probe-writer --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s >/dev/null 2>&1; then
+      "${KUBECTL[@]}" apply -f - >/dev/null <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-probe-reader
+spec:
+  restartPolicy: Never
+  containers:
+    - name: reader
+      image: ${NFS_PROBE_IMAGE}
+      command: ["sh", "-c", "grep -q ${nfs_sentinel} /data/nfs-probe"]
+      volumeMounts:
+        - { name: vol, mountPath: /data }
+  volumes:
+    - name: vol
+      persistentVolumeClaim: { claimName: demo-claim-incluster }
+EOF
+      if "${KUBECTL[@]}" wait pod/nfs-probe-reader --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s >/dev/null 2>&1; then
+        pass "NFS RWX I/O — sentinel written in one pod, read back in another"
+      else
+        fail "NFS RWX I/O — reader pod could not read the sentinel the writer wrote"
+      fi
+    else
+      fail "NFS RWX I/O — writer pod did not finish writing to the NFS volume"
+    fi
+    "${KUBECTL[@]}" delete pod nfs-probe-writer nfs-probe-reader --ignore-not-found --wait=false >/dev/null 2>&1 || true
   else
     fail "NFS PVC demo-claim-incluster did not bind within 120s"
   fi
