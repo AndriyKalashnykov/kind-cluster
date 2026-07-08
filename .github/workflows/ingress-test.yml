@@ -96,12 +96,13 @@ jobs:
       # the embedded GW API CRDs that previously masked this. Mirrors
       # e2e-metallb.yml's classic-Ingress-only cert-manager step. See
       # scripts/kind-add-cert-manager.sh.
-      - name: Install cert-manager + local CA
+      - name: Install cert-manager and local CA
         env:
           ENABLE_GATEWAY_API: "false"
         run: make cert-manager
 
-      - name: Wire TLS (per-ingress sslip.io)
+      # Per-ingress sslip.io certs.
+      - name: Wire TLS
         run: |
           make tls
           make tls-all

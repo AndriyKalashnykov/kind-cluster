@@ -7,6 +7,11 @@ SHELL := /bin/bash
 # subshell. ~/.local/bin stays on PATH for the mise installer itself.
 export PATH := $(HOME)/.local/share/mise/shims:$(HOME)/.local/bin:$(PATH)
 
+# Operator overrides: load .env (gitignored) BEFORE the `?=` defaults below so
+# `.env` is authoritative for `make` too — not just for scripts. `-include`
+# silently skips a missing .env. Committed source of truth: .env.example.
+-include .env
+
 # === Tool versions pinned in .mise.toml (Renovate-tracked via the mise manager).
 # The constants below track tools NOT managed by mise: docker-image pins
 # (MERMAID_CLI_VERSION, PLANTUML_VERSION, KIND_NODE_IMAGE) and a shared
@@ -49,6 +54,12 @@ ACT_UBUNTU_VERSION := act-24.04
 # on the same workstation. Exported so every downstream script sees it.
 KIND_CLUSTER_NAME ?= kind
 export KIND_CLUSTER_NAME
+
+# Host port for the local dev registry (`make registry`). Externalized so a
+# second registry cluster — or a host process already bound to 5001 — can
+# coexist. Consumed by scripts/kind-with-registry.sh via ${REGISTRY_PORT:-5001}.
+REGISTRY_PORT ?= 5001
+export REGISTRY_PORT
 
 # Every recipe and script call uses an explicit `--context=kind-$(KIND_CLUSTER_NAME)`
 # rather than bare `kubectl`. Bare `kubectl` follows the kubeconfig's
@@ -177,10 +188,13 @@ diagrams: deps-docker $(DIAGRAM_OUT)
 
 $(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml $(DIAGRAM_STAMP)
 	@mkdir -p $(DIAGRAM_DIR)/out
-	@docker run --rm --user $$(id -u):$$(id -g) \
-		-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
-		-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
-		plantuml/plantuml:$(PLANTUML_VERSION) -tpng -o out $(notdir $<)
+	@n=0; until [ $$n -ge 3 ]; do \
+		docker run --rm --user $$(id -u):$$(id -g) \
+			-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
+			-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
+			plantuml/plantuml:$(PLANTUML_VERSION) -tpng -o out $(notdir $<) && break; \
+		n=$$((n+1)); echo "plantuml render failed (attempt $$n/3; the C4-PlantUML !include fetch may have hit HTTP 429) — retrying in 5s"; sleep 5; \
+	done; [ $$n -lt 3 ]
 
 # Re-render trigger — see DIAGRAM_STAMP above. Clears stale stamps so only the
 # stamp for the current PLANTUML_VERSION exists.
@@ -212,6 +226,11 @@ diagrams-drawio: deps-docker
 test: deps-tools
 	@bats tests/
 
+#check-env: @ Fail if the committed .env.example source-of-truth for operator tunables is missing
+check-env:
+	@test -f .env.example || { echo "ERROR: .env.example is missing (committed source of truth for operator tunables per rules/common/configuration.md)."; exit 1; }
+	@echo ".env.example present."
+
 #check-toolchain-alignment: @ Fail if the kubectl/kind versions mirrored across Makefile, .mise.toml, Dockerfile and cloud-init disagree
 check-toolchain-alignment:
 	@set -euo pipefail; \
@@ -233,7 +252,7 @@ check-toolchain-alignment:
 	echo "Toolchain alignment OK (kubectl=$$mk_kubectl, kind=$$mise_kind)."
 
 #static-check: @ Composite quality gate (alignment + lint + test + secrets + trivy + mermaid-lint + diagrams-check)
-static-check: check-toolchain-alignment lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
+static-check: check-env check-toolchain-alignment lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
 	@echo "Static check passed."
 
 #ci: @ Full local CI pipeline (static-check + renovate-validate)
@@ -466,7 +485,7 @@ clean:
 	@rm -f client.crt client.key client.pfx cluster-ca.crt headlamp-admin-token.txt
 
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
-	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint check-toolchain-alignment static-check ci ci-run \
+	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint check-env check-toolchain-alignment static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \

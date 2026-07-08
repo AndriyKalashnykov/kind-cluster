@@ -28,7 +28,7 @@ KUBECTL=(kubectl --context="kind-${CLUSTER_NAME}")
 
 # 1. Start the registry container if not already running.
 reg_name='kind-registry'
-reg_port='5001'
+reg_port="${REGISTRY_PORT:-5001}"
 # Distribution registry image — pinned (was an inline `registry:2` literal,
 # invisible to Renovate). The scripts custom.regex manager bumps it via the
 # comment below; registry-test.yml gates the bump end-to-end before automerge.

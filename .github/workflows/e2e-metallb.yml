@@ -158,7 +158,8 @@ jobs:
       # — so even a cluster that DID carry the experimental Gateway API CRDs and
       # their `safe-upgrades` ValidatingAdmissionPolicy would migrate to CPK
       # cleanly; this job simply has none.) See scripts/kind-add-cert-manager.sh.
-      - name: Install cert-manager + local-CA TLS (classic Ingress, no Gateway API)
+      # Classic Ingress only — no Gateway API resources in this job.
+      - name: Install cert-manager and local-CA TLS
         env:
           ENABLE_GATEWAY_API: "false"
         run: |

@@ -22,6 +22,12 @@ client.pfx
 cluster-ca.crt
 headlamp-admin-token.txt
 
+# Local operator overrides. The committed source of truth is .env.example;
+# a developer copies it to .env and edits. .env.example stays tracked (it does
+# not match these patterns).
+.env
+.env.local
+
 # On-demand draw.io exports from PlantUML sources (make diagrams-drawio).
 # PNGs under docs/diagrams/out/ ARE committed (README renders them); the
 # .drawio XML is for local editing in the draw.io app, not embedded anywhere.
