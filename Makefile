@@ -391,6 +391,14 @@ gateway-kgateway: deps
 gateway-kong: deps
 	@./scripts/kind-add-gateway-kong.sh
 
+#cilium-cluster: @ Opt-in: create a DEDICATED KinD cluster with Cilium (CNI-integrated) Gateway API + demo HTTPRoute on a Node-IPAM LB IP (separate cluster — Cilium must be the CNI; see docs/gateway-api-ingress.md)
+cilium-cluster: deps
+	@KIND_NODE_IMAGE=$(KIND_NODE_IMAGE) ./scripts/kind-cilium-cluster.sh
+
+#cilium-cluster-destroy: @ Delete the dedicated Cilium cluster created by 'make cilium-cluster'
+cilium-cluster-destroy:
+	@kind delete cluster --name "$${CILIUM_CLUSTER_NAME:-cilium}"
+
 #cert-manager: @ Opt-in: install cert-manager + a local self-signed CA (local-ca ClusterIssuer); exports lab-ca.crt for trusted HTTPS (no -k). See README "HTTPS with a locally-trusted CA"
 cert-manager: deps
 	@./scripts/kind-add-cert-manager.sh

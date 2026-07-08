@@ -57,6 +57,17 @@ Deployment_Node(host, "Host or Multipass VM", "Linux / macOS / Windows + Docker"
 
     Container(certmgr, "cert-manager (opt-in)", "v1.20.3 in cert-manager ns; selfSigned -> local-ca CA ClusterIssuer signs *.localdev.me + per-LB-IP *.sslip.io leaf certs into Secrets for trusted HTTPS (make cert-manager / tls / tls-all)")
   }
+
+  ' Cilium's Gateway API requires kube-proxy replacement + disableDefaultCNI
+  ' (cluster-creation-time), so it runs as its OWN dedicated KinD cluster on a
+  ' separate docker network — never an install-all add-on (make cilium-cluster).
+  Deployment_Node(ciliumnet, "Docker network: cilium (separate KinD cluster; opt-in)", "make cilium-cluster") {
+    Deployment_Node(ciliumnode, "cilium-control-plane / cilium-worker", "kindest/node containers; Cilium is the CNI (kube-proxy-free)") {
+      Container(ciliumcni, "Cilium 1.19.5", "CNI + kube-proxy replacement + Gateway API controller; GW API CRDs v1.4.1 (Cilium's own, NOT the shared v1.6.0)")
+      Container(ciliumgw, "cilium-gateway-cilium-gw", "gatewayClassName=cilium; Service type=LoadBalancer via Node IPAM (loadBalancerClass io.cilium/node) -> node IP, host-routable, NO cloud-provider-kind")
+      Container(ciliumapp, "helloweb", "hello-app demo; HTTPRoute Host: helloweb.localdev.me")
+    }
+  }
 }
 
 System_Ext(charts, "Helm chart repos", "traefik, kube-prometheus, headlamp, csi-driver-nfs")
@@ -99,6 +110,11 @@ Rel(api, registries, "Pulls workload images")
 ' reference on their TLS listeners. Two representative edges (applies to all).
 Rel(certmgr, ingress, "Issues *.localdev.me TLS cert (Secret)")
 Rel(certmgr, gwistio, "Issues per-LB-IP *.sslip.io TLS certs (all gateways + alt ingresses)")
+
+' Dedicated Cilium cluster (opt-in): self-contained Gateway API datapath.
+Rel(ciliumcni, ciliumgw, "Reconciles Gateway/HTTPRoute; assigns Node-IPAM LB IP")
+Rel(ciliumgw, ciliumapp, "Routes by Host header (HTTPRoute)")
+Rel(dev, ciliumgw, "HTTP to Node-IPAM LB IP", "cilium subnet, host-routable")
 
 SHOW_LEGEND()
 @enduml

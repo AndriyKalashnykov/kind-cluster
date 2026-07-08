@@ -1,0 +1,13 @@
+# Dedicated cluster for the Cilium Gateway API demo (make cilium-cluster).
+# Cilium must BE the CNI (it cannot be added to the kindnet-based install-all
+# cluster), so this cluster disables the default CNI and kube-proxy at creation
+# time — Cilium provides both. See docs/gateway-api-ingress.md "Cilium Gateway
+# API on KinD".
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+networking:
+  disableDefaultCNI: true      # Cilium replaces kindnet
+  kubeProxyMode: "none"        # Cilium kube-proxy replacement
+nodes:
+  - role: control-plane
+  - role: worker

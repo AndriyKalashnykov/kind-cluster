@@ -1,0 +1,39 @@
+# Cilium Gateway API demo: a GatewayClassConfig that makes the Gateway's
+# LoadBalancer Service use Cilium Node IPAM (io.cilium/node) — the Service gets
+# a node IP, already host-routable on the kind docker subnet, with NO L2
+# announcements (sidesteps cilium/cilium#46260). The cilium GatewayClass is
+# patched to reference this config (GatewayClass-level parametersRef is the
+# wiring Cilium honours; the per-Gateway infrastructure.parametersRef does not).
+apiVersion: cilium.io/v2alpha1
+kind: CiliumGatewayClassConfig
+metadata:
+  name: node-ipam
+  namespace: default
+spec:
+  service:
+    type: LoadBalancer
+    loadBalancerClass: io.cilium/node
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: cilium-gw
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces: { from: Same }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: helloweb
+spec:
+  parentRefs: [{ name: cilium-gw }]
+  hostnames: ["helloweb.localdev.me"]
+  rules:
+    - matches: [{ path: { type: PathPrefix, value: / } }]
+      backendRefs: [{ name: helloweb, port: 80 }]

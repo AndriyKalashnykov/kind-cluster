@@ -50,6 +50,15 @@ System_Boundary(host, "Host or Multipass VM") {
       Container(ingnginx, "NGINX Inc.", "F5 OSS chart 2.6.1", "ingressClassName: nginx (distinct from NGF's GatewayClass); own LoadBalancer IP, same demo apps")
     }
   }
+
+  ' Cilium's Gateway API needs kube-proxy replacement + disableDefaultCNI (both
+  ' cluster-creation-time), so it can never be an install-all add-on — it gets
+  ' its OWN dedicated KinD cluster via `make cilium-cluster`.
+  System_Boundary(ciliumk, "Dedicated Cilium cluster (opt-in; make cilium-cluster)") {
+    Container(ciliumcni, "Cilium", "Helm chart 1.19.5", "CNI + kube-proxy replacement + Gateway API controller; GW API CRDs v1.4.1 (Cilium's own, NOT the shared v1.6.0)")
+    Container(ciliumgw, "Cilium Gateway", "gatewayClassName: cilium", "Node IPAM (loadBalancerClass io.cilium/node) -> node IP, host-routable, no cloud-provider-kind")
+    Container(ciliumapp, "helloweb", "hello-app demo", "HTTPRoute Host: helloweb.localdev.me")
+  }
 }
 
 Rel(dev, docker, "docker / kind CLI")
@@ -82,6 +91,11 @@ Rel(gwkong, apps, "Routes by Host header (own LB IP)")
 Rel(apps, nfs, "Mounts RWX PVCs (optional)")
 Rel(prom, apps, "Scrapes /metrics", "HTTP")
 Rel(dev, prom, "Grafana UI", "kubectl port-forward")
+
+' Opt-in dedicated Cilium cluster: CNI-integrated Gateway API, separate cluster.
+Rel(ciliumcni, ciliumgw, "Reconciles Gateway/HTTPRoute")
+Rel(dev, ciliumgw, "HTTP to Node-IPAM LB IP (separate cluster)")
+Rel(ciliumgw, ciliumapp, "Routes by Host header (HTTPRoute)")
 
 Lay_D(docker, kind)
 Lay_R(cp, worker)
