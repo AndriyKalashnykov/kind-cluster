@@ -244,8 +244,15 @@ jobs:
   docs-lint:
     needs: [changes]
     # Runs ONLY on doc-only changes (docs changed, no code). When `code` is true,
-    # static-check already runs mermaid-lint, so this self-skips to avoid a
-    # redundant run. Gates a broken ```mermaid block in any *.md without the e2e.
+    # static-check already runs these, so this self-skips to avoid a redundant
+    # run. Runs the doc-relevant subset of static-check WITHOUT the ~4-min e2e:
+    #   * secrets (gitleaks) — a secret pasted into any *.md (README/CLAUDE.md/
+    #     docs/**) would otherwise ship unscanned on a doc-only PR, since gitleaks
+    #     lives in static-check (gated on code=true).
+    #   * mermaid-lint — a broken ```mermaid block breaks README rendering on
+    #     github.com; README carries several such blocks.
+    # These two are the ONLY static-check gates that apply to a markdown change
+    # (lint/trivy-config/diagrams-check target shell/k8s/puml, not *.md).
     if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'false' && needs.changes.outputs.docs == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -258,6 +265,9 @@ jobs:
         with:
           install: true
           cache: true
+
+      - name: Secret scan (gitleaks)
+        run: make secrets
 
       - name: Mermaid lint
         run: make mermaid-lint
