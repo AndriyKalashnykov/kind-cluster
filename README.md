@@ -7,18 +7,18 @@
 
 Spin up a Kubernetes cluster in Docker ([KinD](https://kind.sigs.k8s.io/)) and run **7 [Gateway API](docs/gateway-api-ingress.md) + 3 classic Ingress controllers side-by-side on one cluster** — each on its own LoadBalancer IP, all routing the same demo apps. LoadBalancer IPs come from cloud-provider-kind by default (MetalLB is a drop-in alternative). Trusted local-CA HTTPS (fully offline), the Headlamp dashboard, Prometheus/Grafana, ReadWriteMany NFS, and a local registry are opt-in; run on your host or a throwaway Multipass VM.
 
-<img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="450">
+<img src="docs/diagrams/out/c4-context.png" alt="System Context — kind-cluster" width="100%">
 
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
 | Cluster | [KinD](https://kind.sigs.k8s.io/) v0.32.0 on Docker | Fastest local k8s — single binary, multi-node config, no VM overhead |
 | Ingress | [Traefik](https://traefik.io/) v3 (chart 41.x) | Replaces the [retired](https://www.kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) ingress-nginx; supports `networking.k8s.io/v1` Ingress + Gateway API on one binary |
-| Gateway API (opt-in) | 7 controllers on [Gateway API](https://gateway-api.sigs.k8s.io/) v1.5.1 (experimental channel) | Traefik GW provider, Istio 1.30.2, NGF 2.6.6, Contour v1.33.5, Envoy Gateway v1.8.1, kgateway v2.3.5, Kong 0.24.0 — all coexist on one cluster, each its own LB IP, routing the same apps. See [Gateway API controllers](#gateway-api-controllers-feature-matrix). |
-| Alternative Ingress (opt-in) | [HAProxy](https://github.com/haproxytech/kubernetes-ingress) 1.52.0, [NGINX Inc.](https://github.com/nginx/kubernetes-ingress) (F5 OSS) 2.6.1 | Classic Ingress controllers alongside Traefik, each on its own LB IP via a distinct `ingressClassName`. See [Alternative classic Ingress](#alternative-classic-ingress-controllers-opt-in). |
+| Gateway API (opt-in) | 7 controllers on [Gateway API](https://gateway-api.sigs.k8s.io/) v1.6.0 (experimental channel) | Traefik GW provider, Istio 1.30.2, NGF 2.6.6, Contour v1.33.5, Envoy Gateway v1.8.2, kgateway v2.3.5, Kong 0.24.0 — all coexist on one cluster, each its own LB IP, routing the same apps. See [Gateway API controllers](#gateway-api-controllers-feature-matrix). |
+| Alternative Ingress (opt-in) | [HAProxy](https://github.com/haproxytech/kubernetes-ingress) 1.52.1, [NGINX Inc.](https://github.com/nginx/kubernetes-ingress) (F5 OSS) 2.6.1 | Classic Ingress controllers alongside Traefik, each on its own LB IP via a distinct `ingressClassName`. See [Alternative classic Ingress](#alternative-classic-ingress-controllers-opt-in). |
 | TLS / HTTPS (opt-in) | [cert-manager](https://cert-manager.io/) v1.20.3 + local CA + [sslip.io](https://sslip.io) | Trusted HTTPS (no `-k`) for every front door — fully offline, no Let's Encrypt, no public domain. `make cert-manager` then `make tls` / `make tls-all`. See [HTTPS with a locally-trusted CA](#https-with-a-locally-trusted-ca). |
 | Load Balancer (default) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) v0.11.1 | One host container watches `Service: LoadBalancer` and hands out IPs from the `kind` docker bridge — routable from your laptop with zero extra setup. Kind-team maintained. |
 | Load Balancer (alternative) | [MetalLB](https://metallb.universe.tf/) v0.16.0 | In-cluster install (controller + `speaker` DaemonSet + CRDs). Pick it when you need L2/BGP announcement parity with prod. Enable with `LB=metallb make install-all` — see [Which LoadBalancer?](#which-loadbalancer). |
-| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.3 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
+| Storage (RWX) | [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) v4.13.4 | Same driver backs both in-cluster and host-NFS modes — only the StorageClass differs |
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Metrics (opt-in) | [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (chart 3.13.1) | `kubectl top` + Horizontal Pod Autoscaler support. `make metrics-server`. |
 | Web UI | [Headlamp](https://github.com/kubernetes-sigs/headlamp) 0.43.x | SIG-UI-endorsed Kubernetes UI (successor to the archived `kubernetes/dashboard`); single-pod ClusterIP with token-based login |
@@ -62,7 +62,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | 8.30.1 |
-| [trivy](https://github.com/aquasecurity/trivy) | 0.71.2 |
+| [trivy](https://github.com/aquasecurity/trivy) | 0.72.0 |
 | [hadolint](https://github.com/hadolint/hadolint) | 2.14.0 |
 | [act](https://github.com/nektos/act) | 0.2.89 |
 | [bats](https://github.com/bats-core/bats-core) | 1.13.0 |
@@ -311,7 +311,7 @@ The four classic Ingress controllers in this lab's orbit (Traefik = default; HAP
 | Also implements Gateway API | ✅ | ⚠️ TCPRoute¹ | ❌ (→ NGF²) | ✅ |
 | Dashboard / UI | ✅ | ⚠️ stats only | ❌ | ❌ (Ent) |
 | Prometheus metrics | ✅ | ✅ | ✅ | ✅ |
-| Latest stable | v3.7.5 / chart 41.x | ctrl v3.2.x / chart 1.52.0 | v5.5.1 / chart 2.6.1 | KIC v3.5.10 / chart 0.24.0 |
+| Latest stable | v3.7.5 / chart 41.x | ctrl v3.2.x / chart 1.52.1 | v5.5.1 / chart 2.6.1 | KIC v3.5.10 / chart 0.24.0 |
 | CNCF | ❌ Traefik Labs | ❌ HAProxy Tech | ❌ F5/NGINX | ❌ Kong Inc. |
 
 ¹ "HAProxy" = the official **haproxytech/kubernetes-ingress**. ⚠️ Its Gateway API support is **`TCPRoute`-only** — and the conformance registry's "HAProxy Ingress" entry is the *separate community* `jcmoraisjr` project, **not** haproxytech.
@@ -328,7 +328,7 @@ The four classic Ingress controllers in this lab's orbit (Traefik = default; HAP
 
 ### Gateway API controllers (feature matrix)
 
-The seven Gateway API controllers wired in this repo. Conformance badges are from the [implementations registry](https://gateway-api.sigs.k8s.io/implementations/); the gateway-api Go-module floor is verified from each project's `go.mod` (all ≥ v1.2.0, so they coexist on the shared experimental v1.5.1 CRDs). All support HTTPRoute + TLS termination + cert-manager.
+The seven Gateway API controllers wired in this repo. Conformance badges are from the [implementations registry](https://gateway-api.sigs.k8s.io/implementations/); the gateway-api Go-module floor is verified from each project's `go.mod` (all ≥ v1.2.0, so they coexist on the shared experimental v1.6.0 CRDs). All support HTTPRoute + TLS termination + cert-manager.
 
 | Feature | Traefik | Istio | NGF | Contour | Envoy GW | kgateway | Kong |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -354,7 +354,7 @@ The seven Gateway API controllers wired in this repo. Conformance badges are fro
 
 ⁵ Envoy Gateway is a subproject of **Envoy** (CNCF **Graduated**); the registry lists it *partially* conformant.
 
-Versions: Istio 1.30.2 · NGF 2.6.6 · Contour v1.33.5 · Envoy GW v1.8.1 · kgateway v2.3.5 · Kong `kong/ingress` 0.24.0.
+Versions: Istio 1.30.2 · NGF 2.6.6 · Contour v1.33.5 · Envoy GW v1.8.2 · kgateway v2.3.5 · Kong `kong/ingress` 0.24.0.
 
 ## HTTPS with a locally-trusted CA
 
@@ -436,7 +436,7 @@ make nfs-incluster
 kubectl apply -f ./k8s/nfs/pvc-incluster.yaml   # sample RWX PVC
 ```
 
-Pinned versions: `csi-driver-nfs` v4.13.3. Source: `scripts/kind-add-nfs-incluster.sh`.
+Pinned versions: `csi-driver-nfs` v4.13.4. Source: `scripts/kind-add-nfs-incluster.sh`.
 
 ### Option 2 — host-side NFS (persistent across cluster recreates)
 
@@ -521,7 +521,7 @@ First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docke
 
 The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
 
-1. Installs Docker CE, KinD v0.32.0, kubectl v1.36.2, helm v4.2.1
+1. Installs Docker CE, KinD v0.32.0, kubectl v1.36.2, helm v4.2.2
 2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
 3. Clones this repo to `/home/ubuntu/kind-cluster`
 4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.

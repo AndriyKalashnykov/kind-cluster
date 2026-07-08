@@ -9,9 +9,9 @@
 > than one of them in the same cluster.
 >
 > Every version, conformance status, and behaviour below is cited to a primary
-> source (see [References](#references)). Verified 2026-06-29 against Gateway API
-> **v1.5.1**, Traefik chart **41.0.1** (appVersion **v3.7.5**), Istio **1.30.2**,
-> NGINX Gateway Fabric **2.6.6**, Contour **v1.33.5**, Envoy Gateway **v1.8.1**,
+> source (see [References](#references)). Verified 2026-07-08 against Gateway API
+> **v1.6.0**, Traefik chart **41.0.2** (appVersion **v3.7.5**), Istio **1.30.2**,
+> NGINX Gateway Fabric **2.6.6**, Contour **v1.33.5**, Envoy Gateway **v1.8.2**,
 > kgateway **v2.3.5**, Kong/KIC chart **0.24.0**, Cilium **v1.19.4**, Calico **v3.32.0**.
 
 ## TL;DR
@@ -22,7 +22,7 @@
 - The **Gateway API** is the future: the Ingress API is feature-frozen, and the
   reference `ingress-nginx` controller is **retiring** (best-effort maintenance
   ends March 2026) — which is why this project already moved to **Traefik**.
-  Gateway API is **GA** (v1.0 in Oct 2023; current **v1.5.1**).
+  Gateway API is **GA** (v1.0 in Oct 2023; current **v1.6.0**).
 - Traefik v3 and Istio are both **conformant Gateway API controllers**. You can
   enable them here opt-in:
   - `make gateway-traefik` — turns on Traefik's Gateway API provider and routes
@@ -87,9 +87,9 @@ other CRD set:
 
 ```bash
 # standard (GA) channel
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/standard-install.yaml
 # experimental channel (adds TCPRoute/TLSRoute/UDPRoute)
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/experimental-install.yaml
 ```
 
 > The CRDs are **not** bundled by Traefik's or Istio's charts — they must be
@@ -257,7 +257,7 @@ _Source: [`docs/diagrams/gateway-coexistence.puml`](diagrams/gateway-coexistence
   Gateway/kgateway each provision a **per-Gateway** data plane; Kong (KIC) uses
   the **unmanaged** model (one shared proxy Service). Each adds real weight, so
   all are opt-in, not part of `install-all`. All seven vendor a Gateway API
-  client **≥ v1.2.0**, so they share the experimental-channel v1.5.1 CRDs without
+  client **≥ v1.2.0**, so they share the experimental-channel v1.6.0 CRDs without
   the `supportedFeatures` crash that dropped HAProxy.
 - **A "CNI gateway" (Antrea):** ❌ not a thing — Antrea is a CNI (see above).
 - **Cilium/Calico (CNI gateway):** ⚠️ a **separate cluster** — a CNI is chosen at
@@ -271,13 +271,13 @@ _Source: [`docs/diagrams/gateway-coexistence.puml`](diagrams/gateway-coexistence
 | Target | What it does | Reach it at |
 |--------|--------------|-------------|
 | `make ingress-traefik` | **Default.** Traefik as a classic Ingress controller (`ingressClassName: traefik`), hostPort 80/443 | `http://<app>.localdev.me/` via `localhost` |
-| `make ingress-haproxy` | Opt-in. HAProxy (haproxytech `kubernetes-ingress`, chart `1.52.0`) as an alternative classic Ingress controller (`ingressClassName: haproxy`) on its own LB IP, fronting the same demo apps. Immune to the GW API floor (a classic Ingress controller never watches `GatewayClass`). | `curl -H 'Host: helloweb.localdev.me' http://<haproxy-LB-IP>/` |
+| `make ingress-haproxy` | Opt-in. HAProxy (haproxytech `kubernetes-ingress`, chart `1.52.1`) as an alternative classic Ingress controller (`ingressClassName: haproxy`) on its own LB IP, fronting the same demo apps. Immune to the GW API floor (a classic Ingress controller never watches `GatewayClass`). | `curl -H 'Host: helloweb.localdev.me' http://<haproxy-LB-IP>/` |
 | `make ingress-nginx` | Opt-in. NGINX Inc. (`nginxinc/kubernetes-ingress`, F5 OSS, chart `2.6.1` — distinct from the retired community `ingress-nginx`) as an alternative classic Ingress controller (`ingressClassName: nginx`) on its own LB IP. `IngressClass nginx` ≠ NGF's `GatewayClass nginx` (different API objects). | `curl -H 'Host: helloweb.localdev.me' http://<nginx-LB-IP>/` |
 | `make gateway-traefik` | Opt-in. Installs Gateway API CRDs (pinned), enables Traefik's Gateway API provider, applies a `Gateway` + `HTTPRoute`s for the demo apps on `*.gw.localdev.me` | `curl -H 'Host: helloweb.gw.localdev.me' http://localhost/` (same Traefik hostPort, now also via Gateway API) |
 | `make gateway-istio` | Opt-in. Installs Gateway API CRDs + Istio (minimal) + an Istio `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts | `curl -H 'Host: helloweb.localdev.me' http://<istio-gateway-LB-IP>/` |
 | `make gateway-nginx` | Opt-in. Installs Gateway API CRDs + NGINX Gateway Fabric (OSS, chart `2.6.6`, GatewayClass `nginx`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps on the original `*.localdev.me` hosts. Provisions a per-Gateway `ngf-nginx` data-plane Service with its own LB IP | `curl -H 'Host: helloweb.localdev.me' http://<ngf-gateway-LB-IP>/` |
-| `make gateway-contour` | Opt-in. Installs Project Contour (Gateway provisioner, `v1.33.5`, GatewayClass `contour`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps. Provisions a per-Gateway `envoy-contour` Service with its own LB IP. The bundled Gateway API CRDs are stripped so the shared experimental-channel CRDs aren't clobbered. On the cluster's v1.5.1 CRDs the GatewayClass reports `SupportedVersion=False` but still routes correctly (best-effort reconcile — Gateway Programmed, routes Accepted) | `curl -H 'Host: helloweb.localdev.me' http://<contour-gateway-LB-IP>/` |
-| `make gateway-envoy` | Opt-in. Installs Envoy Gateway (CNCF, chart `v1.8.1`, GatewayClass `envoy`) + a `Gateway` (`eg`) + `HTTPRoute`s for the **same** demo apps. Reuses the shared GW API CRDs (`crds.gatewayAPI.enabled=false` + `--skip-crds`) and installs only its own `gateway.envoyproxy.io` CRDs. Provisions a per-Gateway Envoy Service in `envoy-gateway-system` with a **generated** name (discovered by `gateway.envoyproxy.io/owning-gateway-*` labels) and its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<envoy-gateway-LB-IP>/` |
+| `make gateway-contour` | Opt-in. Installs Project Contour (Gateway provisioner, `v1.33.5`, GatewayClass `contour`) + a `Gateway` + `HTTPRoute`s for the **same** demo apps. Provisions a per-Gateway `envoy-contour` Service with its own LB IP. The bundled Gateway API CRDs are stripped so the shared experimental-channel CRDs aren't clobbered. On the cluster's v1.6.0 CRDs the GatewayClass reports `SupportedVersion=False` but still routes correctly (best-effort reconcile — Gateway Programmed, routes Accepted) | `curl -H 'Host: helloweb.localdev.me' http://<contour-gateway-LB-IP>/` |
+| `make gateway-envoy` | Opt-in. Installs Envoy Gateway (CNCF, chart `v1.8.2`, GatewayClass `envoy`) + a `Gateway` (`eg`) + `HTTPRoute`s for the **same** demo apps. Reuses the shared GW API CRDs (`crds.gatewayAPI.enabled=false` + `--skip-crds`) and installs only its own `gateway.envoyproxy.io` CRDs. Provisions a per-Gateway Envoy Service in `envoy-gateway-system` with a **generated** name (discovered by `gateway.envoyproxy.io/owning-gateway-*` labels) and its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<envoy-gateway-LB-IP>/` |
 | `make gateway-kgateway` | Opt-in. Installs kgateway (CNCF, formerly Gloo OSS, `v2.3.5`, GatewayClass `kgateway`) + a `Gateway` (`kgw`) + `HTTPRoute`s for the **same** demo apps. Its CRD chart ships only `gateway.kgateway.dev` CRDs (never touches the shared GW API CRDs). Provisions a per-Gateway `kgw` Envoy Service with its own LB IP. Vendors Gateway API v1.5.1 exactly | `curl -H 'Host: helloweb.localdev.me' http://<kgateway-LB-IP>/` |
 | `make gateway-kong` | Opt-in. Installs Kong Ingress Controller (umbrella chart `kong/ingress` `0.24.0`, DB-less, GatewayClass `kong`) + a `Gateway` (`kong`) + `HTTPRoute`s for the **same** demo apps. **Unmanaged-Gateway model**: rather than a per-Gateway data plane, the GatewayClass is bound (via `konghq.com/gatewayclass-unmanaged: "true"`) to the chart's single Kong proxy `LoadBalancer` Service — so Kong's Gateway API listeners AND its classic Ingress (`ingressClassName: kong`) share one LB IP. KIC vendors Gateway API v1.3.0 (≥ the v1.2.0 floor) | `curl -H 'Host: helloweb.localdev.me' http://<kong-proxy-LB-IP>/` |
 
@@ -304,14 +304,14 @@ Smoke coverage for the Gateway API paths is gated behind `TEST_GATEWAY_API=yes`
 > ([PR #3200](https://github.com/kubernetes-sigs/gateway-api/pull/3200)); v1.4
 > only graduated the field to the standard channel and v1.5 did not re-change its
 > type. So any controller whose vendored `sigs.k8s.io/gateway-api` is **≥ v1.2.0**
-> deserializes the field natively and coexists on these v1.5.1 CRDs. The six wired
+> deserializes the field natively and coexists on these v1.6.0 CRDs. The six wired
 > controllers all clear it (Traefik/Istio/NGF/Envoy Gateway/kgateway vendor
 > v1.5.x; Kong/KIC vendors v1.3.0).
 >
 > **HAProxy Ingress was evaluated and dropped.** Its current stable release
 > (`v0.16.1`) vendors a **pre-v1.2.0** Gateway API client where
 > `GatewayClassStatus.supportedFeatures` is still `[]string`, so once a sibling
-> controller populates the field in the v1.5.1 `[]object` form its GatewayClass
+> controller populates the field in the v1.6.0 `[]object` form its GatewayClass
 > informer fails to unmarshal and the controller crash-loops (never becomes
 > ready). This is independent of channel (the field is structured in standard
 > too). Compatibility only returns in the `v0.17.0-alpha` prerelease line; pinning
@@ -420,7 +420,7 @@ Gateway API
 - GatewayClass / HTTPRoute references — <https://gateway-api.sigs.k8s.io/reference/api-types/gatewayclass/> · <https://gateway-api.sigs.k8s.io/reference/api-types/httproute/>
 - Implementer's Guide (controllerName reconcile rule) — <https://gateway-api.sigs.k8s.io/guides/implementers/>
 - Kubernetes concept — <https://kubernetes.io/docs/concepts/services-networking/gateway/>
-- Releases (v1.5.1) — <https://github.com/kubernetes-sigs/gateway-api/releases>
+- Releases (v1.6.0) — <https://github.com/kubernetes-sigs/gateway-api/releases>
 
 Traefik
 - Gateway API routing reference — <https://doc.traefik.io/traefik/reference/routing-configuration/kubernetes/gateway-api/>
