@@ -38,7 +38,7 @@ INGRESS_HTTPS_PORT="${INGRESS_HTTPS_PORT:-443}"
 # write a sentinel through the NFS-backed volume in one pod and read it back in
 # another. Renovate-tracked (scripts custom manager).
 # renovate: datasource=docker depName=busybox
-NFS_PROBE_BUSYBOX_VERSION=1.37.0
+NFS_PROBE_BUSYBOX_VERSION=1.38.0
 NFS_PROBE_IMAGE="busybox:${NFS_PROBE_BUSYBOX_VERSION}"
 
 INGRESS_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
