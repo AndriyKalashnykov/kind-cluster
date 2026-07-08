@@ -6,7 +6,10 @@
     "`commitMessagePrefix: chore(all):` (below) overrides with a scope so commits read",
     "'chore(all): update ...' for portfolio consistency. Both are required — the preset",
     "alone produces 'chore: ...' (no scope), and `commitMessagePrefix` alone is treated",
-    "as a literal string prefix without semantic-commit grouping."
+    "as a literal string prefix without semantic-commit grouping.",
+    "platformAutomerge is deliberately false: main requires the ci-pass status",
+    "check and true can merge in the ~1s window before the check registers (the",
+    "registration race). Do NOT flip to true — see CLAUDE.md conventions."
   ],
   "extends": [
     "config:best-practices",
@@ -77,6 +80,12 @@
       "description": "Wait 3 days before automerging major updates",
       "matchUpdateTypes": ["major"],
       "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Diagram-renderer bumps need a manual PNG regen. A C4-PlantUML or plantuml/plantuml bump that changes the render fails the diagrams-check gate, so the PR cannot auto-merge and must be finished by hand (`make diagrams` + commit the regenerated PNGs on the branch). Disable automerge and add a distinct label so it is not mistaken for a stuck routine bump. See CLAUDE.md 'Diagram renderer bumps' runbook.",
+      "matchDepNames": ["plantuml-stdlib/C4-PlantUML", "plantuml/plantuml"],
+      "automerge": false,
+      "labels": ["dependencies", "needs-diagram-regen"]
     },
     {
       "description": "Buffer mise tool bumps 3 days at ALL update types. The aqua: backend resolves via github-tags, which sees a tag before the GitHub release artifact (the actual binary) publishes — a fresh minor/patch can otherwise open a PR whose `mise install` 404s in CI. The major-only buffer above does not cover minor/patch, so this adds the buffer for the mise manager specifically.",

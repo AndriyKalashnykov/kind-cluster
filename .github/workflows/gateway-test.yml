@@ -108,10 +108,11 @@ jobs:
       # Trusted HTTPS via a local CA (cert-manager + sslip.io). cert-manager
       # then a static *.localdev.me cert (make tls) and per-LB-IP *.sslip.io
       # certs + HTTPS listeners on every installed gateway (make tls-all).
-      - name: Install cert-manager + local CA
+      - name: Install cert-manager and local CA
         run: make cert-manager
 
-      - name: Wire TLS (Traefik classic Ingress + per-gateway sslip.io)
+      # Traefik classic Ingress plus per-gateway sslip.io certs.
+      - name: Wire TLS
         run: |
           make tls
           make tls-all

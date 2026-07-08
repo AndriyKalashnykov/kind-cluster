@@ -157,10 +157,10 @@ curl -H "Host: helloweb.gw.localdev.me" "http://$GW/"        # Hello, world!
 curl -H "Host: golang.gw.localdev.me"  "http://$GW/healthz"  # {"health":"ok"}
 ```
 
-**Istio** (`demo`), **NGINX Gateway Fabric** (`ngf`), **Contour** (`contour`), **Envoy Gateway** (`eg`), **kgateway** (`kgw`), and **Kong** (`kong`) each have their own IP and reuse the plain `*.localdev.me` hostnames — so target each by its IP. The same hostname can't point at six IPs in `/etc/hosts`, so pass it as a `Host:` header (or use `curl --resolve helloweb.localdev.me:80:<ip>`):
+**Istio** (`istio`), **NGINX Gateway Fabric** (`ngf`), **Contour** (`contour`), **Envoy Gateway** (`eg`), **kgateway** (`kgw`), and **Kong** (`kong`) each have their own IP and reuse the plain `*.localdev.me` hostnames — so target each by its IP. The same hostname can't point at six IPs in `/etc/hosts`, so pass it as a `Host:` header (or use `curl --resolve helloweb.localdev.me:80:<ip>`):
 
 ```bash
-for gw in demo ngf contour eg kgw kong; do
+for gw in istio ngf contour eg kgw kong; do
   IP=$(kubectl get gateway "$gw" -o jsonpath='{.status.addresses[0].value}')
   echo "== $gw @ $IP =="
   curl -H "Host: helloweb.localdev.me" "http://$IP/"          # same backend, different front door
