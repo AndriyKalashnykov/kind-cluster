@@ -20,9 +20,9 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT=${1:-180s}
 
 echo "waiting for Traefik service to get External-IP"
-for _ in $(seq 1 90); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-90}"); do
     "${KUBECTL[@]}" get service/traefik -n traefik --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
 done
 "${KUBECTL[@]}" get service/traefik -n traefik --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: Traefik LoadBalancer did not get an External-IP after 180s"; "${KUBECTL[@]}" get svc -n traefik traefik; exit 1; }
 service_ip=$("${KUBECTL[@]}" get services traefik -n traefik -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
@@ -47,8 +47,8 @@ while [ -z "$hostname" ]; do
   echo "Waiting for hostname ..."
   hostname=$("${KUBECTL[@]}" get --namespace default ingress/demo-localhost --template="{{range .status.loadBalancer.ingress}}{{.hostname}}{{end}}")
   if [ -z "$hostname" ];then
-    sleep 10
-    wait_period=$((wait_period+10))
+    sleep "${POLL_INTERVAL:-10}"
+    wait_period=$((wait_period+${POLL_INTERVAL:-10}))
   fi
 
   wait_timeout=${TIMEOUT//[^0-9]/}
@@ -64,8 +64,8 @@ echo "ingress demo-localhost hostname: $hostname"
 # node with an explicit Host header. Retry up to 30s for async rule propagation.
 KIND_NODE=$(docker ps --filter label=io.x-k8s.kind.role=control-plane --format '{{.Names}}' | head -1)
 INGRESS_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-for _ in $(seq 1 15); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-15}"); do
     RESP=$(docker exec "${KIND_NODE}" curl -sf --max-time 5 -H "Host: demo.localdev.me" "http://${INGRESS_IP}:80/" 2>/dev/null) && { echo "$RESP" | head -c 200; echo; break; }
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
 done
 [ -n "${RESP:-}" ] || echo "(curl http://${INGRESS_IP} via ${KIND_NODE} with Host demo.localdev.me failed after 30s)"

@@ -43,9 +43,9 @@ echo "=== Applying NGF Gateway + HTTPRoutes (auto-provisions an nginx data plane
 # Service named "<gateway>-nginx" = "ngf-nginx" in the default namespace.
 # Provisioning is async — wait for the Deployment to appear, then for its
 # rollout (rollout status errors immediately if the object does not yet exist).
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   "${KUBECTL[@]}" -n default get deployment/ngf-nginx >/dev/null 2>&1 && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 "${KUBECTL[@]}" -n default rollout status deployment/ngf-nginx --timeout="${TIMEOUT}"
 

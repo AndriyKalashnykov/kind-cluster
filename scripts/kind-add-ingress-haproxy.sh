@@ -51,11 +51,11 @@ echo "=== Applying the HAProxy Ingress for the demo apps (ingressClassName: hapr
 # <release>-kubernetes-ingress = haproxytech-kubernetes-ingress; selecting by
 # type is robust to release-name changes).
 HAPROXY_SVC=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   HAPROXY_SVC=$("${KUBECTL[@]}" -n haproxy-controller get svc \
     -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1 || echo "")
   [ -n "$HAPROXY_SVC" ] && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 
 echo "HAProxy Ingress installed. Its controller Service ($HAPROXY_SVC) gets its own LoadBalancer IP:"

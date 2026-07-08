@@ -54,11 +54,11 @@ echo "=== Applying Kong GatewayClass (unmanaged) + Gateway + HTTPRoutes ==="
 # chart versions — kong-gateway-proxy / kong-proxy — so select the LB-typed Service
 # in the kong namespace rather than hardcoding a name).
 KONG_SVC=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   KONG_SVC=$("${KUBECTL[@]}" -n kong get svc \
     -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1 || echo "")
   [ -n "$KONG_SVC" ] && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 
 echo "Kong installed. Its proxy Service ($KONG_SVC) gets its own LoadBalancer IP:"

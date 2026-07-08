@@ -92,12 +92,12 @@ EOF
 # Retry until the webhook accepts the resources — "webhook ready" == "apply
 # succeeds" — mirroring the K1.5 route-readiness poll the e2e harness uses.
 applied=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     if printf '%s\n' "$metallb_crs" | "${KUBECTL[@]}" apply -f=- 2>/tmp/metallb-apply.err; then
         applied=yes
         break
     fi
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
 done
 if [ -z "$applied" ]; then
     echo "ERROR: IPAddressPool/L2Advertisement apply failed after 60s (webhook never became ready)"

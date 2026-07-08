@@ -29,8 +29,8 @@ helm upgrade --install --set 'args={--kubelet-insecure-tls}' \
 "${KUBECTL[@]}" rollout status deployment/metrics-server -n kube-system --timeout=3m
 "${KUBECTL[@]}" get deploy,svc -n kube-system | grep -E metrics-server
 # APIService can take ~30s after rollout before it accepts queries; retry.
-for _ in 1 2 3 4 5 6 7 8 9 10; do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-10}"); do
     "${KUBECTL[@]}" get --raw "/apis/metrics.k8s.io/v1beta1/nodes" >/dev/null 2>&1 && { echo "metrics API ready"; break; }
-    sleep 3
+    sleep "${POLL_INTERVAL:-3}"
 done
 

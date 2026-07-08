@@ -132,3 +132,33 @@ Forwarding from 127.0.0.1:2222 -> 80"
     run sslip_host golang 172.18.0.10
     [ "$output" = "golang.172-18-0-10.sslip.io" ]
 }
+
+@test "check_host_port: reports a FREE port as available (rc 0)" {
+    # 59651 is in the ephemeral range and almost never bound at test time.
+    run check_host_port 59651
+    [ "$status" -eq 0 ]
+}
+
+@test "check_host_port: detects a BOUND port (rc non-zero)" {
+    local port=59652 ready="$BATS_TEST_TMPDIR/listener_ready"
+    python3 - "$port" "$ready" <<'PY' &
+import socket, sys, time
+p, ready = int(sys.argv[1]), sys.argv[2]
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", p)); s.listen(1)
+open(ready, "w").close()
+time.sleep(5)
+PY
+    local lpid=$!
+    # Wait for the listener to actually be bound before probing (no race).
+    for _ in $(seq 1 20); do [ -f "$ready" ] && break; sleep 0.1; done
+    run check_host_port "$port"
+    kill "$lpid" 2>/dev/null || true
+    [ "$status" -ne 0 ]
+}
+
+@test "check_ports: rc 0 when all ports free" {
+    run check_ports 59653 59654
+    [ "$status" -eq 0 ]
+}

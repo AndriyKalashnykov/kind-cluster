@@ -4,6 +4,9 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+# shellcheck source=scripts/lib.sh
+. "$SCRIPT_DIR/lib.sh"
+
 # Cluster name: defaults to "kind" when invoked outside `make` (preserves
 # backward compat with existing tooling and docs that reference the
 # `kind-kind` context). The Makefile exports KIND_CLUSTER_NAME via
@@ -24,7 +27,27 @@ if kind get clusters | grep -q "^${KIND_CLUSTER_NAME}$"; then
     # "Conventions and exceptions".
     kubectl config use-context "kind-${KIND_CLUSTER_NAME}"
 else
-    KIND_ARGS=(--config=./k8s/kind-config.yaml --name "${KIND_CLUSTER_NAME}" --wait 60s)
+    # Fail fast if the ingress host ports are already bound (by another cluster,
+    # a stray container, or a host service), so creation errors clearly here
+    # instead of kind failing cryptically on the port bind. check_ports (lib.sh)
+    # prints the holder of any taken port.
+    if ! check_ports "${INGRESS_HTTP_PORT:-80}" "${INGRESS_HTTPS_PORT:-443}"; then
+        echo "Aborting cluster creation: an ingress host port is already in use (see above)."
+        echo "Free it, or override with INGRESS_HTTP_PORT / INGRESS_HTTPS_PORT."
+        exit 1
+    fi
+
+    # Render kind-config.yaml with the chosen host-side ingress ports. Only the
+    # two host-side `hostPort:` values are substituted; `containerPort:` stays
+    # 80/443. The defaults (80/443) render a file identical to the committed one,
+    # so behavior is unchanged unless INGRESS_HTTP_PORT/INGRESS_HTTPS_PORT are set.
+    RENDERED_CONFIG="$(mktemp -t kind-config.XXXXXX.yaml)"
+    trap 'rm -f "$RENDERED_CONFIG"' EXIT
+    sed -e "s/^\([[:space:]]*\)hostPort: 80$/\1hostPort: ${INGRESS_HTTP_PORT:-80}/" \
+        -e "s/^\([[:space:]]*\)hostPort: 443$/\1hostPort: ${INGRESS_HTTPS_PORT:-443}/" \
+        ./k8s/kind-config.yaml > "$RENDERED_CONFIG"
+
+    KIND_ARGS=(--config="$RENDERED_CONFIG" --name "${KIND_CLUSTER_NAME}" --wait 60s)
     if [ -n "${KIND_NODE_IMAGE:-}" ]; then
         KIND_ARGS+=(--image="$KIND_NODE_IMAGE")
     fi

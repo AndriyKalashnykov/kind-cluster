@@ -55,9 +55,9 @@ echo "=== Bootstrapping the local CA (selfSigned -> CA -> local-ca ClusterIssuer
 # The validating webhook can briefly refuse admission for a few seconds after
 # the Deployment reports Ready; retry the apply until it sticks (same race the
 # MetalLB IPAddressPool apply guards against).
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   "${KUBECTL[@]}" apply -f k8s/tls/ca-bootstrap.yaml >/dev/null 2>&1 && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 "${KUBECTL[@]}" apply -f k8s/tls/ca-bootstrap.yaml
 "${KUBECTL[@]}" wait clusterissuer/local-ca --for=condition=Ready --timeout="${TIMEOUT}"

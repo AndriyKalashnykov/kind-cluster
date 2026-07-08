@@ -49,11 +49,11 @@ echo "=== Applying the NGINX Ingress for the demo apps (ingressClassName: nginx)
 # Discover the controller's LoadBalancer Service by type (its name is
 # <release>-nginx-ingress-controller; selecting by type is robust).
 NGINX_SVC=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   NGINX_SVC=$("${KUBECTL[@]}" -n nginx-ingress get svc \
     -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1 || echo "")
   [ -n "$NGINX_SVC" ] && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 
 echo "NGINX Inc. Ingress installed. Its controller Service ($NGINX_SVC) gets its own LoadBalancer IP:"

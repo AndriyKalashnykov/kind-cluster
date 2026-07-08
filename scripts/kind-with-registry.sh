@@ -18,6 +18,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
+. "$SCRIPT_DIR/lib.sh"
+
 CLUSTER_NAME=${CLUSTER_NAME:-kind-registry}
 
 # Explicit context for the registry-wired cluster (separate from the default
@@ -35,6 +39,15 @@ reg_port="${REGISTRY_PORT:-5001}"
 # renovate: datasource=docker depName=registry
 REGISTRY_IMAGE_VERSION=3
 if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
+  # Fail fast if the registry host port is already bound by something OTHER than
+  # our own registry (which we only reach here when it is NOT already running),
+  # so `docker run -p` doesn't error cryptically. check_ports (lib.sh) prints the
+  # holder; `set -e` aborts on its non-zero return.
+  if ! check_ports "$reg_port"; then
+    echo "Aborting: registry host port ${reg_port} is already in use (see above)."
+    echo "Free it, or override with REGISTRY_PORT."
+    exit 1
+  fi
   docker run \
     -d --restart=always -p "127.0.0.1:${reg_port}:5000" --network bridge --name "${reg_name}" \
     "registry:${REGISTRY_IMAGE_VERSION}"

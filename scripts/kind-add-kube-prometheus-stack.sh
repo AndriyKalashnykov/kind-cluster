@@ -36,9 +36,9 @@ echo "changing kube-prometheus-stack-grafana service type to LoadBlancer"
 "${KUBECTL[@]}" patch svc kube-prometheus-stack-grafana -n monitoring --type='json' -p "[{\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"LoadBalancer\"}]"
 
 echo "waiting for kube-prometheus-stack-grafana service to get External-IP"
-for _ in $(seq 1 90); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-90}"); do
     "${KUBECTL[@]}" get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' 2>/dev/null | grep -q "ingress" && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
 done
 "${KUBECTL[@]}" get service/kube-prometheus-stack-grafana -n monitoring --output=jsonpath='{.status.loadBalancer}' | grep -q "ingress" || { echo "ERROR: grafana did not get an External-IP after 180s"; "${KUBECTL[@]}" get svc -n monitoring kube-prometheus-stack-grafana; exit 1; }
 

@@ -57,7 +57,7 @@ for spec in "${SPECS[@]}"; do
   GW="${spec%%|*}"; rest="${spec#*|}"; NS="${rest%%|*}"; DISC="${rest##*|}"
   "${KUBECTL[@]}" get gateway "$GW" -n default >/dev/null 2>&1 || { echo "skip $GW (not installed)"; continue; }
 
-  IP=""; for _ in $(seq 1 30); do IP=$(gw_lb_ip "$NS" "$DISC"); [ -n "$IP" ] && break; sleep 2; done
+  IP=""; for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do IP=$(gw_lb_ip "$NS" "$DISC"); [ -n "$IP" ] && break; sleep "${POLL_INTERVAL:-2}"; done
   if [ -z "$IP" ]; then echo "WARN $GW: no LoadBalancer IP yet — skipping"; continue; fi
   DASHED=$(dash_ip "$IP")
   echo "=== $GW: *.${DASHED}.sslip.io @ ${IP} ==="
@@ -126,7 +126,7 @@ for spec in "${ING_SPECS[@]}"; do
   CLASS="${spec%%|*}"; NS="${spec#*|}"
   "${KUBECTL[@]}" get ingressclass "$CLASS" >/dev/null 2>&1 || { echo "skip ingress/$CLASS (not installed)"; continue; }
 
-  IP=""; for _ in $(seq 1 30); do IP=$(gw_lb_ip "$NS" "type:LoadBalancer"); [ -n "$IP" ] && break; sleep 2; done
+  IP=""; for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do IP=$(gw_lb_ip "$NS" "type:LoadBalancer"); [ -n "$IP" ] && break; sleep "${POLL_INTERVAL:-2}"; done
   if [ -z "$IP" ]; then echo "WARN ingress/$CLASS: no LoadBalancer IP yet — skipping"; continue; fi
   DASHED=$(dash_ip "$IP")
   echo "=== ingress/$CLASS: *.${DASHED}.sslip.io @ ${IP} ==="

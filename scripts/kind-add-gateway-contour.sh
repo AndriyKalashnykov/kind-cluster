@@ -70,9 +70,9 @@ echo "=== Applying Contour GatewayClass + Gateway + HTTPRoutes (provisions per-G
 # the Envoy Service is `envoy-contour` (type LoadBalancer) and the data plane is
 # an `envoy-contour` DaemonSet. Provisioning is async — wait for the Service to
 # appear, then for the DaemonSet rollout.
-for _ in $(seq 1 60); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-60}"); do
   "${KUBECTL[@]}" -n default get svc/envoy-contour >/dev/null 2>&1 && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 "${KUBECTL[@]}" -n default rollout status daemonset/envoy-contour --timeout="${TIMEOUT}"
 

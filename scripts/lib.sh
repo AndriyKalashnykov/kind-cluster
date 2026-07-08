@@ -87,3 +87,43 @@ dash_ip() {
 sslip_host() {
     printf '%s.%s.sslip.io' "${1:-}" "$(dash_ip "${2:-}")"
 }
+
+# check_host_port <port>
+#   Return 0 when TCP <port> is FREE on 127.0.0.1, non-zero when something is
+#   already listening on it. A SUCCESSFUL /dev/tcp connect means the port is
+#   TAKEN (return 1); a failed connect or timeout means it is FREE (return 0).
+#   Pure probe — reads nothing, writes nothing; the fd lives only in the
+#   `timeout bash -c` child, so it is closed when that child exits.
+check_host_port() {
+    if timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/${1:-0}" 2>/dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+# check_ports <port>...
+#   Preflight the fixed host ports a target is about to bind. For every port
+#   already in use, print an actionable line naming the likely holder (the docker
+#   container publishing it, or a generic hint to free it / override the matching
+#   *_PORT var). Return non-zero if ANY port is taken, 0 when all are free.
+#   Side effects are limited to the messages it prints (no binds, no mutations),
+#   so it stays safe to source into the bats suite.
+check_ports() {
+    local p holder conflict=0
+    for p in "$@"; do
+        if check_host_port "$p"; then
+            continue
+        fi
+        holder=$(docker ps --filter "publish=$p" --format '{{.Names}}' 2>/dev/null | paste -sd, -)
+        if [ -n "$holder" ]; then
+            echo "ERROR: host port $p is already in use by container(s): $holder"
+        else
+            echo "ERROR: something is bound to 127.0.0.1:$p; free it or override the matching *_PORT var (INGRESS_HTTP_PORT / INGRESS_HTTPS_PORT / HEADLAMP_LOCAL_PORT / REGISTRY_PORT)."
+        fi
+        conflict=1
+    done
+    if [ "$conflict" -eq 0 ]; then
+        echo "check-ports: all requested host ports are free (${*:-none})."
+    fi
+    return "$conflict"
+}

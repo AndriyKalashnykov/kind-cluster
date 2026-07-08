@@ -26,6 +26,14 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 # container for `docker exec`.
 KIND_NODE="${KIND_NODE:-$(kube_node_name "$KIND_CLUSTER_NAME")}"
 
+# Host-side ingress ports — the kind-config extraPortMappings the cluster was
+# created with. Default 80/443; overridable at create time via INGRESS_HTTP_PORT
+# / INGRESS_HTTPS_PORT (scripts/kind-create.sh). Only the HOST-machine-side
+# curls below use these; NODE-internal `docker exec ... curl ...:80` calls and
+# LB-Service-IP curls stay on 80/443 (the Service port, not the host mapping).
+INGRESS_HTTP_PORT="${INGRESS_HTTP_PORT:-80}"
+INGRESS_HTTPS_PORT="${INGRESS_HTTPS_PORT:-443}"
+
 INGRESS_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 PASS=0
@@ -174,11 +182,11 @@ check_curl "demo.localdev.me over HTTPS (websecure/443)" "https://${INGRESS_IP}/
 # node; Traefik's web entrypoint (ports.web.hostPort=80, pinned to control-plane via
 # ingress-ready=true) binds it. This is a HOST-side curl (NOT docker exec) — it
 # proves the host port mapping the kind config promises actually serves.
-if body=$(curl -sf --max-time 10 -H "Host: demo.localdev.me" "http://localhost/" 2>/dev/null) \
+if body=$(curl -sf --max-time 10 -H "Host: demo.localdev.me" "http://localhost:${INGRESS_HTTP_PORT}/" 2>/dev/null) \
     && echo "$body" | grep -qF "It works!"; then
-  pass "host :80 -> control-plane :80 -> Traefik (curl http://localhost/ with demo Host)"
+  pass "host :${INGRESS_HTTP_PORT} -> control-plane :80 -> Traefik (curl http://localhost:${INGRESS_HTTP_PORT}/ with demo Host)"
 else
-  fail "host :80 mapping not serving — curl http://localhost/ did not reach the httpd backend"
+  fail "host :${INGRESS_HTTP_PORT} mapping not serving — curl http://localhost:${INGRESS_HTTP_PORT}/ did not reach the httpd backend"
 fi
 
 # --- Cert export: kind-export-cert.sh produces these in repo root ---
@@ -714,10 +722,10 @@ if flag_enabled "${TEST_TLS:-}"; then
   fi
   if [ -s "$CA" ]; then pass "CA cert present ($(wc -c <"$CA" | tr -d ' ') bytes)"; else fail "CA cert ($CA) missing"; fi
 
-  # Static Traefik path: *.localdev.me over the hostPort 443, trusted (no -k).
-  if curl -sf --cacert "$CA" --resolve helloweb.localdev.me:443:127.0.0.1 \
-       https://helloweb.localdev.me/ 2>/dev/null | grep -qF "Hello, world!"; then
-    pass "STATIC: https://helloweb.localdev.me/ trusted (no -k) -> Hello, world!"
+  # Static Traefik path: *.localdev.me over the host HTTPS port, trusted (no -k).
+  if curl -sf --cacert "$CA" --resolve "helloweb.localdev.me:${INGRESS_HTTPS_PORT}:127.0.0.1" \
+       "https://helloweb.localdev.me:${INGRESS_HTTPS_PORT}/" 2>/dev/null | grep -qF "Hello, world!"; then
+    pass "STATIC: https://helloweb.localdev.me:${INGRESS_HTTPS_PORT}/ trusted (no -k) -> Hello, world!"
   else
     fail "STATIC: trusted HTTPS on helloweb.localdev.me failed (run 'make tls')"
   fi
@@ -743,9 +751,9 @@ if flag_enabled "${TEST_TLS:-}"; then
   # classic path above and coexists on the websecure entrypoint (port 8443) via
   # per-SNI cert resolution. Proves both Traefik TLS paths work simultaneously.
   if "${KUBECTL[@]}" get gateway traefik-gateway -n default >/dev/null 2>&1; then
-    if curl -sf --cacert "$CA" --resolve helloweb.gw.localdev.me:443:127.0.0.1 \
-         https://helloweb.gw.localdev.me/ 2>/dev/null | grep -qF "Hello, world!"; then
-      pass "GW: https://helloweb.gw.localdev.me/ trusted (no -k) -> Hello, world! (Traefik Gateway, websecure/8443)"
+    if curl -sf --cacert "$CA" --resolve "helloweb.gw.localdev.me:${INGRESS_HTTPS_PORT}:127.0.0.1" \
+         "https://helloweb.gw.localdev.me:${INGRESS_HTTPS_PORT}/" 2>/dev/null | grep -qF "Hello, world!"; then
+      pass "GW: https://helloweb.gw.localdev.me:${INGRESS_HTTPS_PORT}/ trusted (no -k) -> Hello, world! (Traefik Gateway, websecure/8443)"
     else
       fail "GW: trusted HTTPS on helloweb.gw.localdev.me failed (run 'make tls' after 'make gateway-traefik')"
     fi
