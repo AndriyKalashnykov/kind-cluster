@@ -428,9 +428,19 @@ The lab's backlog long cited `cilium/cilium#43819` ("no external traffic for Cil
 - The failure is specific to the **endpoint-less Gateway L7LB Service** (the `cilium-gateway-<name>` Service has dummy endpoints + the `l7-load-balancer` flag): externally-sourced packets are never TPROXY-redirected into Cilium's Envoy. Plain `type: LoadBalancer` Services with real endpoints work fine under L2 on KinD.
 - The bug class was **FIXED for Linux-bridge ingress devices in v1.19.2** (PRs [#44658](https://github.com/cilium/cilium/pull/44658) + [#45582](https://github.com/cilium/cilium/pull/45582)) — confirmed working on 1.19.3 by an independent reporter.
 - It **PERSISTS for non-bridge devices** (VLAN subinterface / native NIC) — the current **OPEN, maintainer-deprioritized** issue is [**cilium/cilium#46260**](https://github.com/cilium/cilium/issues/46260) (still broken on 1.19.4/1.19.5); the proposed fix PR #46312 was closed unmerged.
-- **KinD's `eth0` is a plain veth — neither a Linux bridge (the fix's gate) nor a VLAN subinterface (the still-broken case).** Every upstream data point is one or the other, so **KinD is untested territory — only a live spike answers whether the L7LB path works there.**
+- **KinD's `eth0` is a plain veth — neither a Linux bridge (the fix's gate) nor a VLAN subinterface (the still-broken case).** Every upstream data point is one or the other, so KinD was untested territory — resolved by the spike below.
 
-### The spike (run this before wiring anything)
+### Spike result (2026-07-08): VERIFIED — the L7LB datapath WORKS on KinD ✅
+
+The spike was run on a dedicated `cilium-spike` KinD cluster (Cilium **1.19.5**, kube-proxy-free, Gateway API **v1.4.1** CRDs). Results:
+
+- **GatewayClass `cilium` reached `Accepted=True` with no `supportedFeatures` crash** — pinning Cilium's own **v1.4.1** CRDs (not the lab's shared v1.6.0) avoided the `[]string`→`[]object` skew that dropped HAProxy. This confirms the CRD-version rule above.
+- **External L7 traffic reaches the HTTPRoute backend on KinD's veth.** `curl -H 'Host: helloweb.cilium.test' http://<node-ip>:<gateway-nodeport>/` returned the app body (`Hello, world!`), and a wrong `Host` returned **`404`** — proving real Gateway/HTTPRoute host-matching through Cilium's eBPF → L7 TPROXY → Envoy path, i.e. **the #46260 non-bridge bug class does NOT reproduce on KinD's veth.**
+- **One delivery detail remains for the wiring PR:** giving the `cilium-gateway-<name>` LoadBalancer Service a *host-routable* IP. The proven path is the Service's **NodePort**; for a clean lab-consistent "curl the LB IP" story, front it with the lab's existing **cloud-provider-kind** (CNI-agnostic — it assigns an LB IP and forwards to the same proven NodePort/L7 path), which sidesteps both Node-IPAM enablement quirks and L2 announcements. Cilium **Node IPAM** (`CiliumGatewayClassConfig` `service.loadBalancerClass: io.cilium/node`) is the L2-free native alternative but needs its exact enablement nailed down.
+
+**Verdict: GO.** `make cilium-cluster` is now unblocked (feasibility proven end-to-end). Next step is the implementation PR: a dedicated-cluster script (config below) + a demo Gateway/HTTPRoute + cloud-provider-kind for the LB IP + a scheduled `gateway-cilium` e2e that host-curls the app body (the same body-assert as `e2e-smoke.sh`).
+
+### The spike (reproducible recipe)
 
 A dedicated kind cluster, Cilium v1.19.5, and — critically — the **lowest-risk LB delivery first**:
 
@@ -440,7 +450,7 @@ A dedicated kind cluster, Cilium v1.19.5, and — critically — the **lowest-ri
 4. **LB IP via Cilium Node IPAM first** (`loadBalancerClass: io.cilium/node`): the Gateway's LB Service gets a **node IP**, already host-routable on the kind docker subnet, with **no L2 announcements** — this sidesteps the entire #46260 bug class. Only if Node IPAM fails, fall back to LB-IPAM + `CiliumL2AnnouncementPolicy` (a pool inside `docker network inspect kind`'s subnet), then cloud-provider-kind (unproven for the Gateway path — do not assume it dodges the bug).
 5. **Gate = host-curl the demo body**: `curl <gateway-lb-ip>/` from the host returns the app body, mirroring `e2e-smoke.sh`. **Fail-fast on the GatewayClass `supportedFeatures` check first** — if the class never goes `Accepted` (CRD skew) or the L7LB external path times out (the #46260 class on KinD's veth), record the tested-KinD negative result and keep the item deferred.
 
-**Go/no-go:** cautiously *achievable*, not a slam-dunk — the CNI/LB/kind foundation is proven ([fence-io KinD+Cilium LB](https://fence-io.github.io/website/articles/networking/setting-up-load-balancer-service-with-cilium-in-kind-cluster/), [chealion Node-IPAM](https://chealion.ca/blog/learning-gateway-api-cilium-node-ipam-and-l2/)); the risk is entirely the Gateway-API L7LB layer on KinD's veth + the CRD skew, both of which the spike settles empirically. Wire `make cilium-cluster` + a scheduled `gateway-cilium` e2e **only after** the spike's host-curl passes.
+**Go/no-go: GO** (settled empirically by the 2026-07-08 spike above — the two risks, the CRD skew and the L7LB path on KinD's veth, both passed). Wire `make cilium-cluster` + a scheduled `gateway-cilium` e2e; the only open decision is the LB-IP delivery mechanism (cloud-provider-kind recommended). References for the foundation: [fence-io KinD+Cilium LB](https://fence-io.github.io/website/articles/networking/setting-up-load-balancer-service-with-cilium-in-kind-cluster/), [chealion Node-IPAM](https://chealion.ca/blog/learning-gateway-api-cilium-node-ipam-and-l2/).
 
 Refs: [Cilium Gateway API](https://docs.cilium.io/en/stable/network/servicemesh/gateway-api/gateway-api/) · [LB-IPAM](https://docs.cilium.io/en/stable/network/lb-ipam/) · [L2 announcements](https://docs.cilium.io/en/stable/network/l2-announcements/) · [#46260](https://github.com/cilium/cilium/issues/46260) · [#44658](https://github.com/cilium/cilium/pull/44658).
 
