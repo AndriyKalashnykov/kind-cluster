@@ -163,7 +163,7 @@ fi
 # prove the Service actually load-balances (a broken selector pinning all
 # traffic to one deployment would pass the single check but fail here).
 SAW_FOO=""; SAW_BAR=""
-for _ in $(seq 1 20); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-20}"); do
   b=$(docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: foo.localdev.me" "http://${INGRESS_IP}/" 2>/dev/null || true)
   [ "$b" = "foo" ] && SAW_FOO=yes
   [ "$b" = "bar" ] && SAW_BAR=yes
@@ -238,10 +238,10 @@ HL_PF_LOG=$(mktemp)
 "${KUBECTL[@]}" -n headlamp port-forward svc/headlamp :80 >"$HL_PF_LOG" 2>&1 &
 HL_PF_PID=$!
 HL_PORT=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   HL_PORT=$(pf_local_port "$(cat "$HL_PF_LOG")")
   [ -n "$HL_PORT" ] && break
-  sleep 1
+  sleep "${POLL_INTERVAL:-1}"
 done
 if [ -n "$HL_PORT" ] && curl -sf --retry 5 --retry-connrefused --retry-delay 1 --max-time 10 \
     "http://localhost:${HL_PORT}/" | grep -qiF "headlamp"; then
@@ -276,9 +276,9 @@ if flag_enabled "${TEST_METRICS_SERVER:-}"; then
     fail "metrics.k8s.io APIService is not Available"
   fi
   # kubectl top nodes can take ~30s after install before metrics are populated
-  if for _ in $(seq 1 12); do
+  if for _ in $(seq 1 "${POLL_ATTEMPTS:-12}"); do
        out=$("${KUBECTL[@]}" top nodes 2>/dev/null) && [ "$(echo "$out" | wc -l)" -ge 2 ] && break
-       sleep 5
+       sleep "${POLL_INTERVAL:-5}"
      done && [ "$(echo "$out" | wc -l)" -ge 2 ]; then
     pass "kubectl top nodes returns >=1 row"
   else
@@ -369,6 +369,56 @@ if flag_enabled "${TEST_NFS_HOST:-}"; then
   "${KUBECTL[@]}" apply -f "$REPO_ROOT/k8s/nfs/pvc.yaml" >/dev/null
   if "${KUBECTL[@]}" wait pvc/demo-claim --for=jsonpath='{.status.phase}'=Bound --timeout=120s >/dev/null 2>&1; then
     pass "host-NFS PVC demo-claim bound against nfs-host StorageClass"
+
+    # RWX I/O proof (same as the in-cluster path): write a per-run sentinel
+    # through the host-backed volume in one pod, read it back in another —
+    # proving the CSI mount reaches the HOST nfs-kernel-server and RWX persists
+    # across pods, not just that the PV bound.
+    host_nfs_sentinel="nfs-host-rwx-$$-${RANDOM}"
+    "${KUBECTL[@]}" apply -f - >/dev/null <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-host-probe-writer
+spec:
+  restartPolicy: Never
+  containers:
+    - name: writer
+      image: ${NFS_PROBE_IMAGE}
+      command: ["sh", "-c", "echo ${host_nfs_sentinel} > /data/nfs-host-probe && sync"]
+      volumeMounts:
+        - { name: vol, mountPath: /data }
+  volumes:
+    - name: vol
+      persistentVolumeClaim: { claimName: demo-claim }
+EOF
+    if "${KUBECTL[@]}" wait pod/nfs-host-probe-writer --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s >/dev/null 2>&1; then
+      "${KUBECTL[@]}" apply -f - >/dev/null <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-host-probe-reader
+spec:
+  restartPolicy: Never
+  containers:
+    - name: reader
+      image: ${NFS_PROBE_IMAGE}
+      command: ["sh", "-c", "grep -q ${host_nfs_sentinel} /data/nfs-host-probe"]
+      volumeMounts:
+        - { name: vol, mountPath: /data }
+  volumes:
+    - name: vol
+      persistentVolumeClaim: { claimName: demo-claim }
+EOF
+      if "${KUBECTL[@]}" wait pod/nfs-host-probe-reader --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s >/dev/null 2>&1; then
+        pass "host-NFS RWX I/O — sentinel written in one pod, read back in another"
+      else
+        fail "host-NFS RWX I/O — reader pod could not read the sentinel the writer wrote"
+      fi
+    else
+      fail "host-NFS RWX I/O — writer pod did not finish writing to the host NFS volume"
+    fi
+    "${KUBECTL[@]}" delete pod nfs-host-probe-writer nfs-host-probe-reader --ignore-not-found --wait=false >/dev/null 2>&1 || true
   else
     fail "host-NFS PVC demo-claim did not bind within 120s"
   fi
@@ -394,10 +444,10 @@ if flag_enabled "${TEST_MONITORING:-}"; then
   fi
 
   GRAFANA_IP=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     GRAFANA_IP=$("${KUBECTL[@]}" get svc -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
     [ -n "$GRAFANA_IP" ] && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
   done
   if [ -n "$GRAFANA_IP" ]; then
     pass "Grafana Service has LoadBalancer ingress IP ($GRAFANA_IP)"
@@ -410,11 +460,11 @@ if flag_enabled "${TEST_MONITORING:-}"; then
   # through the control-plane node, mirroring the demo-app docker-exec curl path.
   if [ -n "$GRAFANA_IP" ]; then
     GRAFANA_OK=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       if docker exec "$KIND_NODE" curl -sf --max-time 5 "http://${GRAFANA_IP}/api/health" 2>/dev/null | grep -qF '"database"'; then
         GRAFANA_OK=yes; break
       fi
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$GRAFANA_OK" ]; then
       pass "Grafana /api/health routable at LB IP ${GRAFANA_IP} (body has '\"database\"')"
@@ -427,6 +477,31 @@ if flag_enabled "${TEST_MONITORING:-}"; then
     pass "Grafana admin-password secret is present"
   else
     fail "Grafana admin-password secret missing"
+  fi
+
+  # Real login proof: secret-present only proves the credential EXISTS, not that
+  # it WORKS. Decode the admin password and POST it to Grafana's /login. The
+  # password is built into a shell var and fed to curl on STDIN via a here-string
+  # (`<<<`) + `--data @-` — never in argv, so it can't leak via ps / /proc
+  # (rules/common/security.md). Success returns {"message":"Logged in"}.
+  GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
+  grafana_pw=$("${KUBECTL[@]}" get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d)
+  if [ -n "$grafana_pw" ] && [ -n "$GRAFANA_IP" ]; then
+    grafana_login_json='{"user":"'"${GRAFANA_ADMIN_USER}"'","password":"'"${grafana_pw}"'"}'
+    GRAFANA_LOGIN_OK=""
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
+      if docker exec -i "$KIND_NODE" curl -s --max-time 5 -X POST \
+           -H 'Content-Type: application/json' --data @- "http://${GRAFANA_IP}/login" \
+           <<<"$grafana_login_json" 2>/dev/null | grep -qF '"message":"Logged in"'; then
+        GRAFANA_LOGIN_OK=yes; break
+      fi
+      sleep "${POLL_INTERVAL:-2}"
+    done
+    if [ -n "$GRAFANA_LOGIN_OK" ]; then
+      pass "Grafana admin login succeeds (POST /login authenticates ${GRAFANA_ADMIN_USER})"
+    else
+      fail "Grafana admin login failed — the admin secret did not authenticate at /login"
+    fi
   fi
 
   # Prometheus is ClusterIP, accessed via port-forward — assert the API
@@ -444,10 +519,10 @@ if flag_enabled "${TEST_MONITORING:-}"; then
   "${KUBECTL[@]}" -n monitoring port-forward svc/kube-prometheus-stack-prometheus :9090 >"$PROM_PF_LOG" 2>&1 &
   PROM_PF_PID=$!
   PROM_PORT=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     PROM_PORT=$(pf_local_port "$(cat "$PROM_PF_LOG")")
     [ -n "$PROM_PORT" ] && break
-    sleep 1
+    sleep "${POLL_INTERVAL:-1}"
   done
   if [ -n "$PROM_PORT" ] && curl -sf --retry 5 --retry-connrefused --retry-delay 1 --max-time 10 \
       "http://localhost:${PROM_PORT}/-/healthy" >/dev/null; then
@@ -457,14 +532,14 @@ if flag_enabled "${TEST_MONITORING:-}"; then
   fi
   # Targets can take time to come up after install; poll briefly.
   PROM_UP=""
-  for _ in $(seq 1 12); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-12}"); do
     if [ -n "$PROM_PORT" ] && \
        UP_COUNT=$(curl -sf --max-time 10 "http://localhost:${PROM_PORT}/api/v1/targets" 2>/dev/null \
          | jq '[.data.activeTargets[]? | select(.health=="up")] | length' 2>/dev/null) \
        && [ "${UP_COUNT:-0}" -ge 1 ]; then
       PROM_UP=yes; break
     fi
-    sleep 5
+    sleep "${POLL_INTERVAL:-5}"
   done
   if [ -n "$PROM_UP" ]; then
     pass "Prometheus has >=1 target with health=up (${UP_COUNT})"
@@ -499,20 +574,20 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
     fail "Istio GatewayClass not Accepted — run 'make gateway-istio' first"
   fi
   ISTIO_GW_IP=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     ISTIO_GW_IP=$("${KUBECTL[@]}" -n default get svc istio-istio -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
     [ -n "$ISTIO_GW_IP" ] && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
   done
   if [ -n "$ISTIO_GW_IP" ]; then
     pass "Istio gateway Service has its own LoadBalancer IP ($ISTIO_GW_IP)"
     # K1.5 route-readiness: assigned IP != routable; poll until it serves.
     ISTIO_OK=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${ISTIO_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
         ISTIO_OK=yes; break
       fi
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$ISTIO_OK" ]; then
       pass "helloweb reachable via Istio Gateway at ${ISTIO_GW_IP} (same backend as Traefik)"
@@ -533,20 +608,20 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
     fail "NGINX GatewayClass not Accepted — run 'make gateway-nginx' first"
   fi
   NGF_GW_IP=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     NGF_GW_IP=$("${KUBECTL[@]}" -n default get svc ngf-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
     [ -n "$NGF_GW_IP" ] && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
   done
   if [ -n "$NGF_GW_IP" ]; then
     pass "NGF gateway Service has its own LoadBalancer IP ($NGF_GW_IP)"
     # K1.5 route-readiness: assigned IP != routable; poll until it serves.
     NGF_OK=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${NGF_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
         NGF_OK=yes; break
       fi
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$NGF_OK" ]; then
       pass "helloweb reachable via NGF Gateway at ${NGF_GW_IP} (same backend as Traefik)"
@@ -566,20 +641,20 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
     fail "Contour GatewayClass not Accepted — run 'make gateway-contour' first"
   fi
   CONTOUR_GW_IP=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     CONTOUR_GW_IP=$("${KUBECTL[@]}" -n default get svc envoy-contour -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
     [ -n "$CONTOUR_GW_IP" ] && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
   done
   if [ -n "$CONTOUR_GW_IP" ]; then
     pass "Contour Envoy Service has its own LoadBalancer IP ($CONTOUR_GW_IP)"
     # K1.5 route-readiness: assigned IP != routable; poll until it serves.
     CONTOUR_OK=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${CONTOUR_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
         CONTOUR_OK=yes; break
       fi
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$CONTOUR_OK" ]; then
       pass "helloweb reachable via Contour Gateway at ${CONTOUR_GW_IP} (same backend as Traefik)"
@@ -600,29 +675,29 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
     fail "Envoy Gateway GatewayClass not Accepted — run 'make gateway-envoy' first"
   fi
   EG_SVC=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     EG_SVC=$("${KUBECTL[@]}" -n envoy-gateway-system get svc \
       -l gateway.envoyproxy.io/owning-gateway-namespace=default,gateway.envoyproxy.io/owning-gateway-name=eg \
       -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
     [ -n "$EG_SVC" ] && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
   done
   EG_GW_IP=""
   if [ -n "$EG_SVC" ]; then
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       EG_GW_IP=$("${KUBECTL[@]}" -n envoy-gateway-system get svc "$EG_SVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
       [ -n "$EG_GW_IP" ] && break
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
   fi
   if [ -n "$EG_GW_IP" ]; then
     pass "Envoy Gateway Service ($EG_SVC) has its own LoadBalancer IP ($EG_GW_IP)"
     EG_OK=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${EG_GW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
         EG_OK=yes; break
       fi
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$EG_OK" ]; then
       pass "helloweb reachable via Envoy Gateway at ${EG_GW_IP} (same backend as Traefik)"
@@ -642,19 +717,19 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
     fail "kgateway GatewayClass not Accepted — run 'make gateway-kgateway' first"
   fi
   KGW_IP=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     KGW_IP=$("${KUBECTL[@]}" -n default get svc kgw -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
     [ -n "$KGW_IP" ] && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
   done
   if [ -n "$KGW_IP" ]; then
     pass "kgateway gateway Service has its own LoadBalancer IP ($KGW_IP)"
     KGW_OK=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${KGW_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
         KGW_OK=yes; break
       fi
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$KGW_OK" ]; then
       pass "helloweb reachable via kgateway at ${KGW_IP} (same backend as Traefik)"
@@ -675,28 +750,28 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
     fail "Kong GatewayClass not Accepted — run 'make gateway-kong' first"
   fi
   KONG_SVC=""
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     KONG_SVC=$("${KUBECTL[@]}" -n kong get svc \
       -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1 || echo "")
     [ -n "$KONG_SVC" ] && break
-    sleep 2
+    sleep "${POLL_INTERVAL:-2}"
   done
   KONG_IP=""
   if [ -n "$KONG_SVC" ]; then
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       KONG_IP=$("${KUBECTL[@]}" -n kong get svc "$KONG_SVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
       [ -n "$KONG_IP" ] && break
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
   fi
   if [ -n "$KONG_IP" ]; then
     pass "Kong proxy Service ($KONG_SVC) has its own LoadBalancer IP ($KONG_IP)"
     KONG_OK=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${KONG_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
         KONG_OK=yes; break
       fi
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$KONG_OK" ]; then
       pass "helloweb reachable via Kong at ${KONG_IP} (same backend as Traefik)"
@@ -704,6 +779,45 @@ if flag_enabled "${TEST_GATEWAY_API:-}"; then
       fail "Kong at ${KONG_IP} did not route to helloweb within 60s"
     fi
     check_curl "golang /healthz via Kong" "http://${KONG_IP}/healthz" '"health":"ok"' -H "Host: golang.localdev.me"
+
+    # Kong (KIC) uniquely serves BOTH APIs from ONE proxy: it registers a
+    # GatewayClass AND an IngressClass (both named kong). The block above proved
+    # the Gateway API path; prove the CLASSIC Ingress path too by applying an
+    # Ingress (ingressClassName: kong) and reaching the SAME helloweb backend
+    # through the SAME Kong LB IP on a distinct host.
+    KONG_INGRESS_HOST="${KONG_INGRESS_HOST:-helloweb.kong-ingress.localdev.me}"
+    "${KUBECTL[@]}" apply -f - >/dev/null <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: helloweb-kong
+spec:
+  ingressClassName: kong
+  rules:
+    - host: ${KONG_INGRESS_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: helloweb
+                port:
+                  number: 80
+EOF
+    KONG_ING_OK=""
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
+      if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: ${KONG_INGRESS_HOST}" "http://${KONG_IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
+        KONG_ING_OK=yes; break
+      fi
+      sleep "${POLL_INTERVAL:-2}"
+    done
+    if [ -n "$KONG_ING_OK" ]; then
+      pass "Kong ALSO serves classic Ingress (ingressClassName: kong) on the same LB IP"
+    else
+      fail "Kong classic Ingress (ingressClassName: kong) did not route helloweb at ${KONG_IP}"
+    fi
+    "${KUBECTL[@]}" delete ingress helloweb-kong --ignore-not-found --wait=false >/dev/null 2>&1 || true
   else
     fail "Kong proxy Service got no LoadBalancer IP within 60s"
   fi
@@ -726,28 +840,28 @@ if flag_enabled "${TEST_INGRESS_ALT:-}"; then
       fail "$NAME IngressClass '$CLASS' missing — run its make target first"
     fi
     SVC=""
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
       SVC=$("${KUBECTL[@]}" -n "$NS" get svc \
         -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1 || echo "")
       [ -n "$SVC" ] && break
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     IP=""
     if [ -n "$SVC" ]; then
-      for _ in $(seq 1 30); do
+      for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
         IP=$("${KUBECTL[@]}" -n "$NS" get svc "$SVC" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
         [ -n "$IP" ] && break
-        sleep 2
+        sleep "${POLL_INTERVAL:-2}"
       done
     fi
     if [ -n "$IP" ]; then
       pass "$NAME controller Service ($SVC) has its own LoadBalancer IP ($IP)"
       OK=""
-      for _ in $(seq 1 30); do
+      for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
         if docker exec "$KIND_NODE" curl -sf --max-time 5 -H "Host: helloweb.localdev.me" "http://${IP}/" 2>/dev/null | grep -qF "Hello, world!"; then
           OK=yes; break
         fi
-        sleep 2
+        sleep "${POLL_INTERVAL:-2}"
       done
       if [ -n "$OK" ]; then
         pass "helloweb reachable via $NAME at ${IP} (same backend as Traefik)"
@@ -829,9 +943,9 @@ if flag_enabled "${TEST_TLS:-}"; then
     [ -n "$GIP" ] || { fail "TLS $GW: no LB IP"; continue; }
     HOST=$(sslip_host helloweb "$GIP")
     OK=""
-    for _ in $(seq 1 20); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-20}"); do
       curl -sf --cacert "$CA" "https://${HOST}/" 2>/dev/null | grep -qF "Hello, world!" && { OK=yes; break; }
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$OK" ]; then
       pass "SSLIP $GW: https://${HOST}/ trusted (no -k) -> Hello, world!"
@@ -849,9 +963,9 @@ if flag_enabled "${TEST_TLS:-}"; then
     [ -n "$IIP" ] || { fail "TLS ingress/$CLASS: no LB IP"; continue; }
     IHOST=$(sslip_host helloweb "$IIP")
     IOK=""
-    for _ in $(seq 1 20); do
+    for _ in $(seq 1 "${POLL_ATTEMPTS:-20}"); do
       curl -sf --cacert "$CA" "https://${IHOST}/" 2>/dev/null | grep -qF "Hello, world!" && { IOK=yes; break; }
-      sleep 2
+      sleep "${POLL_INTERVAL:-2}"
     done
     if [ -n "$IOK" ]; then
       pass "SSLIP ingress/$CLASS: https://${IHOST}/ trusted (no -k) -> Hello, world!"
