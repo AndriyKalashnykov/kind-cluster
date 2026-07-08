@@ -1,0 +1,76 @@
+name: Cilium Gateway API E2E
+
+on:
+  schedule:
+    - cron: '0 9 * * 0'  # Sunday 09:00 UTC (after ingress at 08:00)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      # Dedicated-cluster recipe: unlike the other gateway jobs this does NOT
+      # layer on install-all — Cilium must be the CNI (kube-proxy replacement +
+      # disableDefaultCNI are cluster-creation-time settings), so it gets its
+      # own cluster. The whole path lives in these files.
+      - 'scripts/kind-cilium-cluster.sh'
+      - 'k8s/cilium/**'
+      - 'scripts/lib.sh'
+      - '.github/workflows/gateway-cilium.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gateway-cilium-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cilium-gateway-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+
+      - name: Install dependencies
+        run: make deps
+
+      # Creates the dedicated Cilium cluster, installs Cilium (kube-proxy-free,
+      # Gateway API, Node IPAM), wires the demo Gateway + HTTPRoute, and asserts
+      # the app is reachable on the Gateway's Node-IPAM LoadBalancer IP (the
+      # positive path — K1.5 route-readiness poll is inside the script).
+      - name: Create Cilium cluster and verify Gateway API datapath
+        run: make cilium-cluster
+
+      # Negative case: the same Gateway must 404 an unknown Host, proving the
+      # HTTPRoute hostname match is enforced (not a catch-all).
+      - name: Assert wrong-Host returns 404
+        run: |
+          LB_IP=$(kubectl --context kind-cilium get svc cilium-gateway-cilium-gw \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "Cilium Gateway LB IP: ${LB_IP:-<none>}"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+            -H "Host: nonexistent.localdev.me" "http://${LB_IP}/")
+          echo "wrong-Host status: $code"
+          if [ "$code" != "404" ]; then
+            echo "::error::Cilium Gateway did not 404 an unknown Host (got $code) — HTTPRoute hostname match not enforced"
+            kubectl --context kind-cilium get gateway,httproute -A
+            exit 1
+          fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl --context kind-cilium get nodes,pods -A -o wide || true
+          kubectl --context kind-cilium get gateway,httproute,svc -A || true
+          kubectl --context kind-cilium -n kube-system logs -l k8s-app=cilium --tail=80 || true
+
+      - name: Tear down Cilium cluster
+        if: always()
+        run: make cilium-cluster-destroy

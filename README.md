@@ -131,7 +131,7 @@ make gateway-kong       # add Kong (KIC, unmanaged Gateway), its own LB IP, same
 
 All seven vendor a Gateway API **≥ v1.2.0** client (v1.5.x for most; Kong/KIC v1.3.0), so they coexist on the shared experimental-channel CRDs without the `supportedFeatures` deserialization crash that dropped HAProxy — whose client predated the v1.2.0 `[]string`→`[]object` change to `GatewayClass.status.supportedFeatures`.
 
-They coexist because each GatewayClass has a distinct `controllerName` and cloud-provider-kind gives each gateway its own LoadBalancer IP. **Antrea is *not* in this comparison** — it's a CNI, not a Gateway API controller (its "gateway" is the `antrea-gw0` dataplane interface); the real CNI-integrated gateways are **Cilium** / **Calico**.
+They coexist because each GatewayClass has a distinct `controllerName` and cloud-provider-kind gives each gateway its own LoadBalancer IP. **Antrea is *not* in this comparison** — it's a CNI, not a Gateway API controller (its "gateway" is the `antrea-gw0` dataplane interface); the real CNI-integrated gateways are **Cilium** / **Calico**. A CNI-integrated gateway must *be* the cluster's CNI, so it cannot join the shared cluster above — **Cilium** ships as a separate `make cilium-cluster` dedicated cluster (Cilium CNI + its Gateway API on a Node-IPAM LB IP); see [docs/gateway-api-ingress.md](docs/gateway-api-ingress.md#cilium-gateway-api-on-kind-dedicated-cluster).
 
 ### Reaching each gateway
 
@@ -255,7 +255,7 @@ Remove any layer and the chain breaks in a specific way: **no CNI** → packets 
 
 **Two DNS scopes — don't confuse them:** **in-cluster** DNS is CoreDNS resolving Service/Pod names to ClusterIPs (how a pod finds `helloweb` by name — service discovery). **External** DNS is how a client *outside* resolves the Ingress/Gateway hostname (`helloweb.localdev.me`) to the controller's LB IP — in this lab that's `/etc/hosts` (or the public `*.localdev.me` wildcard → `127.0.0.1`); in production it's real DNS, often automated by the [ExternalDNS](https://github.com/kubernetes-sigs/external-dns) controller syncing `Ingress`/`Gateway` hostnames to a DNS provider.
 
-**The overlap:** a few CNIs (**Cilium**, **Calico**) *also* implement Gateway API — but that's an optional add-on to their networking role and requires that CNI to *be* the cluster's CNI. That's exactly why Cilium's Gateway API can't be an add-on here (it would replace kindnet) — see the deferred-Cilium note in the doc.
+**The overlap:** a few CNIs (**Cilium**, **Calico**) *also* implement Gateway API — but that's an optional add-on to their networking role and requires that CNI to *be* the cluster's CNI. That's exactly why Cilium's Gateway API can't join the shared cluster here (it would replace kindnet); it ships instead as a separate `make cilium-cluster` dedicated cluster — see the [dedicated-cluster Cilium note in the doc](docs/gateway-api-ingress.md#cilium-gateway-api-on-kind-dedicated-cluster).
 
 ### CNI landscape (feature matrix)
 
@@ -812,6 +812,8 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Gateway API | `make gateway-envoy` | Add Envoy Gateway (CNCF) as another Gateway API controller (own LB IP, same apps) |
 | Gateway API | `make gateway-kgateway` | Add kgateway (CNCF, formerly Gloo OSS) as another Gateway API controller (own LB IP, same apps) |
 | Gateway API | `make gateway-kong` | Add Kong (KIC, unmanaged Gateway) as another Gateway API controller (own LB IP, same apps; also serves classic Ingress) |
+| Gateway API | `make cilium-cluster` | Opt-in: create a **dedicated** KinD cluster with Cilium (CNI-integrated) Gateway API + demo HTTPRoute on a Cilium Node-IPAM LB IP — separate cluster because Cilium must be the CNI |
+| Gateway API | `make cilium-cluster-destroy` | Delete the dedicated Cilium cluster created by `make cilium-cluster` |
 | NFS | `make nfs-incluster` | Option 1 — in-cluster NFS server + csi-driver-nfs (no host config) |
 | NFS | `make nfs-host-setup` | Option 2, step 1 — configure host as NFS server (sudo; Ubuntu/Debian) |
 | NFS | `make nfs-host-provisioner NFS_SERVER=<ip>` | Option 2, step 2 — install csi-driver-nfs pointing at the host export |
@@ -859,6 +861,7 @@ GitHub Actions (`runs-on: ubuntu-24.04`, pinned). `ci.yml` runs on every push to
 | `e2e-metallb.yml` | weekly + dispatch + paths | **MetalLB** LB path + local-CA TLS (LB-IP assertion) + the **MetalLB → cloud-provider-kind migration** smoke |
 | `gateway-test.yml` | weekly + dispatch + paths | All **7 Gateway API controllers** coexisting + trusted HTTPS (`make tls` / `tls-all`) + a CPK-restart regression guard |
 | `ingress-test.yml` | weekly + dispatch + paths | The 2 **alternative classic Ingress** controllers (HAProxy, NGINX-Inc) on distinct `ingressClassName`s |
+| `gateway-cilium.yml` | weekly + dispatch + paths | The **dedicated Cilium** Gateway API cluster (`make cilium-cluster`) — helloweb on a Node-IPAM LB IP + wrong-`Host`→404 assert |
 | `monitoring-test.yml` | weekly + dispatch + paths | `kube-prometheus-stack` — Grafana LB IP + admin secret |
 | `registry-test.yml` | weekly + dispatch + paths | The `make registry` local-registry cluster (push → deploy → curl) |
 | `cleanup-runs.yml` | weekly | Prune old runs (keep latest 5) + caches from closed PR branches |

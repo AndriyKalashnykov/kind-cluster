@@ -46,8 +46,9 @@
 - **Antrea is not in this comparison.** Antrea is a **CNI**, not a Gateway API
   controller — its "gateway" (`antrea-gw0`) is an Open vSwitch dataplane interface,
   unrelated to `gateway.networking.k8s.io`. If you want a **CNI-integrated**
-  gateway, the real options are **Cilium** or **Calico** (both conformant) — see
-  [§ CNI-integrated gateways](#cni-integrated-gateways-cilium--calico).
+  gateway, the real options are **Cilium** or **Calico** (both conformant); Cilium
+  ships here as a **dedicated cluster** via `make cilium-cluster` — see
+  [§ Cilium Gateway API on KinD](#cilium-gateway-api-on-kind-dedicated-cluster).
 
 ---
 
@@ -168,7 +169,9 @@ gateway**, the real options are **Cilium** and **Calico** — both on the Gatewa
 API conformance list:
 
 - **Cilium** — eBPF CNI with built-in Gateway API (GatewayClass `cilium`), served
-  by an embedded **Envoy**; requires kube-proxy replacement and an LB/L2 path.
+  by an embedded **Envoy**; requires kube-proxy replacement and an LB path. It
+  ships here as a **dedicated cluster** via `make cilium-cluster` — see
+  [§ Cilium Gateway API on KinD](#cilium-gateway-api-on-kind-dedicated-cluster).
 - **Calico** — its **Calico Ingress Gateway** is a hardened distribution of the
   **Envoy Gateway** project — enabled cluster-wide via the Tigera operator's
   `GatewayAPI` installation CR, then provisioned per-gateway from a standard
@@ -176,25 +179,20 @@ API conformance list:
 
 **These cannot be "added" to the running cluster.** A cluster has exactly one
 CNI, and kind installs `kindnetd` by default; switching CNIs is a
-**cluster-creation-time** decision. To try Cilium here you recreate the cluster
-with the default CNI disabled:
-
-```yaml
-# kind config — disable kindnet so a real CNI can own pod networking
-networking:
-  disableDefaultCNI: true
-  podSubnet: "10.244.0.0/16"
-```
+**cluster-creation-time** decision. So Cilium's Gateway API is delivered as a
+**separate** cluster, not an `install-all` add-on:
 
 ```bash
-kind create cluster --config kind-cilium.yaml
-cilium install --version 1.19.4 --set kubeProxyReplacement=true \
-  --set gatewayAPI.enabled=true        # requires Gateway API CRDs pre-applied
+make cilium-cluster          # dedicated `cilium` cluster: Cilium 1.19.5 CNI + Gateway API + demo HTTPRoute
+make cilium-cluster-destroy  # delete it
 ```
 
-This is a different (heavier) experiment than the Traefik-vs-Istio comparison,
-which is why this repo documents it rather than wiring it into `install-all`. The
-kind docs note `disableDefaultCNI` is *"a power user feature with limited
+Under the hood this creates a kind cluster with `disableDefaultCNI: true` +
+`kubeProxyMode: none` so Cilium owns pod networking and kube-proxy replacement,
+installs Cilium's own Gateway API v1.4.1 CRDs, and exposes the demo Gateway on a
+Cilium Node-IPAM LoadBalancer IP (full detail in
+[§ Cilium Gateway API on KinD](#cilium-gateway-api-on-kind-dedicated-cluster)).
+The kind docs note `disableDefaultCNI` is *"a power user feature with limited
 support, but many common CNI manifests are known to work, e.g. Calico."*
 
 ### Why not Antrea?
@@ -262,7 +260,8 @@ _Source: [`docs/diagrams/gateway-coexistence.puml`](diagrams/gateway-coexistence
 - **A "CNI gateway" (Antrea):** ❌ not a thing — Antrea is a CNI (see above).
 - **Cilium/Calico (CNI gateway):** ⚠️ a **separate cluster** — a CNI is chosen at
   creation time and is mutually exclusive with kindnet (and with each other). You
-  don't run it *alongside*; you recreate the cluster with it.
+  don't run it *alongside*; Cilium ships as its own cluster via `make cilium-cluster`
+  (see [§ Cilium Gateway API on KinD](#cilium-gateway-api-on-kind-dedicated-cluster)).
 
 ---
 
@@ -413,9 +412,22 @@ cert-manager / sslip.io references:
 
 ---
 
-## Deferred: Cilium Gateway API on KinD
+## Cilium Gateway API on KinD (dedicated cluster)
 
-Cilium is a **CNI-integrated** Gateway API implementation (see [§ The implementations](#the-implementations)). Unlike the 7 controllers this lab wires, Cilium **cannot** be added to the running cluster — it must *be* the CNI. This section records the deep-research (2026-07-08, primary-sourced) that scopes a future `make cilium-cluster`, and the exact spike to run before wiring it.
+Cilium is a **CNI-integrated** Gateway API implementation (see [§ The implementations](#the-implementations)). Unlike the 7 controllers this lab wires into the shared `install-all` cluster, Cilium **cannot** be an add-on — it must *be* the CNI — so it ships as a **dedicated cluster**:
+
+```bash
+make cilium-cluster          # create the `cilium` cluster: Cilium CNI + Gateway API + demo HTTPRoute on a Node-IPAM LB IP
+make cilium-cluster-destroy  # delete it
+```
+
+`make cilium-cluster` creates a separate KinD cluster (name `cilium`, context `kind-cilium`, overridable via `CILIUM_CLUSTER_NAME`) running **Cilium 1.19.5 as the CNI** with its Gateway API controller enabled, and routes the demo `helloweb` app through a `Gateway` + `HTTPRoute` reachable from the host. The script self-asserts `curl -H 'Host: helloweb.localdev.me' http://<lb-ip>/` returns the app body before reporting success; `make cilium-cluster-destroy` deletes the cluster.
+
+The wiring decisions, and the deep-research + spike (2026-07-08, primary-sourced) that validated them:
+
+- **LB IP via Cilium Node IPAM** (`loadBalancerClass: io.cilium/node`) — the Gateway's `LoadBalancer` Service is assigned a **node IP** on the kind docker subnet, already host-routable, with **no L2 announcements** and **no cloud-provider-kind**. Node IPAM is attached through a **GatewayClass-level** `parametersRef` → `CiliumGatewayClassConfig` (Cilium 1.19 does not honour the per-`Gateway` `infrastructure.parametersRef`); because `loadBalancerClass` is immutable, the Gateway is recreated after the GatewayClass is patched.
+- **Gateway API CRDs pinned to v1.4.1** — Cilium 1.19's own tested version, deliberately **not** the lab's shared experimental **v1.6.0**. A newer CRD set re-introduces the `GatewayClass.status.supportedFeatures` `[]string`→`[]object` skew that dropped HAProxy, so the dedicated cluster installs its own CRDs and never reuses `scripts/kind-add-gateway-api-crds.sh`. `CILIUM_GATEWAY_API_VERSION` is coupled to `CILIUM_VERSION` and intentionally not Renovate-tracked (bump both together).
+- **CI:** [`.github/workflows/gateway-cilium.yml`](../.github/workflows/gateway-cilium.yml) — weekly Sunday 09:00 UTC cron + `workflow_dispatch` + push on the cilium files; runs `make cilium-cluster` (self-asserting the app body on the Node-IPAM LB IP), asserts a wrong `Host` returns `404`, then tears the cluster down.
 
 ### Why it's a separate cluster (settled)
 
@@ -436,9 +448,9 @@ The spike was run on a dedicated `cilium-spike` KinD cluster (Cilium **1.19.5**,
 
 - **GatewayClass `cilium` reached `Accepted=True` with no `supportedFeatures` crash** — pinning Cilium's own **v1.4.1** CRDs (not the lab's shared v1.6.0) avoided the `[]string`→`[]object` skew that dropped HAProxy. This confirms the CRD-version rule above.
 - **External L7 traffic reaches the HTTPRoute backend on KinD's veth.** `curl -H 'Host: helloweb.cilium.test' http://<node-ip>:<gateway-nodeport>/` returned the app body (`Hello, world!`), and a wrong `Host` returned **`404`** — proving real Gateway/HTTPRoute host-matching through Cilium's eBPF → L7 TPROXY → Envoy path, i.e. **the #46260 non-bridge bug class does NOT reproduce on KinD's veth.**
-- **One delivery detail remains for the wiring PR:** giving the `cilium-gateway-<name>` LoadBalancer Service a *host-routable* IP. The proven path is the Service's **NodePort**; for a clean lab-consistent "curl the LB IP" story, front it with the lab's existing **cloud-provider-kind** (CNI-agnostic — it assigns an LB IP and forwards to the same proven NodePort/L7 path), which sidesteps both Node-IPAM enablement quirks and L2 announcements. Cilium **Node IPAM** (`CiliumGatewayClassConfig` `service.loadBalancerClass: io.cilium/node`) is the L2-free native alternative but needs its exact enablement nailed down.
+- **LB delivery — the spike proved the NodePort/L7 path and weighed the options; the shipped `make cilium-cluster` uses Cilium Node IPAM** (`CiliumGatewayClassConfig` `service.loadBalancerClass: io.cilium/node`), which gives the `cilium-gateway-<name>` LoadBalancer Service a host-routable **node IP** with no L2 announcements and no cloud-provider-kind (see the section lead). The Service's **NodePort** and a cloud-provider-kind–fronted LB IP were the fallbacks considered — both work, but Node IPAM is the L2-free native path that keeps the cluster self-contained.
 
-**Verdict: GO.** `make cilium-cluster` is now unblocked (feasibility proven end-to-end). Next step is the implementation PR: a dedicated-cluster script (config below) + a demo Gateway/HTTPRoute + cloud-provider-kind for the LB IP + a scheduled `gateway-cilium` e2e that host-curls the app body (the same body-assert as `e2e-smoke.sh`).
+**Verdict: GO — now shipped.** Feasibility was proven end-to-end and `make cilium-cluster` implements it: a dedicated-cluster script (`scripts/kind-cilium-cluster.sh`, kind config in `k8s/cilium/`) + a demo Gateway/HTTPRoute on a Cilium Node-IPAM LB IP + the scheduled `gateway-cilium` e2e that host-curls the app body (the same body-assert as `e2e-smoke.sh`).
 
 ### The spike (reproducible recipe)
 
@@ -450,7 +462,7 @@ A dedicated kind cluster, Cilium v1.19.5, and — critically — the **lowest-ri
 4. **LB IP via Cilium Node IPAM first** (`loadBalancerClass: io.cilium/node`): the Gateway's LB Service gets a **node IP**, already host-routable on the kind docker subnet, with **no L2 announcements** — this sidesteps the entire #46260 bug class. Only if Node IPAM fails, fall back to LB-IPAM + `CiliumL2AnnouncementPolicy` (a pool inside `docker network inspect kind`'s subnet), then cloud-provider-kind (unproven for the Gateway path — do not assume it dodges the bug).
 5. **Gate = host-curl the demo body**: `curl <gateway-lb-ip>/` from the host returns the app body, mirroring `e2e-smoke.sh`. **Fail-fast on the GatewayClass `supportedFeatures` check first** — if the class never goes `Accepted` (CRD skew) or the L7LB external path times out (the #46260 class on KinD's veth), record the tested-KinD negative result and keep the item deferred.
 
-**Go/no-go: GO** (settled empirically by the 2026-07-08 spike above — the two risks, the CRD skew and the L7LB path on KinD's veth, both passed). Wire `make cilium-cluster` + a scheduled `gateway-cilium` e2e; the only open decision is the LB-IP delivery mechanism (cloud-provider-kind recommended). References for the foundation: [fence-io KinD+Cilium LB](https://fence-io.github.io/website/articles/networking/setting-up-load-balancer-service-with-cilium-in-kind-cluster/), [chealion Node-IPAM](https://chealion.ca/blog/learning-gateway-api-cilium-node-ipam-and-l2/).
+**Go/no-go: GO — shipped** (settled empirically by the 2026-07-08 spike above — the two risks, the CRD skew and the L7LB path on KinD's veth, both passed). `make cilium-cluster` + the scheduled `gateway-cilium` e2e implement this recipe, with **Cilium Node IPAM** as the chosen LB-IP delivery mechanism (an L2-free node IP; see the section lead). References for the foundation: [fence-io KinD+Cilium LB](https://fence-io.github.io/website/articles/networking/setting-up-load-balancer-service-with-cilium-in-kind-cluster/), [chealion Node-IPAM](https://chealion.ca/blog/learning-gateway-api-cilium-node-ipam-and-l2/).
 
 Refs: [Cilium Gateway API](https://docs.cilium.io/en/stable/network/servicemesh/gateway-api/gateway-api/) · [LB-IPAM](https://docs.cilium.io/en/stable/network/lb-ipam/) · [L2 announcements](https://docs.cilium.io/en/stable/network/l2-announcements/) · [#46260](https://github.com/cilium/cilium/issues/46260) · [#44658](https://github.com/cilium/cilium/pull/44658).
 
