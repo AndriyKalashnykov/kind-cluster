@@ -42,12 +42,12 @@ helm upgrade --install headlamp "$CHART_URL" \
 "${KUBECTL[@]}" apply -n headlamp -f ./k8s/headlamp-admin.yaml
 
 # Wait for the auto-populated ServiceAccountToken Secret.
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
     if "${KUBECTL[@]}" get secret -n headlamp admin-user-token \
          -o jsonpath='{.data.token}' 2>/dev/null | grep -q .; then
         break
     fi
-    sleep 1
+    sleep "${POLL_INTERVAL:-1}"
 done
 
 headlamp_admin_token=$("${KUBECTL[@]}" get secret -n headlamp admin-user-token \

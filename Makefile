@@ -61,6 +61,16 @@ export KIND_CLUSTER_NAME
 REGISTRY_PORT ?= 5001
 export REGISTRY_PORT
 
+# Host-side ingress ports (templated into the kind-config extraPortMappings) and
+# the Headlamp port-forward local port. Externalized so a host already bound to
+# 80/443/8081 — or a second cluster — can coexist by overriding these.
+INGRESS_HTTP_PORT ?= 80
+export INGRESS_HTTP_PORT
+INGRESS_HTTPS_PORT ?= 443
+export INGRESS_HTTPS_PORT
+HEADLAMP_LOCAL_PORT ?= 8081
+export HEADLAMP_LOCAL_PORT
+
 # Every recipe and script call uses an explicit `--context=kind-$(KIND_CLUSTER_NAME)`
 # rather than bare `kubectl`. Bare `kubectl` follows the kubeconfig's
 # current-context, which a parallel `make` invocation in another KinD project
@@ -230,6 +240,15 @@ test: deps-tools
 check-env:
 	@test -f .env.example || { echo "ERROR: .env.example is missing (committed source of truth for operator tunables per rules/common/configuration.md)."; exit 1; }
 	@echo ".env.example present."
+
+# Host ports probed by `make check-ports` — the ingress binds (80/443) by
+# default. Override to probe a different fixed bind, e.g. the local registry:
+# `make check-ports CHECK_PORTS=$(REGISTRY_PORT)`.
+CHECK_PORTS ?= $(INGRESS_HTTP_PORT) $(INGRESS_HTTPS_PORT)
+
+#check-ports: @ Fail early (naming the holder) if a fixed host port is already bound (default: ingress 80/443; override CHECK_PORTS)
+check-ports:
+	@bash -c '. scripts/lib.sh && check_ports $(CHECK_PORTS)'
 
 #check-toolchain-alignment: @ Fail if the kubectl/kind versions mirrored across Makefile, .mise.toml, Dockerfile and cloud-init disagree
 check-toolchain-alignment:
@@ -485,7 +504,7 @@ clean:
 	@rm -f client.crt client.key client.pfx cluster-ca.crt headlamp-admin-token.txt
 
 .PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
-	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint check-env check-toolchain-alignment static-check ci ci-run \
+	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint check-env check-ports check-toolchain-alignment static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
 	headlamp-install headlamp-forward headlamp-token ingress-traefik \

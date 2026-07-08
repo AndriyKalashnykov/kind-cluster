@@ -61,12 +61,12 @@ echo "=== Applying Envoy Gateway + HTTPRoutes (auto-provisions an Envoy data pla
 # Service in envoy-gateway-system with a generated name; discover it by the
 # owning-gateway labels. Provisioning is async — wait for the Service to appear.
 ENVOY_SVC=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   ENVOY_SVC=$("${KUBECTL[@]}" -n envoy-gateway-system get svc \
     -l gateway.envoyproxy.io/owning-gateway-namespace=default,gateway.envoyproxy.io/owning-gateway-name=eg \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
   [ -n "$ENVOY_SVC" ] && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 [ -n "$ENVOY_SVC" ] && "${KUBECTL[@]}" -n envoy-gateway-system rollout status "deployment/${ENVOY_SVC}" --timeout="${TIMEOUT}" || true
 

@@ -53,13 +53,13 @@ multipass launch \
 
 echo
 echo "=== Waiting for cloud-init bootstrap to finish ==="
-for i in $(seq 1 60); do
+for i in $(seq 1 "${POLL_ATTEMPTS:-60}"); do
     if multipass exec "$NAME" -- test -f /var/lib/kind-cluster-bootstrapped 2>/dev/null; then
-        echo "Bootstrap finished after ${i}0s."
+        echo "Bootstrap finished after $((i * ${POLL_INTERVAL:-10}))s."
         break
     fi
     printf "."
-    sleep 10
+    sleep "${POLL_INTERVAL:-10}"
 done
 echo
 

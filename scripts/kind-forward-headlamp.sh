@@ -13,7 +13,9 @@ set -euo pipefail
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
-LOCAL_PORT=${1:-8081}
+# Positional arg wins; else HEADLAMP_LOCAL_PORT env; else 8081 (8080 is
+# reserved for the deploy-app demos).
+LOCAL_PORT="${1:-${HEADLAMP_LOCAL_PORT:-8081}}"
 NS=headlamp
 SVC=headlamp
 

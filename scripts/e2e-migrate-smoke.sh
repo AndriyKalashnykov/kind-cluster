@@ -70,9 +70,9 @@ else
 fi
 
 # Allow the ns up to 60s to finish Terminating (CRD finalizers can be slow)
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-30}"); do
   "${KUBECTL[@]}" get ns metallb-system >/dev/null 2>&1 || break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 if "${KUBECTL[@]}" get ns metallb-system >/dev/null 2>&1; then
   fail "metallb-system namespace still exists 60s after migration"
@@ -82,10 +82,10 @@ fi
 
 # CPK re-allocates LB IPs after the kick. Wait for ingress to get a fresh one.
 NEW_IP=""
-for _ in $(seq 1 60); do
+for _ in $(seq 1 "${POLL_ATTEMPTS:-60}"); do
   NEW_IP=$("${KUBECTL[@]}" get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
   [ -n "$NEW_IP" ] && break
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 if [ -n "$NEW_IP" ]; then
   pass "Traefik reassigned a LoadBalancer IP under CPK ($NEW_IP)"
@@ -98,13 +98,13 @@ fi
 
 # K1.5 — IP assigned ≠ IP routable. Poll the body until ready.
 ROUTED=0
-for i in $(seq 1 60); do
+for i in $(seq 1 "${POLL_ATTEMPTS:-60}"); do
   if docker exec "$KIND_NODE" curl -sf --max-time 3 -H 'Host: demo.localdev.me' "http://${NEW_IP}/" 2>/dev/null | grep -q 'It works!'; then
-    pass "demo.localdev.me reachable through CPK after $((i * 2))s"
+    pass "demo.localdev.me reachable through CPK after $((i * ${POLL_INTERVAL:-2}))s"
     ROUTED=1
     break
   fi
-  sleep 2
+  sleep "${POLL_INTERVAL:-2}"
 done
 if [ "$ROUTED" -ne 1 ]; then
   fail "demo.localdev.me did not respond through CPK within 120s"
