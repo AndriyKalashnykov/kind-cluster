@@ -12,7 +12,7 @@
 > source (see [References](#references)). Verified 2026-07-08 against Gateway API
 > **v1.6.0**, Traefik chart **41.0.2** (appVersion **v3.7.5**), Istio **1.30.2**,
 > NGINX Gateway Fabric **2.6.6**, Contour **v1.33.5**, Envoy Gateway **v1.8.2**,
-> kgateway **v2.3.5**, Kong/KIC chart **0.24.0**, Cilium **v1.19.4**, Calico **v3.32.0**.
+> kgateway **v2.3.5**, Kong/KIC chart **0.24.0**, Cilium **v1.19.5**, Calico **v3.32.1**.
 
 ## TL;DR
 

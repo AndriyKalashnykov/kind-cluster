@@ -311,7 +311,7 @@ The four classic Ingress controllers in this lab's orbit (Traefik = default; HAP
 | Also implements Gateway API | ✅ | ⚠️ TCPRoute¹ | ❌ (→ NGF²) | ✅ |
 | Dashboard / UI | ✅ | ⚠️ stats only | ❌ | ❌ (Ent) |
 | Prometheus metrics | ✅ | ✅ | ✅ | ✅ |
-| Latest stable | v3.7.5 / chart 41.x | ctrl v3.2.x / chart 1.52.1 | v5.5.1 / chart 2.6.1 | KIC v3.5.10 / chart 0.24.0 |
+| Latest stable | v3.7.6 / chart 41.x | ctrl v3.2.x / chart 1.52.1 | v5.5.1 / chart 2.6.1 | KIC v3.5.10 / chart 0.24.0 |
 | CNCF | ❌ Traefik Labs | ❌ HAProxy Tech | ❌ F5/NGINX | ❌ Kong Inc. |
 
 ¹ "HAProxy" = the official **haproxytech/kubernetes-ingress**. ⚠️ Its Gateway API support is **`TCPRoute`-only** — and the conformance registry's "HAProxy Ingress" entry is the *separate community* `jcmoraisjr` project, **not** haproxytech.
