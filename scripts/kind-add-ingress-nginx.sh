@@ -27,7 +27,7 @@ HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
 # renovate: datasource=docker depName=ghcr.io/nginx/charts/nginx-ingress
-NGINX_INGRESS_VERSION=2.6.1
+NGINX_INGRESS_VERSION=2.6.2
 NGINX_INGRESS_CHART="oci://ghcr.io/nginx/charts/nginx-ingress"
 
 echo "=== Installing NGINX Inc. Ingress controller (OSS, chart ${NGINX_INGRESS_VERSION}) ==="
