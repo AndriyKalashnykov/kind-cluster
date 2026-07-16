@@ -19,7 +19,7 @@ HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
 # renovate: datasource=docker depName=ghcr.io/nginx/charts/nginx-gateway-fabric
-NGF_VERSION=2.6.6
+NGF_VERSION=2.6.7
 NGF_CHART="oci://ghcr.io/nginx/charts/nginx-gateway-fabric"
 
 # Shared Gateway API CRDs first (idempotent). NGF 2.6.3 targets Gateway API
