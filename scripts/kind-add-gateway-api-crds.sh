@@ -21,7 +21,7 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 
 # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-GATEWAY_API_VERSION=v1.6.0
+GATEWAY_API_VERSION=v1.6.1
 
 echo "=== Installing Gateway API CRDs (experimental channel) ${GATEWAY_API_VERSION} ==="
 # --server-side is REQUIRED here: the experimental HTTPRoute CRD schema exceeds
