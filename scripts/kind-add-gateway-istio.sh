@@ -18,7 +18,7 @@ HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
 # renovate: datasource=github-releases depName=istio/istio
-ISTIO_VERSION=1.30.2
+ISTIO_VERSION=1.30.3
 ISTIO_CHARTS="https://istio-release.storage.googleapis.com/charts"
 
 # Gateway API CRDs first — Istio ≤1.29 + v1.5 CRDs crash-loops istiod; this repo
