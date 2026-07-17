@@ -35,7 +35,7 @@ KUBECTL=(kubectl --context="kind-${CILIUM_CLUSTER_NAME}")
 HELM=(helm --kube-context="kind-${CILIUM_CLUSTER_NAME}")
 
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
-CILIUM_VERSION=1.19.5
+CILIUM_VERSION=1.19.6
 # Gateway API CRD channel Cilium 1.19 is TESTED against (v1.4.1). Do NOT bump to
 # the lab's shared v1.6.0 pin, and do NOT Renovate-track this to latest — it is
 # COUPLED to CILIUM_VERSION (a newer CRD set than Cilium vendors re-introduces
