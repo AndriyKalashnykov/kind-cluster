@@ -80,6 +80,27 @@
         "\\[kubectl\\]\\([^)]+\\)\\s*\\|\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*\\|",
         "KinD v[\\d.]+, kubectl v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Track the README Pinned-version table rows whose tool links to github.com/<owner>/<repo> — shellcheck, actionlint, gitleaks, trivy, hadolint, act, bats (and jq) — so the docs bump in lockstep with their .mise.toml pins instead of drifting on every release. depName is captured from the github link; datasource=github-tags with extractVersion stripping the leading v (all these projects tag `vX.Y.Z`). kind and kubectl use non-github links and are tracked by their own managers. NOTE: jq is captured here too (github.com/jqlang/jq) but its tags carry a `jq-` prefix that `^v` does not match, so jq resolves no update and stays frozen — which is exactly right, matching its deliberately-frozen aqua:jqlang/jq pin (see CLAUDE.md Upgrade Backlog).",
+      "managerFilePatterns": ["/^README\\.md$/"],
+      "datasourceTemplate": "github-tags",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+      "matchStrings": [
+        "\\| \\[[^\\]]+\\]\\(https://github\\.com/(?<depName>[^/)]+/[^/)]+)\\)\\s*\\|\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*\\|"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Track the kind version in the README Pinned-version table row. kind links to kind.sigs.k8s.io (not github), so the github-link manager above misses it — this handles it explicitly. datasource=github-tags depName=kubernetes-sigs/kind matches the vm/cloud-init.yaml + .mise.toml pins, so it joins the 'kind' group and inherits the 3-day buffer from the kubectl/kind buffer rule. extractVersion strips the leading v.",
+      "managerFilePatterns": ["/^README\\.md$/"],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "kubernetes-sigs/kind",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+      "matchStrings": [
+        "\\| \\[kind\\]\\([^)]+\\)\\s*\\|\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*\\|"
+      ]
     }
   ],
   "vulnerabilityAlerts": {
@@ -108,6 +129,17 @@
       "description": "Mirror the mise manager's 3-day minimumReleaseAge onto the github-based kubectl (kubernetes/kubernetes) and kind (kubernetes-sigs/kind) pins that check-toolchain-alignment cross-checks against their .mise.toml aqua: twins. Without this, the github-tracked half (Makefile KUBECTL_VERSION, images/Dockerfile ARG, vm/cloud-init.yaml) becomes eligible ~day 0 while its buffered mise twin (aqua:kubernetes/kubectl, aqua:kubernetes-sigs/kind) waits until day 3, so the grouped kubectl/kind PR opens with ONLY the github half and check-toolchain-alignment reddens it for ~3 days every patch (observed: PR #225, kubectl v1.36.2->v1.36.3, 2026-07-23). The group already cannot MERGE before day 3 (the alignment gate blocks the partial state under platformAutomerge:false + required ci-pass), so buffering the github half adds no real merge delay — it only stops opening a doomed-red PR early, and both halves then bump atomically. Does NOT cover kindest/node: the node-image K8s version is a separate axis, not compared by the alignment gate.",
       "matchDepNames": ["kubernetes/kubernetes", "kubernetes-sigs/kind"],
       "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Buffer every README-table custom.regex pin 3 days, matching the mise manager's buffer on the .mise.toml twins, so a README row never becomes eligible before its pin — within each tool's group both halves reach day-3 together and bump atomically (no README-leads-the-pin window). Scoped by matchFileNames + matchDatasources (NOT matchManagers:['custom.regex'], which reports as 'regex' and silently voids the AND-combined rule — see /renovate skill); README.md is only scanned by the custom.regex managers above, so file+datasource uniquely targets those pins. List-free, so it covers current and future README rows automatically; harmless overlap with the kubectl/kind depName buffer above (both 3 days).",
+      "matchFileNames": ["README.md"],
+      "matchDatasources": ["github-tags"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Group each README-tracked dev tool's .mise.toml pin (mise manager, depName aqua:<owner>/<repo>) with its README table row (custom.regex, depName <owner>/<repo>) — both resolve to the same packageName — into one PR per tool, so the README bumps together with the pin instead of in a separate PR. (kubectl/kind have their own explicit groups; jq is frozen. If a README dev-tool row is added/removed, update this list — the sibling buffer rule above is already list-free.)",
+      "matchPackageNames": ["koalaman/shellcheck", "rhysd/actionlint", "gitleaks/gitleaks", "aquasecurity/trivy", "hadolint/hadolint", "nektos/act", "bats-core/bats-core"],
+      "groupName": "{{packageName}}"
     },
     {
       "description": "Group GitHub Actions into one PR",
