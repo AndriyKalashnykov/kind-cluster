@@ -16,4 +16,4 @@
 # 2026-06-29). It detects jq but never proposes a bump. Check `mise latest aqua:jqlang/jq`.
 "aqua:jqlang/jq"            = "1.8.2"
 "aqua:kubernetes-sigs/kind" = "0.32.0"
-"aqua:kubernetes/kubectl"   = "1.36.2"
+"aqua:kubernetes/kubectl"   = "1.36.3"

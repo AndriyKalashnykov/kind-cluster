@@ -58,7 +58,7 @@ Pinned in [`.mise.toml`](./.mise.toml), auto-installed by `make deps` via [mise]
 | Tool | Pinned version |
 |------|----------------|
 | [kind](https://kind.sigs.k8s.io/) | 0.32.0 |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.2 |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.36.3 |
 | [jq](https://github.com/jqlang/jq) | 1.8.2 |
 | [shellcheck](https://github.com/koalaman/shellcheck) | 0.11.0 |
 | [actionlint](https://github.com/rhysd/actionlint) | 1.7.12 |
@@ -522,7 +522,7 @@ First boot takes ~3–5 min (Ubuntu cloud image download, apt-get install, docke
 
 The cloud-init playbook (`vm/cloud-init.yaml`) runs once at first boot:
 
-1. Installs Docker CE, KinD v0.32.0, kubectl v1.36.2, helm v4.2.2
+1. Installs Docker CE, KinD v0.32.0, kubectl v1.36.3, helm v4.2.2
 2. Installs `nfs-kernel-server`, exports `/srv/k8s_nfs_storage`
 3. Clones this repo to `/home/ubuntu/kind-cluster`
 4. Writes `/var/lib/kind-cluster-bootstrapped` as the finished sentinel — `vm-up.sh` polls this file.
