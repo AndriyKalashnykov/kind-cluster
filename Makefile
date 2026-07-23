@@ -130,8 +130,9 @@ deps-renovate:
 #lint: @ Run shellcheck + executable-mode check on scripts, actionlint on workflows, hadolint on Dockerfile
 lint: deps-tools
 	@# Catch shell scripts committed without +x — they exit 126 "Permission
-	@# denied" in CI. `make ci-run` only exercises static-check + docker jobs
-	@# (not e2e), so scripts called from e2e-only paths slip through locally.
+	@# denied" in CI. `make ci-run` only exercises the static-check job (docker
+	@# + e2e are tag-only, so `act push` skips them), so scripts called from the
+	@# e2e path slip through locally.
 	@NONEXEC=$$(find scripts -name '*.sh' -not -executable -print); \
 	if [ -n "$$NONEXEC" ]; then \
 		echo "Error: shell scripts missing +x (run 'chmod +x <file>'):"; \
@@ -278,7 +279,7 @@ static-check: check-env check-toolchain-alignment lint test secrets trivy-fs tri
 ci: static-check renovate-validate
 	@echo "Local CI pipeline passed."
 
-#ci-run: @ Run GitHub Actions workflow locally via act (static-check + docker; e2e skipped — KinD Docker-in-Docker flakes under act)
+#ci-run: @ Run GitHub Actions workflow locally via act (static-check only; docker + e2e are tag-only, so `act push` skips them — run `make image-test` / `make e2e` directly to exercise those)
 ci-run: deps-tools deps-docker
 	@docker container prune -f 2>/dev/null || true
 	@# Random artifact port + dir so concurrent ci-run invocations from other
@@ -295,7 +296,7 @@ ci-run: deps-tools deps-docker
 	ARTIFACT_PATH=$$(mktemp -d -t act-artifacts.XXXXXX); \
 	GITHUB_TOKEN="$${GITHUB_TOKEN:-$$(gh auth token 2>/dev/null || true)}"; export GITHUB_TOKEN; \
 	SECRET_FLAG=""; [ -n "$$GITHUB_TOKEN" ] && SECRET_FLAG="--secret GITHUB_TOKEN"; \
-	for j in static-check docker; do \
+	for j in static-check; do \
 		echo "==== act push --job $$j ===="; \
 		act push --job $$j \
 			--container-architecture linux/amd64 \

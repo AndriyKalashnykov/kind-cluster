@@ -23,7 +23,7 @@ Spin up a Kubernetes cluster in Docker ([KinD](https://kind.sigs.k8s.io/)) and r
 | Observability | [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts) | One-shot Prometheus + Grafana + Alertmanager + node-exporter for HPA / dashboards |
 | Metrics (opt-in) | [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (chart 3.13.1) | `kubectl top` + Horizontal Pod Autoscaler support. `make metrics-server`. |
 | Web UI | [Headlamp](https://github.com/kubernetes-sigs/headlamp) 0.43.x | SIG-UI-endorsed Kubernetes UI (successor to the archived `kubernetes/dashboard`); single-pod ClusterIP with token-based login |
-| CI | GitHub Actions | `make deps` + `make kind-create` — same Makefile path users hit locally; CI verifies install scripts on every push |
+| CI | GitHub Actions | `make deps` + `make kind-create` — same Makefile path users hit locally; `static-check` runs on every push/PR, and the full install-scripts KinD `e2e` runs on `v*` tag pushes (weekly sibling suites cover `main` between tags) |
 
 ## Quick Start
 
@@ -839,11 +839,11 @@ Suppressions (intentional, justified inline):
 
 ## CI/CD
 
-GitHub Actions (`runs-on: ubuntu-24.04`, pinned). `ci.yml` runs on every push to `main`, `v*` tags, and pull requests; the heavier end-to-end suites run weekly (and on `workflow_dispatch` + a `paths:`-filtered push of the scripts they exercise) to keep PR feedback fast.
+GitHub Actions (`runs-on: ubuntu-24.04`, pinned). `ci.yml` triggers on every push to `main`, `v*` tags, and pull requests, but on PRs and `main` pushes only `static-check` (+ the doc-only `docs-lint`) runs — the `docker` and full KinD `e2e` jobs are gated **tag-only** (`if: … && startsWith(github.ref, 'refs/tags/')`), so they run on `v*` tag pushes and skip elsewhere. Skips keep the gate green because only `ci-pass` (which treats skipped jobs as pass) is a required status check. The heavier end-to-end sibling suites run weekly (and on `workflow_dispatch` + a `paths:`-filtered push of the scripts they exercise), so between tags they are the standing integration safety net for `main`.
 
 | Workflow | Triggers | What it validates |
 |----------|----------|-------------------|
-| `ci.yml` | push `main` / `v*` / PR | `changes` → `static-check` → (`docker` ‖ `e2e`) → `ci-pass`, plus a lightweight `docs-lint` (gitleaks + mermaid-lint) that gates doc-only changes so they skip the ~4-min e2e. Greenfield **cloud-provider-kind** e2e: install scripts + route-readiness poll + `make e2e-smoke` |
+| `ci.yml` | `static-check`/`docs-lint`: PR+push · `docker`/`e2e`: `v*` tag only | `changes` → `static-check` → (`docker` ‖ `e2e`, **tag-only**) → `ci-pass`, plus a lightweight `docs-lint` (gitleaks + mermaid-lint) that gates doc-only changes so they skip the full pipeline. Greenfield **cloud-provider-kind** e2e (tag runs only): install scripts + route-readiness poll + `make e2e-smoke` |
 | `e2e-metallb.yml` | weekly + dispatch + paths | **MetalLB** LB path + local-CA TLS (LB-IP assertion) + the **MetalLB → cloud-provider-kind migration** smoke |
 | `gateway-test.yml` | weekly + dispatch + paths | All **7 Gateway API controllers** coexisting + trusted HTTPS (`make tls` / `tls-all`) + a CPK-restart regression guard |
 | `ingress-test.yml` | weekly + dispatch + paths | The 2 **alternative classic Ingress** controllers (HAProxy, NGINX-Inc) on distinct `ingressClassName`s |
