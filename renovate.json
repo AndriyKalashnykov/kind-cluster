@@ -93,6 +93,11 @@
       "minimumReleaseAge": "3 days"
     },
     {
+      "description": "Mirror the mise manager's 3-day minimumReleaseAge onto the github-based kubectl (kubernetes/kubernetes) and kind (kubernetes-sigs/kind) pins that check-toolchain-alignment cross-checks against their .mise.toml aqua: twins. Without this, the github-tracked half (Makefile KUBECTL_VERSION, images/Dockerfile ARG, vm/cloud-init.yaml) becomes eligible ~day 0 while its buffered mise twin (aqua:kubernetes/kubectl, aqua:kubernetes-sigs/kind) waits until day 3, so the grouped kubectl/kind PR opens with ONLY the github half and check-toolchain-alignment reddens it for ~3 days every patch (observed: PR #225, kubectl v1.36.2->v1.36.3, 2026-07-23). The group already cannot MERGE before day 3 (the alignment gate blocks the partial state under platformAutomerge:false + required ci-pass), so buffering the github half adds no real merge delay — it only stops opening a doomed-red PR early, and both halves then bump atomically. Does NOT cover kindest/node: the node-image K8s version is a separate axis, not compared by the alignment gate.",
+      "matchDepNames": ["kubernetes/kubernetes", "kubernetes-sigs/kind"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
       "description": "Group GitHub Actions into one PR",
       "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions"
