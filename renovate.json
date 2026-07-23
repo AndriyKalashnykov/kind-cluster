@@ -68,18 +68,6 @@
       "matchStrings": [
         "plantuml-stdlib/C4-PlantUML/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
       ]
-    },
-    {
-      "customType": "regex",
-      "description": "Track the kubectl version shown in prose in README.md — the Pinned-version table row (`| [kubectl](...) | 1.36.2 |`) and the cloud-init bootstrap prose (`... KinD v0.32.0, kubectl v1.36.2, ...`) — so the docs bump in lockstep with the functional pins instead of drifting on every patch. datasource=github-tags depName=kubernetes/kubernetes matches the Makefile/Dockerfile/cloud-init pins, so these land in the same 'kubectl' group and inherit the 3-day github-half minimumReleaseAge buffer. extractVersion strips the leading v from the github tags so both the bare table value and the `kubectl v...` prose capture/write bare digits (the literal `v` in the prose is outside the capture and stays). The prose matchString is anchored on the `KinD v..., kubectl v...` bootstrap shape (not a bare `kubectl vX.Y.Z`) so it can only match the install line, never a future version-compat note. NOTE: only kubectl is tracked here; the other README version-table rows (kind/jq/shellcheck/trivy/...) have the same latent drift but are a deliberate follow-up — a whole-table approach means many fragile prose regexes, and a whole-table *drift gate* would red every mise-tool bump PR until the README is regenerated, breaking mise automerge.",
-      "managerFilePatterns": ["/^README\\.md$/"],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "kubernetes/kubernetes",
-      "extractVersionTemplate": "^v(?<version>.*)$",
-      "matchStrings": [
-        "\\[kubectl\\]\\([^)]+\\)\\s*\\|\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*\\|",
-        "KinD v[\\d.]+, kubectl v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ]
     }
   ],
   "vulnerabilityAlerts": {
