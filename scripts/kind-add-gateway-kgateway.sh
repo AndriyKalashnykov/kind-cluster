@@ -25,7 +25,7 @@ HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
 # renovate: datasource=github-releases depName=kgateway-dev/kgateway
-KGATEWAY_VERSION=v2.3.6
+KGATEWAY_VERSION=v2.4.0
 KGATEWAY_CRDS_CHART="oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds"
 KGATEWAY_CHART="oci://cr.kgateway.dev/kgateway-dev/charts/kgateway"
 
