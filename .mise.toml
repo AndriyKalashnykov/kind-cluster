@@ -9,7 +9,7 @@
 "aqua:aquasecurity/trivy"   = "0.72.0"
 "aqua:hadolint/hadolint"    = "2.14.0"
 "aqua:nektos/act"           = "0.2.89"
-"aqua:bats-core/bats-core"  = "1.13.0"
+"aqua:bats-core/bats-core"  = "1.14.0"
 # jq bumps are MANUAL: Renovate's mise manager can't strip jq's `jq-` tag prefix
 # (its auto extractVersion is `^v?`; neither a packageRule `extractVersion` nor a
 # `.mise.toml` `version_prefix` overrides it for the aqua backend — both verified
