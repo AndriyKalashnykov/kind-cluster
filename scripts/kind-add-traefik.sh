@@ -30,7 +30,7 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT=${1:-5m}
 
 # renovate: datasource=helm depName=traefik registryUrl=https://traefik.github.io/charts
-TRAEFIK_CHART_VERSION=41.1.1
+TRAEFIK_CHART_VERSION=41.2.0
 
 VERSION=${2:-$TRAEFIK_CHART_VERSION}
 
