@@ -67,9 +67,38 @@ jobs:
       - name: Diagnostics on failure
         if: failure()
         run: |
-          kubectl --context kind-cilium get nodes,pods -A -o wide || true
-          kubectl --context kind-cilium get gateway,httproute,svc -A || true
-          kubectl --context kind-cilium -n kube-system logs -l k8s-app=cilium --tail=80 || true
+          # A function, not `K="kubectl …"` + `$K` — the latter relies on the
+          # shell word-splitting an unquoted expansion, which zsh does NOT do.
+          K() { kubectl --context kind-cilium "$@"; }
+          K get nodes,pods -A -o wide || true
+          K get gateway,httproute,svc -A || true
+          # A bad parametersRef -> CiliumGatewayClassConfig surfaces ONLY as an
+          # InvalidParameters / "Invalid GatewayClass" condition here.
+          K describe gatewayclass cilium || true
+          # Accepted/Programmed conditions, and whether the LB Service exists at
+          # all — "Service missing" vs "Service exists with no loadBalancerClass"
+          # are different root causes behind the SAME LB-IP-timeout error string.
+          K describe gateway cilium-gw || true
+          K get svc cilium-gateway-cilium-gw -o yaml || true
+          K get ciliumgatewayclassconfig -A -o yaml || true
+          # Which Gateway API CRD versions are actually SERVED. The coupled-pin
+          # failure mode (Cilium 1.20 needs Gateway API >= v1.6.1, i.e. TLSRoute
+          # at v1) is a one-line read right here.
+          for c in gatewayclasses gateways httproutes tlsroutes; do
+            printf '%s served versions: ' "$c"
+            K get crd "$c.gateway.networking.k8s.io" \
+              -o jsonpath='{range .spec.versions[*]}{.name}{" "}{end}' || true
+            echo
+          done
+          K get crd gateways.gateway.networking.k8s.io \
+            -o jsonpath='{.metadata.annotations}' || true; echo
+          # The OPERATOR reconciles the Gateway and assigns the Node-IPAM LB IP —
+          # NOT the agent DaemonSet. Agent logs alone cannot explain a Gateway
+          # stuck at PROGRAMMED=Unknown (that gap is why the 1.20 regression
+          # needed upstream research instead of reading this log).
+          K -n kube-system logs -l io.cilium/app=operator --tail=200 --all-containers || true
+          K -n kube-system logs -l k8s-app=cilium --tail=80 || true
+          K get events -A --sort-by=.lastTimestamp | tail -50 || true
 
       - name: Tear down Cilium cluster
         if: always()
