@@ -8,19 +8,22 @@
 # settings, mutually exclusive with the lab's kindnet + kube-proxy install-all
 # cluster. So Cilium can never be an add-on; it gets its own cluster.
 #
-# Verified end-to-end on KinD 2026-07-08 (see docs/gateway-api-ingress.md
-# "Cilium Gateway API on KinD"). Key design points, each load-bearing:
-#   * Gateway API CRDs are pinned to Cilium 1.19's OWN supported version
-#     (v1.4.1), NOT the lab's shared experimental v1.6.0 — a newer CRD set
-#     triggers the GatewayClass.status.supportedFeatures []string->[]object
-#     skew that dropped HAProxy.
+# Verified end-to-end on KinD 2026-07-08 (Cilium 1.19.5 + GW API v1.4.1);
+# re-verified 2026-08-09 on Cilium 1.20.0 + GW API v1.6.1. See
+# docs/gateway-api-ingress.md "Cilium Gateway API on KinD". Key design points,
+# each load-bearing:
+#   * Gateway API CRDs are pinned to the version Cilium's CURRENT minor
+#     REQUIRES (see CILIUM_GATEWAY_API_VERSION below), from the EXPERIMENTAL
+#     channel. The pin is coupled to CILIUM_VERSION in BOTH directions — it is
+#     neither "always the lab's shared pin" nor "always older than it".
 #   * LB IP via Cilium Node IPAM (io.cilium/node): the Gateway Service gets a
 #     node IP, already host-routable on the kind docker subnet, with NO L2
 #     announcements — sidestepping cilium/cilium#46260 (the endpoint-less L7LB
 #     TPROXY drop that only affects non-bridge L2-announced devices).
 #   * Node IPAM is attached to the Gateway via a GatewayClass-level
 #     parametersRef -> CiliumGatewayClassConfig (the per-Gateway
-#     infrastructure.parametersRef is NOT honoured by Cilium 1.19).
+#     infrastructure.parametersRef is NOT honoured by Cilium — checked
+#     through 1.20).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,12 +39,27 @@ HELM=(helm --kube-context="kind-${CILIUM_CLUSTER_NAME}")
 
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
 CILIUM_VERSION=1.20.0
-# Gateway API CRD channel Cilium 1.19 is TESTED against (v1.4.1). Do NOT bump to
-# the lab's shared v1.6.0 pin, and do NOT Renovate-track this to latest — it is
-# COUPLED to CILIUM_VERSION (a newer CRD set than Cilium vendors re-introduces
-# the supportedFeatures skew). Re-check against the Cilium Gateway API docs on
-# every CILIUM_VERSION bump.
-CILIUM_GATEWAY_API_VERSION=v1.4.1
+# Gateway API CRD channel that Cilium's CURRENT minor REQUIRES: v1.6.1 for Cilium
+# 1.20 (experimental channel — see the apply below). Cilium 1.20 moved TLSRoute
+# from v1alpha2 to v1 and will NOT program a Gateway against an older CRD set;
+# experimental is required so v1alpha2 stays served alongside v1.
+# Ref: https://docs.cilium.io/en/stable/operations/upgrade/ ("Cilium's Gateway
+# API support now requires Gateway API v1.6.1 at a minimum to work correctly").
+#
+# COUPLED to CILIUM_VERSION in BOTH directions, and deliberately NOT
+# Renovate-tracked:
+#   * too OLD  -> the Gateway sticks at PROGRAMMED=Unknown and NO
+#                 cilium-gateway-* Service is ever created (v1.4.1 serves
+#                 TLSRoute v1alpha2+v1alpha3 and no v1).
+#   * too NEW  -> re-introduces the GatewayClass.status.supportedFeatures
+#                 []string->[]object skew that dropped HAProxy.
+# It currently EQUALS the lab's shared pin in scripts/kind-add-gateway-api-crds.sh
+# — that is a COINCIDENCE, NOT a rule. Do NOT make it follow the shared pin.
+# Re-check Cilium's Gateway API prerequisites on every CILIUM_VERSION bump and
+# move BOTH pins in the SAME commit.
+# Regression of record: PR #242 bumped only CILIUM_VERSION (1.19.6->1.20.0);
+# gateway-cilium.yml was RED on main 2026-07-30 .. 2026-08-09 (4 runs).
+CILIUM_GATEWAY_API_VERSION=v1.6.1
 
 READY_TIMEOUT="${READY_TIMEOUT:-180s}"
 
@@ -59,9 +77,19 @@ else
     kind create cluster "${KIND_ARGS[@]}"
 fi
 
-echo "==> Installing Gateway API ${CILIUM_GATEWAY_API_VERSION} CRDs (Cilium's supported version)"
+echo "==> Installing Gateway API ${CILIUM_GATEWAY_API_VERSION} CRDs (the version Cilium ${CILIUM_VERSION} requires)"
 "${KUBECTL[@]}" apply --server-side --force-conflicts \
     -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${CILIUM_GATEWAY_API_VERSION}/experimental-install.yaml" >/dev/null
+# Mirror scripts/kind-add-gateway-api-crds.sh: block until the CRDs are usable, so
+# a CRD problem fails HERE, named, in 60s — instead of surfacing 4 minutes later
+# as a generic "Gateway got no LoadBalancer IP". tlsroutes is in the list on
+# purpose: its v1alpha2->v1 move is exactly what Cilium 1.20 requires.
+"${KUBECTL[@]}" wait --for=condition=Established \
+    crd/gatewayclasses.gateway.networking.k8s.io \
+    crd/gateways.gateway.networking.k8s.io \
+    crd/httproutes.gateway.networking.k8s.io \
+    crd/tlsroutes.gateway.networking.k8s.io \
+    --timeout=60s >/dev/null
 
 echo "==> Installing Cilium ${CILIUM_VERSION} (kube-proxy-free, Gateway API, Node IPAM)"
 helm repo add cilium https://helm.cilium.io/ >/dev/null 2>&1 || true
@@ -82,7 +110,10 @@ echo "==> Waiting for nodes Ready (Cilium is the CNI now)"
 "${KUBECTL[@]}" wait --for=condition=Ready nodes --all --timeout="${READY_TIMEOUT}" >/dev/null
 
 echo "==> Wiring Node IPAM onto the cilium GatewayClass (parametersRef -> CiliumGatewayClassConfig)"
-"${KUBECTL[@]}" apply -f k8s/cilium/cilium-gateway.yaml >/dev/null 2>&1 || true
+# Tolerated (the GatewayClass may not exist yet on a first run) but NOT silenced:
+# swallowing stderr here would hide a CiliumGatewayClassConfig apiVersion break —
+# the same class of blindfold this script's own regressions have hidden behind.
+"${KUBECTL[@]}" apply -f k8s/cilium/cilium-gateway.yaml >/dev/null || true
 # The GatewayClass is Cilium-managed; patch its parametersRef so the Gateway's
 # LoadBalancer Service is created with loadBalancerClass io.cilium/node.
 "${KUBECTL[@]}" patch gatewayclass cilium --type=merge \
