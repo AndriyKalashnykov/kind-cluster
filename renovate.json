@@ -88,6 +88,14 @@
       "labels": ["dependencies", "needs-diagram-regen"]
     },
     {
+      "description": "Cilium bumps carry a COUPLED, deliberately un-tracked pin. CILIUM_GATEWAY_API_VERSION in scripts/kind-cilium-cluster.sh is the Gateway API CRD channel that Cilium's minor REQUIRES; it is not Renovate-tracked because it must follow Cilium, not latest. A CILIUM_VERSION-only bump therefore ships a HALF upgrade that no PR check can catch: gateway-cilium.yml has no pull_request trigger (push-to-main + cron + dispatch only) and ci.yml's e2e job is tag-gated, so nothing on a PR ever stands up the Cilium cluster. Observed: PR #242 (cilium 1.19.6 -> 1.20.0) merged green and left main RED for 4 consecutive runs, 2026-07-30 .. 2026-08-09 — Cilium 1.20 requires Gateway API >= v1.6.1 (TLSRoute v1alpha2 -> v1), fixed in PR #256. minimumReleaseAge is set here because the repo-wide 3-day buffer matches only `major`, and 1.19 -> 1.20 is a Helm-chart MINOR. Disable automerge + label so a human moves the coupled pin on the SAME branch and proves it with `gh workflow run gateway-cilium.yml --ref <branch>` before merging. See CLAUDE.md 'Cilium bumps' runbook.",
+      "matchDatasources": ["helm"],
+      "matchDepNames": ["cilium"],
+      "automerge": false,
+      "minimumReleaseAge": "3 days",
+      "labels": ["dependencies", "needs-cilium-crd-recheck"]
+    },
+    {
       "description": "Buffer mise tool bumps 3 days at ALL update types. The aqua: backend resolves via github-tags, which sees a tag before the GitHub release artifact (the actual binary) publishes — a fresh minor/patch can otherwise open a PR whose `mise install` 404s in CI. The major-only buffer above does not cover minor/patch, so this adds the buffer for the mise manager specifically.",
       "matchManagers": ["mise"],
       "minimumReleaseAge": "3 days"
