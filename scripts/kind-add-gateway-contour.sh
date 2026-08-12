@@ -35,7 +35,7 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
 # renovate: datasource=docker depName=ghcr.io/projectcontour/contour
-CONTOUR_VERSION=v1.33.5
+CONTOUR_VERSION=v1.33.6
 CONTOUR_MANIFEST="https://raw.githubusercontent.com/projectcontour/contour/${CONTOUR_VERSION}/examples/render/contour-gateway-provisioner.yaml"
 
 # Shared Gateway API CRDs first (idempotent, experimental channel v1.5.1).
