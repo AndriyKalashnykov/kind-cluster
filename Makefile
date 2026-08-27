@@ -28,7 +28,7 @@ KUBECTL_VERSION := v1.36.3
 # KIND_NODE_IMAGE is bumped together with kind in .mise.toml per KinD release notes.
 # Digest-pinned for reproducibility; Renovate bumps tag + @sha256 together.
 # renovate: datasource=docker depName=kindest/node
-KIND_NODE_IMAGE := kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+KIND_NODE_IMAGE := kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
 # CLOUD_PROVIDER_KIND_VERSION is consumed only as a CONTAINER-IMAGE tag
 # (registry.k8s.io/.../cloud-controller-manager:v$(VERSION) in
 # scripts/kind-add-cloud-provider-kind.sh), so it MUST track the registry that
