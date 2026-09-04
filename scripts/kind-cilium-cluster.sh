@@ -38,7 +38,7 @@ KUBECTL=(kubectl --context="kind-${CILIUM_CLUSTER_NAME}")
 HELM=(helm --kube-context="kind-${CILIUM_CLUSTER_NAME}")
 
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
-CILIUM_VERSION=1.20.0
+CILIUM_VERSION=1.20.1
 # Gateway API CRD channel that Cilium's CURRENT minor REQUIRES: v1.6.1 for Cilium
 # 1.20 (experimental channel — see the apply below). Cilium 1.20 moved TLSRoute
 # from v1alpha2 to v1 and will NOT program a Gateway against an older CRD set;
