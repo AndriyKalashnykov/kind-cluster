@@ -52,7 +52,7 @@ write_files:
       # renovate: datasource=github-tags depName=kubernetes/kubernetes
       KUBECTL_VERSION=v1.37.0
       # renovate: datasource=github-releases depName=helm/helm
-      HELM_VERSION=v4.2.4
+      HELM_VERSION=v4.3.0
 
       # Docker repo
       install -m 0755 -d /etc/apt/keyrings
