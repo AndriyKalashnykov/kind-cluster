@@ -24,7 +24,11 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
-# renovate: datasource=github-releases depName=kgateway-dev/kgateway
+# Tracked on the OCI chart repo (the CONSUMED sink), not the GitHub release:
+# a release can exist before/without its chart, which is exactly how the Istio
+# pin broke main. Upstream publishes both `v2.4.4` and `2.4.4` tag families;
+# the `v` form is what this pin uses.
+# renovate: datasource=docker depName=cr.kgateway.dev/kgateway-dev/charts/kgateway
 KGATEWAY_VERSION=v2.4.4
 KGATEWAY_CRDS_CHART="oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds"
 KGATEWAY_CHART="oci://cr.kgateway.dev/kgateway-dev/charts/kgateway"

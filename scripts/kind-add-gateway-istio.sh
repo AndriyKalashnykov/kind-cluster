@@ -17,22 +17,33 @@ KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
 HELM=(helm --kube-context="kind-${KIND_CLUSTER_NAME}")
 TIMEOUT="${1:-5m}"
 
-# renovate: datasource=github-releases depName=istio/istio
+# Istio retired https://istio-release.storage.googleapis.com/charts: from 1.31 on,
+# charts are published ONLY to blob.istio.io, and the old bucket is deleted in
+# December 2026 (istio.io/latest/blog/2026/retirement-of-gcp/). Its index froze at
+# 2026-08-27, so base-1.31.0.tgz 404s there while it is HTTP 200 on blob.istio.io.
+# registryUrl MUST point at the live index or Renovate reads the frozen one, sees
+# 1.30.4 as newest, and silently never opens another PR.
+# Attribute order is load-bearing: datasource depName [extractVersion] [registryUrl].
+# renovate: datasource=helm depName=base registryUrl=https://blob.istio.io/istio-release/charts
 ISTIO_VERSION=1.31.0
-ISTIO_CHARTS="https://istio-release.storage.googleapis.com/charts"
+ISTIO_CHARTS="https://blob.istio.io/istio-release/charts"
 
-# Gateway API CRDs first — Istio ≤1.29 + v1.5 CRDs crash-loops istiod; this repo
-# pins Istio 1.30.x (supports Gateway API v1.5.x) so the order is the only gate.
+# Gateway API CRDs first — a too-old Istio against newer CRDs crash-loops istiod
+# (Istio ≤1.29 + v1.5 CRDs). Istio 1.31.0 vendors sigs.k8s.io/gateway-api v1.6.0
+# against this repo's v1.6.2 CRDs; keep this pin moving with the CRD channel.
 "$SCRIPT_DIR/kind-add-gateway-api-crds.sh"
 
 echo "=== Installing Istio ${ISTIO_VERSION} (base + istiod, minimal) ==="
-helm repo add istio "$ISTIO_CHARTS" >/dev/null 2>&1 || true
-helm repo update istio >/dev/null
-"${HELM[@]}" upgrade --install istio-base istio/base \
-    --version "${ISTIO_VERSION}" --namespace istio-system --create-namespace \
+# Direct chart tarball URLs — bypasses `helm repo add`+index.yaml, matching the
+# pattern kind-add-traefik.sh already uses, so an upstream index restructure cannot
+# break the install silently. It also sidesteps `helm repo add ... || true`, which
+# swallows the "repository name already exists" error a URL change raises and would
+# leave a developer's stale alias pointing at the retired bucket.
+"${HELM[@]}" upgrade --install istio-base "${ISTIO_CHARTS}/base-${ISTIO_VERSION}.tgz" \
+    --namespace istio-system --create-namespace \
     --wait --timeout "${TIMEOUT}"
-"${HELM[@]}" upgrade --install istiod istio/istiod \
-    --version "${ISTIO_VERSION}" --namespace istio-system \
+"${HELM[@]}" upgrade --install istiod "${ISTIO_CHARTS}/istiod-${ISTIO_VERSION}.tgz" \
+    --namespace istio-system \
     --wait --timeout "${TIMEOUT}"
 "${KUBECTL[@]}" -n istio-system rollout status deployment/istiod --timeout="${TIMEOUT}"
 
