@@ -29,7 +29,7 @@ TIMEOUT="${1:-5m}"
 # pin broke main. Upstream publishes both `v2.4.4` and `2.4.4` tag families;
 # the `v` form is what this pin uses.
 # renovate: datasource=docker depName=cr.kgateway.dev/kgateway-dev/charts/kgateway
-KGATEWAY_VERSION=v2.4.4
+KGATEWAY_VERSION=v2.4.5
 KGATEWAY_CRDS_CHART="oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds"
 KGATEWAY_CHART="oci://cr.kgateway.dev/kgateway-dev/charts/kgateway"
 
