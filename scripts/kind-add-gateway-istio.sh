@@ -25,7 +25,7 @@ TIMEOUT="${1:-5m}"
 # 1.30.4 as newest, and silently never opens another PR.
 # Attribute order is load-bearing: datasource depName [extractVersion] [registryUrl].
 # renovate: datasource=helm depName=base registryUrl=https://blob.istio.io/istio-release/charts
-ISTIO_VERSION=1.31.0
+ISTIO_VERSION=1.31.1
 ISTIO_CHARTS="https://blob.istio.io/istio-release/charts"
 
 # Gateway API CRDs first — a too-old Istio against newer CRDs crash-loops istiod
