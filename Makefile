@@ -233,7 +233,7 @@ diagrams-drawio: deps-docker
 		. -o drawio/
 	@echo "Wrote $(DIAGRAM_DIR)/drawio/*.drawio"
 
-#test: @ Run bats unit tests for the scripts/lib.sh helpers
+#test: @ Run bats tests (scripts/lib.sh helpers + the toolchain-alignment gate)
 test: deps-tools
 	@bats tests/
 
@@ -251,25 +251,9 @@ CHECK_PORTS ?= $(INGRESS_HTTP_PORT) $(INGRESS_HTTPS_PORT)
 check-ports:
 	@bash -c '. scripts/lib.sh && check_ports $(CHECK_PORTS)'
 
-#check-toolchain-alignment: @ Fail if the kubectl/kind versions mirrored across Makefile, .mise.toml, Dockerfile and cloud-init disagree
+#check-toolchain-alignment: @ Fail (naming the file) if the kubectl/kind versions mirrored across Makefile, .mise.toml, Dockerfile and cloud-init disagree, or a pin is missing
 check-toolchain-alignment:
-	@set -euo pipefail; \
-	norm() { sed 's/^v//'; }; \
-	mk_kubectl=$$(printf '%s' '$(KUBECTL_VERSION)' | norm); \
-	mise_kubectl=$$(grep -E '"aqua:kubernetes/kubectl"' .mise.toml | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' | norm); \
-	docker_kubectl=$$(grep -E '^ARG KUBECTL_VERSION=' images/Dockerfile | sed -E 's/.*=//' | norm); \
-	ci_kubectl=$$(grep -E '^[[:space:]]*KUBECTL_VERSION=' vm/cloud-init.yaml | sed -E 's/.*=//' | norm); \
-	for v in "$$mise_kubectl" "$$docker_kubectl" "$$ci_kubectl"; do \
-		if [ "$$v" != "$$mk_kubectl" ]; then \
-			echo "ERROR: kubectl version drift — Makefile=$$mk_kubectl .mise.toml=$$mise_kubectl Dockerfile=$$docker_kubectl cloud-init=$$ci_kubectl"; exit 1; \
-		fi; \
-	done; \
-	mise_kind=$$(grep -E '"aqua:kubernetes-sigs/kind"' .mise.toml | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' | norm); \
-	ci_kind=$$(grep -E '^[[:space:]]*KIND_VERSION=' vm/cloud-init.yaml | sed -E 's/.*=//' | norm); \
-	if [ "$$mise_kind" != "$$ci_kind" ]; then \
-		echo "ERROR: kind version drift — .mise.toml=$$mise_kind cloud-init=$$ci_kind"; exit 1; \
-	fi; \
-	echo "Toolchain alignment OK (kubectl=$$mk_kubectl, kind=$$mise_kind)."
+	@./scripts/check-toolchain-alignment.sh
 
 #static-check: @ Composite quality gate (alignment + lint + test + secrets + trivy + mermaid-lint + diagrams-check)
 static-check: check-env check-toolchain-alignment lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
