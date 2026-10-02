@@ -41,7 +41,7 @@ KIND_NODE_IMAGE := kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405
 # v$(VERSION) at the use site. The {custom.regex + docker, pinDigests:false} rule
 # in renovate.json covers this pin (no @sha256 appended to a bare-semver var).
 # renovate: datasource=docker depName=registry.k8s.io/cloud-provider-kind/cloud-controller-manager extractVersion=^v(?<version>.*)$
-CLOUD_PROVIDER_KIND_VERSION := 0.11.1
+CLOUD_PROVIDER_KIND_VERSION := 0.12.0
 export CLOUD_PROVIDER_KIND_VERSION
 # catthehacker/ubuntu tags use loose `act-YY.MM` format (Ubuntu LTS cadence);
 # bumps require also updating runs-on in .github/workflows/*.yml.
