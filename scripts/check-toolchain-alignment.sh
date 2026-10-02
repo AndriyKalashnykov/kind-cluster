@@ -9,6 +9,10 @@
 #
 # Every pin is read from the COMMITTED TEXT of its file (the Makefile included),
 # so `make KUBECTL_VERSION=x` on the command line does not change the verdict.
+# Out of scope by design: a value make would resolve differently from that text
+# (an `include`d file, a `define` block, a target-specific assignment). The pin
+# is the top-level, unindented `KUBECTL_VERSION :=` line; a tab-indented line is
+# a recipe command, not an assignment, and is not counted.
 #
 # Failure modes this script must keep loud (each has a case in
 # tests/toolchain-alignment.bats):
@@ -30,7 +34,10 @@ die() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="${1:-$SCRIPT_DIR/..}"
+# ${1-...} not ${1:-...}: an explicitly EMPTY argument must fail, not silently
+# fall back to checking this repo.
+ROOT="${1-$SCRIPT_DIR/..}"
+[ -n "$ROOT" ] || die "root argument is empty"
 [ -d "$ROOT" ] || die "root directory not found: $ROOT"
 cd "$ROOT"
 
@@ -67,7 +74,7 @@ pin() {
 }
 
 mk_kubectl=$(pin "kubectl" Makefile \
-	'^[[:space:]]*(export[[:space:]]+|override[[:space:]]+)?KUBECTL_VERSION[[:space:]]*[:?+!]*=' bare)
+	'^ *(export[[:space:]]+|override[[:space:]]+)?KUBECTL_VERSION[[:space:]]*[:?+!]*=' bare)
 mise_kubectl=$(pin "kubectl" .mise.toml '^"aqua:kubernetes/kubectl"[[:space:]]*=' quoted)
 docker_kubectl=$(pin "kubectl" images/Dockerfile '^ARG[[:space:]]+KUBECTL_VERSION=' bare)
 ci_kubectl=$(pin "kubectl" vm/cloud-init.yaml '^[[:space:]]*KUBECTL_VERSION=' bare)

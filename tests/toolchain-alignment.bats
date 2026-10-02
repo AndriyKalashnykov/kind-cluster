@@ -223,3 +223,86 @@ drop_line() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"ERROR: kubectl: unparseable pin in .mise.toml"* ]]
 }
+
+# --- added after implementation review ----------------------------------------
+
+@test "alignment: an EMPTY root argument fails instead of checking this repo" {
+    run "$SCRIPT" ""
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: root argument is empty"* ]]
+}
+
+# Two missing pins of the SAME tool give two empty values, and "" == "" — so this
+# case fails only if pin()'s abort actually stops the script. A single missing
+# pin cannot tell that apart from a later drift failure.
+@test "alignment: both kind pins missing fails and never prints the OK line" {
+    drop_line .mise.toml '"aqua:kubernetes-sigs/kind"'
+    drop_line vm/cloud-init.yaml 'KIND_VERSION='
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"Toolchain alignment OK"* ]]
+    [[ "$output" == *"ERROR: kind: expected exactly 1 pin line in .mise.toml, found 0"* ]]
+}
+
+# A commented-out pin alone is not a pin. These pin each regex's ^ anchor.
+@test "alignment: a commented-out Makefile pin alone is not counted" {
+    drop_line Makefile 'KUBECTL_VERSION :='
+    printf '# KUBECTL_VERSION := v%s\n' "$KUBECTL" >> "$TREE/Makefile"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: kubectl: expected exactly 1 pin line in Makefile, found 0"* ]]
+}
+
+@test "alignment: a commented-out .mise.toml kubectl pin alone is not counted" {
+    drop_line .mise.toml '"aqua:kubernetes/kubectl"'
+    printf '# "aqua:kubernetes/kubectl" = "%s"\n' "$KUBECTL" >> "$TREE/.mise.toml"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: kubectl: expected exactly 1 pin line in .mise.toml, found 0"* ]]
+}
+
+@test "alignment: a commented-out .mise.toml kind pin alone is not counted" {
+    drop_line .mise.toml '"aqua:kubernetes-sigs/kind"'
+    printf '# "aqua:kubernetes-sigs/kind" = "%s"\n' "$KIND" >> "$TREE/.mise.toml"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: kind: expected exactly 1 pin line in .mise.toml, found 0"* ]]
+}
+
+@test "alignment: a commented-out Dockerfile ARG alone is not counted" {
+    drop_line images/Dockerfile 'ARG KUBECTL_VERSION='
+    printf '# ARG KUBECTL_VERSION=v%s\n' "$KUBECTL" >> "$TREE/images/Dockerfile"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: kubectl: expected exactly 1 pin line in images/Dockerfile, found 0"* ]]
+}
+
+@test "alignment: a commented-out cloud-init kubectl pin alone is not counted" {
+    drop_line vm/cloud-init.yaml '      KUBECTL_VERSION='
+    printf '      # KUBECTL_VERSION=v%s\n' "$KUBECTL" >> "$TREE/vm/cloud-init.yaml"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: kubectl: expected exactly 1 pin line in vm/cloud-init.yaml, found 0"* ]]
+}
+
+@test "alignment: a commented-out cloud-init kind pin alone is not counted" {
+    drop_line vm/cloud-init.yaml 'KIND_VERSION='
+    printf '      # KIND_VERSION=v%s\n' "$KIND" >> "$TREE/vm/cloud-init.yaml"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: kind: expected exactly 1 pin line in vm/cloud-init.yaml, found 0"* ]]
+}
+
+@test "alignment: a tab-indented recipe line setting KUBECTL_VERSION is not a second pin" {
+    printf 'smoke:\n\tKUBECTL_VERSION=v%s ./run.sh\n' "$KUBECTL" >> "$TREE/Makefile"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "Toolchain alignment OK (kubectl=$KUBECTL, kind=$KIND)." ]
+}
+
+@test "alignment: a pre-release value is rejected as unparseable even when all pins agree" {
+    mktree "$KUBECTL-rc.1" "$KUBECTL-rc.1" "$KUBECTL-rc.1" "$KUBECTL-rc.1" "$KIND" "$KIND"
+    run "$SCRIPT" "$TREE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR: kubectl: unparseable pin in Makefile"* ]]
+}

@@ -47,7 +47,7 @@ write_files:
       # Idempotent bootstrap run once at first boot.
       set -euo pipefail
 
-      # renovate: datasource=github-tags depName=kubernetes-sigs/kind
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
       KIND_VERSION=v0.33.0
       # renovate: datasource=github-tags depName=kubernetes/kubernetes
       KUBECTL_VERSION=v1.37.1
