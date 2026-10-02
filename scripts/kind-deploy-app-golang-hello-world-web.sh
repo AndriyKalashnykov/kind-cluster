@@ -23,7 +23,7 @@ fi
 # Image pin — kept in sync with k8s/golang-hello-world-web.yaml via Renovate's
 # docker-image grouping rule in renovate.json.
 # renovate: datasource=docker depName=ghcr.io/andriykalashnykov/golang-web
-GOLANG_WEB_VERSION=0.0.3
+GOLANG_WEB_VERSION=0.0.4
 IMAGE=ghcr.io/andriykalashnykov/golang-web:${GOLANG_WEB_VERSION}
 
 # Load the image as a single-platform archive — avoids kind#3795 where a
