@@ -18,7 +18,7 @@ scripts/              # Bash scripts for cluster lifecycle and app deployment
                       #   (lib.sh = sourceable helpers; kind-add-* installers;
                       #    kind-cilium-cluster.sh (dedicated Cilium cluster);
                       #    migrate-from-metallb.sh; e2e-*.sh smoke tests)
-tests/                # bats unit tests for scripts/lib.sh (make test)
+tests/                # bats tests: scripts/lib.sh helpers + the alignment gate (make test)
 k8s/                  # Kubernetes manifests (kind config, Headlamp, NFS, gateway/, etc.)
 k8s/cilium/           # Dedicated Cilium cluster: kind-config-cilium.yaml + Cilium Gateway/HTTPRoute
 images/               # Dockerfiles (kubectl-test image)
@@ -56,7 +56,7 @@ make vm-down                           # Stop + delete + purge the VM
 # Local quality gates (pinned tools installed on first run via `make deps`;
 # mise is auto-bootstrapped into ~/.local/bin if missing)
 make lint                              # shellcheck + actionlint + hadolint
-make test                              # bats unit tests for scripts/lib.sh helpers
+make test                              # bats tests: scripts/lib.sh helpers + toolchain-alignment gate
 make secrets                           # gitleaks (suppressions: .gitleaks.toml)
 make trivy-fs                          # Trivy CVE/secret/misconfig scan (suppressions: .trivyignore.yaml)
 make trivy-config                      # Trivy K8s manifest scan

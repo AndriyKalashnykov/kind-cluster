@@ -818,7 +818,7 @@ This is an **alternative** to the default `make install-all` flow — the regist
 | Utilities | `make image-test` | build + runtime-verify the `kubectl-test` image (the `docker` CI job) |
 | Utilities | `make renovate-validate` | validate `renovate.json` |
 | Quality | `make lint` | shellcheck + actionlint + hadolint + scripts-exec-bit check |
-| Quality | `make test` | bats unit tests for the `scripts/lib.sh` helpers |
+| Quality | `make test` | bats tests: `scripts/lib.sh` helpers and the toolchain-alignment gate |
 | Quality | `make secrets` | gitleaks (suppressions: `.gitleaks.toml`) |
 | Quality | `make trivy-fs` | Trivy fs scan (vulns, secrets, misconfigs; CRITICAL/HIGH) |
 | Quality | `make vulncheck` | Alias for `trivy-fs` (portfolio-standard target name) |
