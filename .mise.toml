@@ -16,4 +16,4 @@
 # tags are `v0.37.1` / `kubernetes-1.37.1`). See the two mise rules in renovate.json.
 "aqua:jqlang/jq"            = "1.8.2"
 "aqua:kubernetes-sigs/kind" = "0.33.0"
-"aqua:kubernetes/kubectl"   = "1.37.1"
+"aqua:kubernetes/kubectl"   = "1.37.2"
