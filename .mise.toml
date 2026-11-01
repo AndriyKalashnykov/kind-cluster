@@ -8,7 +8,7 @@
 "aqua:gitleaks/gitleaks"    = "8.30.1"
 "aqua:aquasecurity/trivy"   = "0.76.1"
 "aqua:hadolint/hadolint"    = "2.15.1"
-"aqua:nektos/act"           = "0.2.89"
+"aqua:nektos/act"           = "0.2.92"
 "aqua:bats-core/bats-core"  = "1.14.0"
 # jq and kubectl need a renovate.json packageRule each: Renovate's mise manager looks
 # an `aqua:<owner>/<repo>` tool up as github-tags on <owner>/<repo> with extractVersion
