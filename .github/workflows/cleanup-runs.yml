@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   cleanup-runs:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       actions: write   # gh run delete
@@ -47,7 +47,7 @@ jobs:
           | xargs -r -I{} gh run delete {} --repo "${{ github.repository }}"
 
   cleanup-caches:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       actions: write   # gh api DELETE .../actions/caches/{id}
