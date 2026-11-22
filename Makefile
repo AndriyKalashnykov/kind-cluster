@@ -218,9 +218,13 @@ $(DIAGRAM_STAMP):
 # all three C4 diagrams. Renders each source to SVG in a temp dir and fails on
 # the warning box's style (observed at 1.2026.10: fill="#FFC" stroke:#FD8) or
 # the word "deprecated". RED-proven 2026-11-21 against that raw-URL include.
+# The temp dir lives UNDER $(CURDIR), not /tmp: under `make ci-run` (act) the
+# docker CLI talks to the HOST daemon, which resolves a -v source on the host,
+# where an in-container /tmp dir does not exist ("No file found"). $(CURDIR)
+# is the same path on both sides, as the `diagrams` render relies on too.
 #diagrams-warnings: @ Fail if PlantUML draws a warning box into any diagram
 diagrams-warnings: deps-docker
-	@TMP=$$(mktemp -d); trap 'rm -rf "$$TMP"' EXIT; \
+	@TMP=$$(mktemp -d "$(CURDIR)/.diagrams-warnings.XXXXXX"); trap 'rm -rf "$$TMP"' EXIT; \
 	cp $(DIAGRAM_SRC) "$$TMP"/; \
 	docker run --rm --user $$(id -u):$$(id -g) \
 		-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
