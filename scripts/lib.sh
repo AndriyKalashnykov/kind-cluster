@@ -127,3 +127,14 @@ check_ports() {
     fi
     return "$conflict"
 }
+
+# metallb_manifest_url <version> — MetalLB's native manifest URL for a release.
+# MetalLB's git tags are v-prefixed (v0.16.2), but METALLB_VERSION is a BARE
+# semver: its Renovate annotation's extractVersion strips the v, so Renovate
+# writes 0.16.2. Interpolating that verbatim into the raw URL 404s (PR #407).
+# Accepts either form; fails with no output on an empty version.
+metallb_manifest_url() {
+    local v="${1#v}"
+    [ -n "$v" ] || return 1
+    printf 'https://raw.githubusercontent.com/metallb/metallb/v%s/config/manifests/metallb-native.yaml\n' "$v"
+}
