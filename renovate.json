@@ -58,16 +58,6 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>[A-Za-z0-9_./:-]+)( versioning=(?<versioning>\\S+))?\\s*\\nARG\\s+[A-Z0-9_]+=(?<currentValue>\\S+)"
       ]
-    },
-    {
-      "customType": "regex",
-      "description": "Track the C4-PlantUML library version pinned in the docs/diagrams/*.puml !include URLs so Renovate proposes bumps; the diagrams-check re-render gate in CI validates the bump. The !include is a raw.githubusercontent URL with no inline `# renovate:` comment, so it needs this dedicated manager rather than the comment-driven ones above.",
-      "managerFilePatterns": ["/^docs/diagrams/.*\\.puml$/"],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "plantuml-stdlib/C4-PlantUML",
-      "matchStrings": [
-        "plantuml-stdlib/C4-PlantUML/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
-      ]
     }
   ],
   "vulnerabilityAlerts": {
@@ -82,8 +72,8 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Diagram-renderer bumps need a manual PNG regen. A C4-PlantUML or plantuml/plantuml bump that changes the render fails the diagrams-check gate, so the PR cannot auto-merge and must be finished by hand (`make diagrams` + commit the regenerated PNGs on the branch). Disable automerge and add a distinct label so it is not mistaken for a stuck routine bump. See CLAUDE.md 'Diagram renderer bumps' runbook.",
-      "matchDepNames": ["plantuml-stdlib/C4-PlantUML", "plantuml/plantuml"],
+      "description": "Diagram-renderer bumps need a manual PNG regen. A plantuml/plantuml bump that changes the render fails the diagrams-check gate, so the PR cannot auto-merge and must be finished by hand (`make diagrams` + commit the regenerated PNGs on the branch). The C4 library is PlantUML's bundled stdlib (`!include <C4/...>`), so its version moves with this image and has no separate manager. Disable automerge and add a distinct label so it is not mistaken for a stuck routine bump. See CLAUDE.md 'Diagram renderer bumps' runbook.",
+      "matchDepNames": ["plantuml/plantuml"],
       "automerge": false,
       "labels": ["dependencies", "needs-diagram-regen"]
     },
