@@ -46,7 +46,12 @@ export CLOUD_PROVIDER_KIND_VERSION
 # catthehacker/ubuntu tags use loose `act-YY.MM` format (Ubuntu LTS cadence);
 # bumps require also updating runs-on in .github/workflows/*.yml.
 # renovate: datasource=docker depName=catthehacker/ubuntu versioning=loose
-ACT_UBUNTU_VERSION := act-24.04
+ACT_UBUNTU_VERSION := act-26.04
+# The runs-on label ci-run maps onto that image, derived from the tag so the
+# two cannot drift. act SKIPS a job whose label has no -P mapping and still
+# exits 0 ("Skipping unsupported platform"), so check-act-runner fails when
+# ci.yml's runs-on labels differ from this one.
+ACT_RUNNER_LABEL := $(patsubst act-%,ubuntu-%,$(ACT_UBUNTU_VERSION))
 
 # Cluster identity. Defaults to `kind` for backward compat with existing
 # tooling and docs that reference the `kind-kind` context. Override per-project
@@ -280,8 +285,16 @@ check-ports:
 check-toolchain-alignment:
 	@./scripts/check-toolchain-alignment.sh
 
+#check-act-runner: @ Fail if ci.yml's runs-on labels differ from the label ci-run maps to the act image (ACT_UBUNTU_VERSION)
+check-act-runner:
+	@LABELS=$$(grep -hE '^[[:space:]]*runs-on:' .github/workflows/ci.yml | sed -E 's/^[[:space:]]*runs-on:[[:space:]]*([^[:space:]#]*).*/\1/' | sort -u | tr '\n' ' ' | sed 's/ $$//'); \
+	if [ "$$LABELS" != "$(ACT_RUNNER_LABEL)" ]; then \
+		echo "ERROR: .github/workflows/ci.yml runs-on labels [$$LABELS] != ci-run's act mapping [$(ACT_RUNNER_LABEL)] (from ACT_UBUNTU_VERSION=$(ACT_UBUNTU_VERSION)). act would skip the unmapped jobs and exit 0 — move both together."; \
+		exit 1; fi; \
+	echo "act runner label OK ($(ACT_RUNNER_LABEL))."
+
 #static-check: @ Composite quality gate (alignment + lint + test + secrets + trivy + mermaid-lint + diagrams-check)
-static-check: check-env check-toolchain-alignment lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
+static-check: check-env check-toolchain-alignment check-act-runner lint test secrets trivy-fs trivy-config mermaid-lint diagrams-check
 	@echo "Static check passed."
 
 #ci: @ Full local CI pipeline (static-check + renovate-validate)
@@ -289,7 +302,7 @@ ci: static-check renovate-validate
 	@echo "Local CI pipeline passed."
 
 #ci-run: @ Run GitHub Actions workflow locally via act (static-check only; docker + e2e are tag-only, so `act push` skips them — run `make image-test` / `make e2e` directly to exercise those)
-ci-run: deps-tools deps-docker
+ci-run: deps-tools deps-docker check-act-runner
 	@docker container prune -f 2>/dev/null || true
 	@# Random artifact port + dir so concurrent ci-run invocations from other
 	@# projects don't collide on act's host-global defaults (34567, /tmp/act-artifacts).
@@ -310,7 +323,7 @@ ci-run: deps-tools deps-docker
 		act push --job $$j \
 			--container-architecture linux/amd64 \
 			--pull=false \
-			-P ubuntu-24.04=catthehacker/ubuntu:$(ACT_UBUNTU_VERSION) \
+			-P $(ACT_RUNNER_LABEL)=catthehacker/ubuntu:$(ACT_UBUNTU_VERSION) \
 			$$SECRET_FLAG \
 			--artifact-server-port "$$ACT_PORT" \
 			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
@@ -521,7 +534,7 @@ clean:
 	@./scripts/kind-delete.sh 2>/dev/null || true
 	@rm -f client.crt client.key client.pfx cluster-ca.crt headlamp-admin-token.txt
 
-.PHONY: help deps deps-tools deps-docker deps-multipass deps-renovate \
+.PHONY: help check-act-runner deps deps-tools deps-docker deps-multipass deps-renovate \
 	lint test secrets trivy-fs trivy-config vulncheck mermaid-lint check-env check-ports check-toolchain-alignment static-check ci ci-run \
 	install-all install-all-no-demo-workloads kind-up kind-down \
 	lb-cpk lb-metallb kind-create create-cluster export-cert \
