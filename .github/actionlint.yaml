@@ -1,0 +1,14 @@
+# actionlint configuration.
+#
+# ubuntu-26.04 is a GitHub-HOSTED runner (GA; listed in actions/runner-images'
+# README), but no actionlint release knows the label yet — v1.7.12 (the pin in
+# .mise.toml) rejects it as "unknown" [runner-label]. Upstream PRs adding it are
+# open (rhysd/actionlint #682, #723, #743). Declaring it here is actionlint's
+# documented mechanism for a label it does not know.
+#
+# REMOVE this entry (and this file, if it is then empty) once the pinned
+# actionlint lists ubuntu-26.04 in rule_runner_label.go: delete it and run
+# `make lint` — a green lint means the release knows the label.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

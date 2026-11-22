@@ -839,7 +839,7 @@ Suppressions (intentional, justified inline):
 
 ## CI/CD
 
-GitHub Actions (`runs-on: ubuntu-24.04`, pinned). `ci.yml` triggers on every push to `main`, `v*` tags, and pull requests, but on PRs and `main` pushes only `static-check` (+ the doc-only `docs-lint`) runs — the `docker` and full KinD `e2e` jobs are gated **tag-only** (`if: … && startsWith(github.ref, 'refs/tags/')`), so they run on `v*` tag pushes and skip elsewhere. Skips keep the gate green because only `ci-pass` (which treats skipped jobs as pass) is a required status check. The heavier end-to-end sibling suites run weekly (and on `workflow_dispatch` + a `paths:`-filtered push of the scripts they exercise), so between tags they are the standing integration safety net for `main`.
+GitHub Actions (`runs-on: ubuntu-26.04`, pinned). `ci.yml` triggers on every push to `main`, `v*` tags, and pull requests, but on PRs and `main` pushes only `static-check` (+ the doc-only `docs-lint`) runs — the `docker` and full KinD `e2e` jobs are gated **tag-only** (`if: … && startsWith(github.ref, 'refs/tags/')`), so they run on `v*` tag pushes and skip elsewhere. Skips keep the gate green because only `ci-pass` (which treats skipped jobs as pass) is a required status check. The heavier end-to-end sibling suites run weekly (and on `workflow_dispatch` + a `paths:`-filtered push of the scripts they exercise), so between tags they are the standing integration safety net for `main`.
 
 | Workflow | Triggers | What it validates |
 |----------|----------|-------------------|
