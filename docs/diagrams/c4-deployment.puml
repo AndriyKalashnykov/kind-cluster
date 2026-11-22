@@ -1,5 +1,5 @@
 @startuml c4-deployment
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/v2.14.0/C4_Deployment.puml
+!include <C4/C4_Deployment>
 
 ' Modern flat styling: no shadows, sharper corners, clean sans-serif, modern palette.
 skinparam backgroundColor #FAFAFA

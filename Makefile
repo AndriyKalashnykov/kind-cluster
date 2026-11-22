@@ -20,7 +20,7 @@ export PATH := $(HOME)/.local/share/mise/shims:$(HOME)/.local/bin:$(PATH)
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION := 12.0.1
 # renovate: datasource=docker depName=plantuml/plantuml
-PLANTUML_VERSION := 1.2026.8
+PLANTUML_VERSION := 1.2026.10
 # renovate: datasource=docker depName=ghcr.io/andriykalashnykov/puml2drawio
 PUML2DRAWIO_VERSION := 1.6.1
 # renovate: datasource=github-tags depName=kubernetes/kubernetes
@@ -199,13 +199,10 @@ diagrams: deps-docker $(DIAGRAM_OUT)
 
 $(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml $(DIAGRAM_STAMP)
 	@mkdir -p $(DIAGRAM_DIR)/out
-	@n=0; until [ $$n -ge 3 ]; do \
-		docker run --rm --user $$(id -u):$$(id -g) \
-			-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
-			-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
-			plantuml/plantuml:$(PLANTUML_VERSION) -tpng -o out $(notdir $<) && break; \
-		n=$$((n+1)); echo "plantuml render failed (attempt $$n/3; the C4-PlantUML !include fetch may have hit HTTP 429) — retrying in 5s"; sleep 5; \
-	done; [ $$n -lt 3 ]
+	@docker run --rm --user $$(id -u):$$(id -g) \
+		-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
+		-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
+		plantuml/plantuml:$(PLANTUML_VERSION) -tpng -o out $(notdir $<)
 
 # Re-render trigger — see DIAGRAM_STAMP above. Clears stale stamps so only the
 # stamp for the current PLANTUML_VERSION exists.
@@ -214,8 +211,32 @@ $(DIAGRAM_STAMP):
 	@rm -f $(DIAGRAM_DIR)/out/.plantuml-*.stamp
 	@touch $@
 
-#diagrams-check: @ Verify committed diagram PNGs match current .puml source
-diagrams-check: diagrams
+# PlantUML draws its own warnings INTO the diagram (a yellow box), so a render
+# that "succeeds" can still ship a warning in every README image and the
+# git-diff below happily accepts it. 1.2026.10 started warning on variables
+# declared without '$'; the raw-URL C4-PlantUML v2.14.0 !include tripped it in
+# all three C4 diagrams. Renders each source to SVG in a temp dir and fails on
+# the warning box's style (observed at 1.2026.10: fill="#FFC" stroke:#FD8) or
+# the word "deprecated". RED-proven 2026-11-21 against that raw-URL include.
+#diagrams-warnings: @ Fail if PlantUML draws a warning box into any diagram
+diagrams-warnings: deps-docker
+	@TMP=$$(mktemp -d); trap 'rm -rf "$$TMP"' EXIT; \
+	cp $(DIAGRAM_SRC) "$$TMP"/; \
+	docker run --rm --user $$(id -u):$$(id -g) \
+		-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
+		-v "$$TMP:/work" -w /work \
+		plantuml/plantuml:$(PLANTUML_VERSION) -tsvg $(notdir $(DIAGRAM_SRC)) >/dev/null || exit 1; \
+	N=$$(find "$$TMP" -maxdepth 1 -name '*.svg' | wc -l); \
+	if [ "$$N" -ne $(words $(DIAGRAM_SRC)) ]; then \
+		echo "ERROR: diagrams-warnings rendered $$N SVGs for $(words $(DIAGRAM_SRC)) sources"; exit 1; fi; \
+	BAD=$$(grep -liE 'stroke:#FD8|deprecated' "$$TMP"/*.svg || true); \
+	if [ -n "$$BAD" ]; then \
+		echo "ERROR: PlantUML drew a warning into: $$(echo $$BAD | sed 's#[^ ]*/##g')"; \
+		grep -ohiE '[^<>]{0,60}deprecated[^<>]{0,80}' "$$TMP"/*.svg | sort -u; exit 1; fi; \
+	echo "Diagram warnings: none ($$N of $(words $(DIAGRAM_SRC)) diagrams checked)."
+
+#diagrams-check: @ Verify committed diagram PNGs match current .puml source and carry no PlantUML warning
+diagrams-check: diagrams diagrams-warnings
 	@git diff --exit-code -- $(DIAGRAM_DIR)/out >/dev/null 2>&1 || \
 		{ echo "ERROR: Diagram source changed but rendered PNG was not committed. Run 'make diagrams' and commit."; exit 1; }
 	@echo "Diagrams in sync."
@@ -511,5 +532,5 @@ clean:
 	deploy-app-golang-hello-world-web deploy-app-foo-bar-service \
 	image-build image-test registry registry-test renovate-validate \
 	kind-destroy delete-cluster \
-	e2e e2e-smoke clean diagrams diagrams-check diagrams-clean diagrams-drawio \
+	e2e e2e-smoke clean diagrams diagrams-check diagrams-warnings diagrams-clean diagrams-drawio \
 	vm-up vm-down vm-ssh vm-install-all
