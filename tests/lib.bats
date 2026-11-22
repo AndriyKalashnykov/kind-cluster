@@ -162,3 +162,32 @@ PY
     run check_ports 59653 59654
     [ "$status" -eq 0 ]
 }
+
+# --- metallb_manifest_url ----------------------------------------------------
+# MetalLB's git tags are v-prefixed; METALLB_VERSION is a bare semver because
+# Renovate's extractVersion strips the v. PR #407 interpolated the bare value
+# into the raw URL and every MetalLB install 404'd (main red 2026-11-04..).
+
+@test "metallb_manifest_url: a bare semver gets the v-prefixed tag ref" {
+    run metallb_manifest_url 0.16.2
+    [ "$status" -eq 0 ]
+    [ "$output" = "https://raw.githubusercontent.com/metallb/metallb/v0.16.2/config/manifests/metallb-native.yaml" ]
+}
+
+@test "metallb_manifest_url: a v-prefixed version is not double-prefixed" {
+    run metallb_manifest_url v0.16.2
+    [ "$status" -eq 0 ]
+    [ "$output" = "https://raw.githubusercontent.com/metallb/metallb/v0.16.2/config/manifests/metallb-native.yaml" ]
+}
+
+@test "metallb_manifest_url: an empty version fails and prints nothing" {
+    run metallb_manifest_url ""
+    [ "$status" -ne 0 ]
+    [ "$output" = "" ]
+}
+
+@test "metallb_manifest_url: a bare 'v' fails and prints nothing" {
+    run metallb_manifest_url v
+    [ "$status" -ne 0 ]
+    [ "$output" = "" ]
+}

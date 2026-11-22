@@ -2,6 +2,8 @@
 
 # set -x
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
+. "$SCRIPT_DIR/lib.sh"
 cd "$SCRIPT_DIR/.." || exit 1
 
 # Use an explicit kubectl context so a parallel `make` invocation in
@@ -19,6 +21,7 @@ if docker ps --filter name=cloud-provider-kind --format '{{.Names}}' | grep -qx 
     exit 1
 fi
 
+# BARE semver (extractVersion strips the tag's v); metallb_manifest_url adds it back.
 # renovate: datasource=github-tags depName=metallb/metallb extractVersion=^v(?<version>.*)$
 METALLB_VERSION=0.16.2
 
@@ -40,8 +43,11 @@ fi
 # https://github.com/metallb/metallb
 
 # On v0.13.4 and older
-echo "deploying metallb LoadBalancer"
-"${KUBECTL[@]}" apply -f  https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml
+MANIFEST_URL=$(metallb_manifest_url "$VERSION") || { echo "ERROR: invalid MetalLB version '$VERSION'"; exit 1; }
+echo "deploying metallb LoadBalancer v${VERSION#v} ($MANIFEST_URL)"
+# Stop here on a failed apply (e.g. a 404 manifest URL): carrying on only
+# surfaces later as a misleading "webhook never became ready".
+"${KUBECTL[@]}" apply -f "$MANIFEST_URL" || { echo "ERROR: failed to apply $MANIFEST_URL"; exit 1; }
 
 # https://fabianlee.org/2022/01/27/kubernetes-using-kubectl-to-wait-for-condition-of-pods-deployments-services/
 echo "waiting for metallb"
